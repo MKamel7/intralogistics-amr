@@ -18,7 +18,8 @@ find_package(geometry_msgs REQUIRED)
 
 add_library(amr_perception_core SHARED
   src/leg_detector_core.cpp
-  src/tracker_core.cpp)
+  src/tracker_core.cpp
+  src/height_detector_core.cpp)
 target_include_directories(amr_perception_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
@@ -61,6 +62,9 @@ if(BUILD_TESTING)
 
   ament_add_gtest(test_tracker_core test/test_tracker_core.cpp)
   target_link_libraries(test_tracker_core amr_perception_core)
+
+  ament_add_gtest(test_height_detector_core test/test_height_detector_core.cpp)
+  target_link_libraries(test_height_detector_core amr_perception_core)
 endif()
 
 ament_package()

@@ -325,6 +325,50 @@ moved from estimated to datasheet and happened to match the estimates exactly.
 
 ---
 
+## V-10. The depth channel's vertical field of view limits it more than expected
+
+**Status: measured, and it changed the design.**
+
+The height channel exists to separate a standing person from a rack upright, which neither the scan
+plane nor the tracker can do. The intended discriminator was simple: a person tops out around
+1.75 m, a rack upright keeps going.
+
+That test turns out to be unusable at close range, and the geometry says why. The camera sits at
+0.27 m with a 58 degree vertical field of view, so the highest point it can see at horizontal
+distance r is 0.27 + r*tan(29 deg):
+
+| range | highest visible point | a 1.75 m person |
+|---|---|---|
+| 1.5 m | 1.10 m | cut off |
+| 2.5 m | 1.66 m | cut off |
+| 4.0 m | 2.49 m | fits |
+| 6.0 m | 3.60 m | fits |
+
+**Closer than about 2.7 m every tall object is truncated to the same apparent height.** A 3 m rack
+upright and a 1.75 m person both appear to stop at the visible ceiling, so "it tops out where a
+person tops out" is not merely weak there, it is meaningless. This was found because a unit test
+asserting that a 3 m column is structure failed at 2.5 m, which looked like a detector bug and was
+a geometry lesson.
+
+**What changed.** Clusters now carry a `truncated` flag and the visible ceiling at their range. When
+a cluster is truncated the height test is **skipped rather than trusted**, and `looksLikeStructure`
+refuses to assert anything, because a truncated column might be a person or a pillar and choosing
+would be a guess. Two tests cover it, one at 5 m where the top is observable and one at 2.5 m where
+it is not.
+
+**So the discriminator that actually carries the load is the WIDTH PROFILE**, not the height: a
+person is narrow at the calves and wider at the torso, a post is the same width all the way up. That
+works at any range where the torso is visible, which is everywhere beyond about 1.7 m. A test
+renders a post cut off at exactly 1.60 m, so its top falls inside the person band, and confirms the
+width profile still rejects it.
+
+**Carried forward.** The near field below about 1.7 m is now poorly served by BOTH channels: the leg
+detector merges the legs into one wide cluster (V-07, 55 percent detection at 1.28 m) and the depth
+channel cannot see the torso. That is exactly where a protective stop matters most, and it is the
+open problem for the safety phase rather than something to be quietly averaged away.
+
+---
+
 ## Known limitations of the model
 
 Recorded here rather than discovered later. None of these are bugs; they are places where the model

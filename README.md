@@ -113,6 +113,19 @@ person has no more velocity than a rack upright. V-08 in
 [docs/validation.md](docs/validation.md) has the numbers and the measurement bug that nearly
 disguised itself as one.
 
+**Depth-based people detection** (`amr_perception`, C++). Unprojects the depth image, removes floor
+and ceiling, clusters into vertical columns and classifies by height profile: a person is narrow at
+the calves, wider at the torso and stops around 1.75 m, a rack upright is uniform and keeps going.
+12 unit tests on depth images synthesised by ray-marching known solids, so every case has exact
+truth.
+
+Building it exposed a real constraint. The camera's 58 degree vertical field of view at 0.27 m sees
+no higher than 1.66 m at 2.5 m range, so **closer than about 2.7 m every tall object is truncated to
+the same apparent height** and the "tops out at person height" test is meaningless. Clusters now
+carry a truncation flag and the detector declines to conclude anything from a height it never
+observed. The width profile is what actually carries the discrimination. V-10 in
+[docs/validation.md](docs/validation.md).
+
 **Battery and state of charge.** A power model fitted to the three runtimes the platform sheet
 publishes, exposed as `sensor_msgs/BatteryState`. Deliberately labelled as calibration rather than
 validation in [docs/validation.md](docs/validation.md): three published figures and three model
