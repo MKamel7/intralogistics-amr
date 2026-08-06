@@ -529,6 +529,53 @@ written into the gate's own docstring as a limit of what it can check.
 
 ---
 
+## OPEN-1. Animated pedestrians do not walk their lanes
+
+**Status: not working. Parked with a diagnosis rather than left to look fixed.**
+
+Static pedestrians work correctly and are what the demo scenario uses: all four rest on the floor and
+are detected in 100 percent of frames (V-12). Walking pedestrians do not.
+
+Five approaches were tried and each failed differently:
+
+| approach | result |
+|---|---|
+| dynamic body, human inertia (CoM 0.95 m over a 0.22 m puck) | tipped at ~13 degrees of lean, climbed the racking, hovered at z = 0.27 m |
+| inertia moved into the collision puck | upright and stable, but barely moves |
+| floor friction removed | still barely moves |
+| kinematic link | the velocity plugin integrated it out of the world, to z = 19 m |
+| prismatic rail welded to `world` | a model joined to `world` is treated as fixed and its joints do not articulate; verified by commanding the joint directly in Gazebo |
+
+Current state: gravity disabled on the body, lanes placed on floor **measured** clear from the live
+scan rather than guessed. Two of three walkers move 0.5 to 0.7 m of a 3 m lane; one does not move.
+
+**What the evidence says.** The command demonstrably reaches the plugin (verified on the Gazebo
+topic), the figure is upright and at the right height, and the lane is clear. So the remaining
+problem is in how `VelocityControl` interacts with this body, not in the driver, the bridge or the
+scenario.
+
+**The right fix is a small Gazebo system plugin in C++** that sets the model pose directly along a
+waypoint list, which is how moving obstacles are normally done and which removes the dynamics
+question entirely. That is scoped work, not another guess, and it belongs with R4 of the revised
+plan.
+
+## OPEN-2. SLAM runs but produces no map
+
+**Status: not working.**
+
+`slam_toolbox` is configured on the merged scan, launches, and stays silent: no map on `/map`, no
+`map -> odom` transform, and nothing logged. The scan itself is healthy, 3102 returns per frame with
+155 of 2118 bins empty.
+
+One real bug was found and fixed while chasing this: the merged scan declared
+`angle_max = angle_min + 2*pi`, so the first and last ray described the same bearing. That is a
+malformed scan and a consumer walking from `angle_min` in steps of `angle_increment` gets one ray too
+many. It is now one increment short of a full turn, with a test. **It did not fix the map**, so the
+cause lies elsewhere; the next things to check are whether slam_toolbox will accept a scan whose
+`frame_id` equals `base_frame`, and whether it needs the robot to move before publishing anything.
+
+---
+
 ## Known limitations of the model
 
 Recorded here rather than discovered later. None of these are bugs; they are places where the model

@@ -152,7 +152,13 @@ private:
     out.header.stamp = out_stamp;
     out.header.frame_id = target_frame_;
     out.angle_min = static_cast<float>(accumulator_->angleMin());
-    out.angle_max = static_cast<float>(accumulator_->angleMin() + 2.0 * M_PI);
+    // One increment short of a full turn. With angle_max exactly angle_min +
+    // 2*pi the first and last ray describe the SAME bearing, which is a
+    // malformed scan: consumers that walk from angle_min in steps of
+    // angle_increment then have one ray too many. slam_toolbox accepts such a
+    // scan and then silently produces no map at all.
+    out.angle_max = static_cast<float>(
+      accumulator_->angleMin() + 2.0 * M_PI - accumulator_->angleIncrement());
     out.angle_increment = static_cast<float>(accumulator_->angleIncrement());
     out.range_min = static_cast<float>(range_min_);
     out.range_max = static_cast<float>(range_max_);

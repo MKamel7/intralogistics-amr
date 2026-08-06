@@ -260,6 +260,15 @@ Published figures from the reference platform are validated **against**, never t
 model and the reference disagree, [docs/validation.md](docs/validation.md) says so and says which
 way the error points.
 
+## Known not working
+
+Two things are configured but do not work, recorded here rather than left to be discovered:
+
+- **Walking pedestrians.** Static ones are correct and are what the demo uses. Walking ones cover
+  only part of their lane or do not move; five approaches are documented in OPEN-1 of
+  [docs/validation.md](docs/validation.md), along with the fix that should be done instead.
+- **SLAM produces no map.** `slam_toolbox` launches on the merged scan and stays silent. See OPEN-2.
+
 ## Roadmap
 
 In order, each independently demonstrable:

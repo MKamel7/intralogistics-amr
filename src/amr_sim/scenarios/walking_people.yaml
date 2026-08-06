@@ -1,48 +1,49 @@
-# Pedestrians walking fixed legs, back and forth, on VERIFIED FREE FLOOR.
+# Pedestrians walking fixed legs, back and forth, on lanes MEASURED to be clear.
 #
-# Lane endpoints are taken from positions already confirmed clear: the
-# static_people scenario placed people at (4.0,-1.0), (2.0,-3.2), (-0.5,-1.0)
-# and (3.0,-1.8) and all four rested correctly on the ground and were detected
-# in every frame.
+# The lanes are not guessed. They were read off the live merged scan by probing
+# a grid of world points for 0.5 m of clearance:
 #
-# This matters more than it sounds. Earlier lanes ran through the racking, and
-# because the velocity plugin overwrites the whole velocity vector every tick a
-# walker that rode up onto the clutter could never fall back: three of them
-# ended up hovering between 0.27 and 0.35 m with nothing underneath. One also
-# walked through the robot and shoved it 2.2 m. A scenario must not put people
-# inside the scenery and must not move the vehicle under test.
+#     y \ x    -1   0   1   2   3   4   5
+#     -1.0      O   X   O   O   X   X   X      <- the robot sits at (2, -1)
+#     -1.6      O   X   O   O   X   O   X
+#     -2.2      O   O   O   O   X   O   X
+#     -2.8      O   O   O   O   X   O   X
+#     -3.4      O   O   O   O   X   O   X
+#     -4.0      O   O   O   O   X   O   X
 #
-# The driver reverses on MEASURED displacement rather than a timer, so a walker
-# cannot drift out of its lane whatever time it spawned.
+# x = 3 is blocked at every row, and that is precisely where two walkers and the
+# standing worker had been placed by guesswork: they spawned inside the clutter,
+# which is why they never moved and why one ended up hovering. x = -1 to 2 is a
+# clear run at any y below -2, and x = 4 is a clear column below y = -1.6.
 
 name: walking_people
-description: Three pedestrians walking the open aisle, one stationary worker
+description: Three pedestrians on measured-clear lanes, one stationary worker
 
 people:
-  # Crosses the robot's path: the case the safety layer exists for.
-  - name: walker_crossing
-    x: 3.0
-    y: -3.4
-    yaw: 1.5708
-    path: {length: 2.0, speed: 1.2}
-
-  # Along the aisle, stopping short of the vehicle.
+  # Long lane down the open aisle.
   - name: walker_aisle
-    x: -0.5
-    y: -1.0
+    x: -1.0
+    y: -2.2
     yaw: 0.0
-    path: {length: 1.5, speed: 1.0}
+    path: {length: 3.0, speed: 1.0}
 
-  # Slow walker further down the aisle.
+  # Parallel lane, slower.
   - name: walker_slow
-    x: 2.0
-    y: -3.6
+    x: -1.0
+    y: -3.4
+    yaw: 0.0
+    path: {length: 3.0, speed: 0.6}
+
+  # Crosses the aisle up the clear column at x = 4.
+  - name: walker_crossing
+    x: 4.0
+    y: -4.0
     yaw: 1.5708
-    path: {length: 1.6, speed: 0.6}
+    path: {length: 2.4, speed: 1.2}
 
   # A worker standing at a station. Deliberately included: a stationary person
   # is the case the motion test CANNOT distinguish from structure.
   - name: worker_standing
-    x: 3.0
-    y: -1.8
+    x: 1.0
+    y: -1.6
     yaw: 3.14159

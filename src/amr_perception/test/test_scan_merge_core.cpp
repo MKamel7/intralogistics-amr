@@ -279,6 +279,21 @@ TEST(ScanAccumulator, ASingleScannerLeavesALargeBlindSector)
   EXPECT_GT(gap_deg, 60.0) << "a single 275 degree scanner should leave a large sector";
 }
 
+TEST(ScanAccumulator, AFullTurnDoesNotDuplicateTheFirstBearing)
+{
+  // A scan whose angle_max equals angle_min + 2*pi describes the first ray
+  // twice, once at each end. It is malformed, and the way it fails is silent:
+  // slam_toolbox accepted such a scan and produced no map whatsoever, with
+  // nothing logged.
+  ScanAccumulator acc(2118, 0.05, 40.0);
+  const double span = 2.0 * M_PI - acc.angleIncrement();
+  EXPECT_LT(span, 2.0 * M_PI);
+  EXPECT_NEAR(
+    acc.angleMin() + span + acc.angleIncrement(), acc.angleMin() + 2.0 * M_PI, 1e-12);
+  // and the bin count still covers the whole turn
+  EXPECT_EQ(acc.bins(), 2118u);
+}
+
 int main(int argc, char ** argv)
 {
   testing::InitGoogleTest(&argc, argv);

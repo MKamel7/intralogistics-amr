@@ -30,6 +30,21 @@
   <model name="person">
 
     <link name="body">
+      <!-- GRAVITY OFF. The figure is driven, not simulated.
+
+           The velocity plugin sets this body's velocity every tick. With
+           gravity on, the contact solver at the floor fights that command and
+           wins: measured, a walker commanded 1.2 m/s covered 0.12 m, with the
+           twist demonstrably arriving at the plugin. Removing floor friction
+           did not help either.
+
+           With gravity off there is no weight pressing into the floor, so
+           nothing to resist the commanded velocity, and the figure holds the
+           height it was spawned at instead of settling or climbing. It still
+           collides with anything it meets at body height, which is what matters
+           for the robot. A pedestrian is an input to this simulation, not a
+           subject of it. -->
+      <gravity>false</gravity>
       <!-- Inertia of the puck that touches nothing, since the rail carries the
            figure. Kept plausible rather than arbitrary. -->
       <inertial>

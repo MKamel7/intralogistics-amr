@@ -51,6 +51,9 @@ def generate_launch_description():
         DeclareLaunchArgument('yaw', default_value='0.0'),
         DeclareLaunchArgument('world', default_value='warehouse'),
         DeclareLaunchArgument(
+            'slam', default_value='true',
+            description='build a map from the merged scan'),
+        DeclareLaunchArgument(
             'safety', default_value='true',
             description='protective and warning fields between command and wheels'),
         DeclareLaunchArgument('payload', default_value='0.0',
@@ -219,6 +222,16 @@ def generate_launch_description():
 
     scan_merger = OpaqueFunction(function=make_scan_merger)
 
+    # SLAM on the merged scan. Until this existed there was no map at all,
+    # which RViz showed as an empty grid and which is the most visible gap in
+    # the stack.
+    slam = Node(
+        package='slam_toolbox', executable='async_slam_toolbox_node',
+        name='slam_toolbox', output='screen',
+        condition=IfCondition(LaunchConfiguration('slam')),
+        parameters=[PathJoinSubstitution(
+            [FindPackageShare('amr_navigation'), 'config', 'slam.yaml'])])
+
     people_tracker = Node(
         package='amr_perception', executable='people_tracker', output='screen',
         condition=IfCondition(LaunchConfiguration('scanners')),
@@ -268,7 +281,7 @@ def generate_launch_description():
         # both start fine with this one variable cleared. Narrowed by unsetting
         # the candidates one at a time; GTK_PATH was the only one that mattered.
         SetEnvironmentVariable('GTK_PATH', ''),
-        gz, aim_camera, rsp, bridge, spawn, rviz, battery, scan_merger, leg_detector, people_tracker, collision_monitor, safety_lifecycle,
+        gz, aim_camera, rsp, bridge, spawn, rviz, battery, scan_merger, leg_detector, people_tracker, slam, collision_monitor, safety_lifecycle,
         # Chain on spawn exiting rather than on a timer. `create` exits once the
         # model is in the world, which is exactly the precondition the
         # controller_manager needs.
