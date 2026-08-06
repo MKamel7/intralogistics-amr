@@ -28,6 +28,29 @@ def spawn_people(context, *_, **__):
     model = PathJoinSubstitution([share, 'models', 'person']).perform(context)
 
     nodes = []
+    # Ground truth bridge. The simulator's pose feed is the LABEL ORACLE for
+    # evaluation: it never enters the control path, only the scoring. See the
+    # note at the top of docs/validation.md.
+    world = LaunchConfiguration('world').perform(context)
+    nodes.append(Node(
+        package='amr_sim', executable='ground_truth_publisher', output='screen',
+        parameters=[{'use_sim_time': True, 'world': world}]))
+
+    walkers = [q for q in spec.get('people', []) if q.get('path')]
+    if walkers:
+        # One bridge entry per walker, ROS to Gazebo, feeding the VelocityControl
+        # plugin the person model carries.
+        nodes.append(Node(
+            package='ros_gz_bridge', executable='parameter_bridge', output='screen',
+            name='pedestrian_cmd_bridge',
+            arguments=[
+                f'/model/{q["name"]}/cmd_vel@geometry_msgs/msg/Twist]gz.msgs.Twist'
+                for q in walkers],
+            parameters=[{'use_sim_time': True}]))
+        nodes.append(Node(
+            package='amr_sim', executable='pedestrian_driver', output='screen',
+            parameters=[{'use_sim_time': True, 'scenario_path': path}]))
+
     for person in spec.get('people', []):
         nodes.append(Node(
             package='ros_gz_sim', executable='create', output='screen',
@@ -49,5 +72,8 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'scenario', default_value='static_people',
             description='name of a file under amr_sim/scenarios'),
+        DeclareLaunchArgument(
+            'world', default_value='warehouse',
+            description='world name, used to find the ground truth pose feed'),
         OpaqueFunction(function=spawn_people),
     ])

@@ -101,6 +101,18 @@ of the false positives come from nine fixed positions that are present in almost
 (from RGB-D) and motion (from tracking) are what separate the two, and both are next. V-07 in
 [docs/validation.md](docs/validation.md) has the analysis.
 
+**Pedestrian tracking** (`amr_perception`, C++). Constant-velocity Kalman filter per track, global
+nearest neighbour association with a Mahalanobis gate so a track that has been coasting through an
+occlusion is allowed to search wider, M-of-N confirmation, and coasting through about a second of
+full occlusion. 14 unit tests including two targets crossing without exchanging identities.
+
+Measured against the `walking_people` scenario: classifying tracks by velocity lifts precision from
+0.071 to **0.312** and cuts ID switches from 3 to 1, while halving recall from 0.575 to 0.242. The
+recall cost is real and expected: the scenario contains a worker standing still, and a stationary
+person has no more velocity than a rack upright. V-08 in
+[docs/validation.md](docs/validation.md) has the numbers and the measurement bug that nearly
+disguised itself as one.
+
 **Battery and state of charge.** A power model fitted to the three runtimes the platform sheet
 publishes, exposed as `sensor_msgs/BatteryState`. Deliberately labelled as calibration rather than
 validation in [docs/validation.md](docs/validation.md): three published figures and three model

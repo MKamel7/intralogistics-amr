@@ -221,8 +221,10 @@ uprights would be fitting to one scene rather than detecting people. The result 
 1. **Height above the scan plane.** The RGB-D channel sees that a person has a torso at 1.2 m and a
    rack upright continues to the ceiling. One plane cannot see either.
 2. **Motion.** A rack upright is in the same place every frame, which is precisely what the analysis
-   above measured. A tracker with track confirmation and a velocity estimate removes persistent
-   static returns almost by construction.
+   above measured. A tracker's VELOCITY ESTIMATE separates the two. Note that track confirmation
+   does not: a rack upright is seen in every frame and so confirms immediately. Measured in V-08:
+   the motion test lifts precision 4.4 times and halves recall, because a person standing still has
+   no velocity either.
 
 So this number is the baseline the fused detector and the tracker have to beat, and it is recorded
 so that improvement can be quantified rather than asserted.
@@ -231,6 +233,56 @@ so that improvement can be quantified rather than asserted.
 large angle, the two legs merge into one wide cluster, and the width test rejects it. That is a real
 weakness in the near field, which is exactly where a protective stop matters most. Noted as an open
 item for the fused detector.
+
+---
+
+## V-08. Tracking: what the motion test buys, and what it costs
+
+**Status: measured. A real improvement, not a sufficient one.**
+
+Scored by `src/amr_evaluation/tools/score_tracks.py` against the `walking_people` scenario: three
+pedestrians walking fixed legs and one worker standing still. 60 frames, a match counted within
+0.50 m. Ground truth from the simulator pose feed, used only for scoring.
+
+| | all confirmed tracks | moving tracks only |
+|---|---|---|
+| precision | 0.071 | **0.312** |
+| recall | **0.575** | 0.242 |
+| localisation p50 | 4.9 cm | 9.0 cm |
+| id switches | 3 | **1** |
+
+**Classifying by velocity improves precision about 4.4 times**, from 0.071 to 0.312, and cuts ID
+switches from 3 to 1. That is the measured answer to what tracking contributes.
+
+**It also halves recall, and that is not a bug.** The scenario deliberately contains a stationary
+worker. A person standing still has, by definition, no velocity to distinguish them from a rack
+upright, so the motion test discards them. Leaving the standing worker out of the scenario would
+have produced a much prettier number and a dishonest one.
+
+**Correcting something stated in V-07.** That entry said a tracker removes persistent static returns
+"almost by construction". That is wrong and the tracker's own tests now say so explicitly. Track
+confirmation counts how often something is seen, and a rack upright is the most confirmable object
+in a warehouse: it confirms immediately. Only the velocity estimate separates them, and only for
+people who are moving.
+
+**Precision 0.312 is still poor**, and no amount of tracker tuning closes it, for the same reason as
+V-07. What remains is height: a torso at 1.2 m that a rack upright does not have. That is the RGB-D
+channel, and these figures are the baseline it has to beat.
+
+### A measurement bug worth recording, because it looked exactly like a result
+
+The first run of this scoring reported precision 0.019 and recall 0.129, numbers so bad they would
+have read as a broken tracker. They were a broken measurement. The scorer hardcoded the robot's
+spawn pose to convert ground truth into the sensor frame, and `walker_slow` had been given a path
+running straight down the robot's own row. A velocity-controlled pedestrian does not respond to
+contact, so a 75 kg person simply shoved the 97 kg vehicle 2.2 m backwards, and every ground-truth
+position was wrong by that much.
+
+Two fixes, one of them structural: the scorer now **reads the robot pose from the oracle every
+frame** rather than assuming it, and the pedestrian path no longer crosses the vehicle. The general
+lesson matches V-05: a number produced by a broken measurement is indistinguishable from a number
+produced by a discovery, and the only defence is to sanity-check the inputs before believing the
+output.
 
 ---
 

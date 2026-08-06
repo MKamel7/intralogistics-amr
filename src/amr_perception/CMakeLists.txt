@@ -16,7 +16,9 @@ find_package(tf2_ros REQUIRED)
 find_package(vision_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 
-add_library(amr_perception_core SHARED src/leg_detector_core.cpp)
+add_library(amr_perception_core SHARED
+  src/leg_detector_core.cpp
+  src/tracker_core.cpp)
 target_include_directories(amr_perception_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
@@ -34,9 +36,16 @@ target_include_directories(leg_detector PUBLIC
 target_link_libraries(leg_detector amr_perception_core)
 ament_target_dependencies(leg_detector rclcpp sensor_msgs vision_msgs geometry_msgs)
 
+add_executable(people_tracker src/people_tracker_node.cpp)
+target_include_directories(people_tracker PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+target_link_libraries(people_tracker amr_perception_core)
+ament_target_dependencies(people_tracker rclcpp vision_msgs geometry_msgs)
+
 install(TARGETS amr_perception_core
   ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
-install(TARGETS scan_merger leg_detector DESTINATION lib/${PROJECT_NAME})
+install(TARGETS scan_merger leg_detector people_tracker DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/ DESTINATION include)
 
 if(BUILD_TESTING)
@@ -49,6 +58,9 @@ if(BUILD_TESTING)
 
   ament_add_gtest(test_leg_detector_core test/test_leg_detector_core.cpp)
   target_link_libraries(test_leg_detector_core amr_perception_core)
+
+  ament_add_gtest(test_tracker_core test/test_tracker_core.cpp)
+  target_link_libraries(test_tracker_core amr_perception_core)
 endif()
 
 ament_package()

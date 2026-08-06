@@ -193,6 +193,15 @@ def generate_launch_description():
 
     scan_merger = OpaqueFunction(function=make_scan_merger)
 
+    people_tracker = Node(
+        package='amr_perception', executable='people_tracker', output='screen',
+        condition=IfCondition(LaunchConfiguration('scanners')),
+        parameters=[{'use_sim_time': True,
+                     # Publish everything confirmed, moving or not, so the
+                     # evaluation can score both and the improvement from the
+                     # motion test is measurable rather than assumed.
+                     'publish_moving_only': False}])
+
     leg_detector = Node(
         package='amr_perception', executable='leg_detector', output='screen',
         condition=IfCondition(LaunchConfiguration('scanners')),
@@ -206,7 +215,7 @@ def generate_launch_description():
         parameters=[{'use_sim_time': True}])
 
     return LaunchDescription(args + [
-        gz, rsp, bridge, spawn, rviz, battery, scan_merger, leg_detector,
+        gz, rsp, bridge, spawn, rviz, battery, scan_merger, leg_detector, people_tracker,
         # Chain on spawn exiting rather than on a timer. `create` exits once the
         # model is in the world, which is exactly the precondition the
         # controller_manager needs.

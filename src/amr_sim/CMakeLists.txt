@@ -10,6 +10,12 @@ ament_python_install_package(${PROJECT_NAME})
 install(PROGRAMS ${PROJECT_NAME}/battery_model.py
         DESTINATION lib/${PROJECT_NAME}
         RENAME battery_model)
+install(PROGRAMS ${PROJECT_NAME}/pedestrian_driver.py
+        DESTINATION lib/${PROJECT_NAME}
+        RENAME pedestrian_driver)
+install(PROGRAMS ${PROJECT_NAME}/ground_truth_publisher.py
+        DESTINATION lib/${PROJECT_NAME}
+        RENAME ground_truth_publisher)
 
 install(DIRECTORY models worlds tools scenarios launch
         DESTINATION share/${PROJECT_NAME}
