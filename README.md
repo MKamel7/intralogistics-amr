@@ -166,6 +166,12 @@ partial view is much weaker. Produces a 5 cm occupancy grid and `map -> odom`. T
 faults had to be fixed to get there, none of which logged an error; V-14 in
 [docs/validation.md](docs/validation.md) has them.
 
+**Walking pedestrians.** Three walkers pace their lanes back and forth and one worker stands still,
+all on the floor. Getting there was mostly not a physics problem: sixteen ground-truth publishers and
+eleven driver nodes had accumulated from repeated launches and were issuing conflicting commands to
+the same pedestrians, which made every measurement contradict the last. V-15 in
+[docs/validation.md](docs/validation.md).
+
 **Battery and state of charge.** A power model fitted to the three runtimes the platform sheet
 publishes, exposed as `sensor_msgs/BatteryState`. Deliberately labelled as calibration rather than
 validation in [docs/validation.md](docs/validation.md): three published figures and three model
@@ -265,14 +271,6 @@ measured on and the conditions it was measured under.
 Published figures from the reference platform are validated **against**, never tuned to. Where the
 model and the reference disagree, [docs/validation.md](docs/validation.md) says so and says which
 way the error points.
-
-## Known not working
-
-Two things are configured but do not work, recorded here rather than left to be discovered:
-
-- **Walking pedestrians.** Static ones are correct and are what the demo uses. Walking ones cover
-  only part of their lane or do not move; five approaches are documented in OPEN-1 of
-  [docs/validation.md](docs/validation.md), along with the fix that should be done instead.
 
 ## Roadmap
 

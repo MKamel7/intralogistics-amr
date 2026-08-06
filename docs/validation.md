@@ -529,9 +529,47 @@ written into the gate's own docstring as a limit of what it can check.
 
 ---
 
-## OPEN-1. Animated pedestrians do not walk their lanes
+## V-15. Animated pedestrians: the cause was duplicate nodes, not physics
 
-**Status: not working. Parked with a diagnosis rather than left to look fixed.**
+**Status: working.** Measured over 100 s: all three walkers travel back and forth inside their
+lanes, 2.0 to 2.4 m of extent against 51 to 83 m of path, all resting at z = 0.020 m, with the
+standing worker correctly stationary.
+
+**The cause was not physics at all, and I spent a long time believing it was.** Sixteen
+`ground_truth_publisher` nodes and eleven `pedestrian_driver` nodes were running simultaneously,
+left behind by repeated launches. Killing a launch does not reliably kill the nodes it started.
+Eleven drivers were publishing conflicting velocity commands to the same three pedestrians, which is
+why every measurement contradicted the last and why the same configuration appeared to work and then
+not work.
+
+**This invalidated a long run of measurements**, and the wasted effort is the lesson: before
+believing a behavioural measurement, check `ros2 node list | sort | uniq -d` for duplicates.
+
+Two genuine model fixes were also needed and are kept:
+
+- **Inertia matching the collision body.** The figure carried a real person's centre of mass at
+  0.95 m over a 0.22 m collision puck, which tips at about 13 degrees of lean. It now sits at 0.12 m
+  with that cylinder's tensor.
+- **No collision geometry.** Lanes were cleared against the 150 mm scan plane, but a body collision
+  reaching 1.2 m can still snag on a shelf beam that the probe never saw. A driven pedestrian is an
+  input to the simulation, not a subject of it, and the lidar renders visuals so the scanner sees the
+  figure exactly as before.
+
+Lane placement is also no longer guesswork: the free floor was measured by probing the live scan on a
+grid, which showed x = 3 blocked at every row, exactly where two walkers and the standing worker had
+been placed.
+
+### Approaches that failed, kept because each was instructive
+
+| approach | result |
+|---|---|
+| kinematic link | the velocity plugin integrated it out of the world, to z = 19 m |
+| prismatic rail welded to `world` | a model joined to `world` is treated as fixed and its joints do not articulate; verified by commanding the joint directly |
+| removing floor friction | no effect |
+
+## OPEN-1 (RESOLVED, see V-15)
+
+**Status: was not working; the entry above supersedes this.**
 
 Static pedestrians work correctly and are what the demo scenario uses: all four rest on the floor and
 are detected in 100 percent of frames (V-12). Walking pedestrians do not.
