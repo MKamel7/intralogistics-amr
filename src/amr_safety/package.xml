@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>amr_safety</name>
+  <version>0.1.0</version>
+  <description>
+    Protective and warning fields, and the vehicle state machine around them.
+    Fields are generated from the platform spec by a stopping-distance
+    calculation, never hand-tuned. Nothing here consumes the people detector:
+    a protective function must not depend on classification.
+  </description>
+  <maintainer email="mkamel860@gmail.com">Mohamed Kamel</maintainer>
+  <license>Apache-2.0</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <exec_depend>nav2_collision_monitor</exec_depend>
+  <test_depend>ament_cmake_pytest</test_depend>
+  <test_depend>python3-pytest</test_depend>
+  <test_depend>python3-yaml</test_depend>
+  <export><build_type>ament_cmake</build_type></export>
+</package>

@@ -60,11 +60,21 @@ def test_provenance_entries_are_well_formed(spec):
 
 
 # Words that indicate a source line gives a reason rather than just a label.
-# Deliberately loose: the point is to catch 'estimated' with no explanation at
-# all, not to police prose.
+#
+# This is a HEURISTIC and it is worth being honest about what it can do. It
+# catches a bare label like "engineering estimate" with no reasoning attached.
+# It cannot tell whether the reasoning given is correct, and it has already
+# produced one false positive on a source line that explained itself at length
+# but happened to use none of these words. When that happens the right response
+# is to widen this list, not to reword prose to satisfy a keyword check.
+#
+# It also cannot catch the failure that actually matters most: a source that
+# cites a document nobody read. Two of those have occurred in this project and
+# both were found by reading the document, not by this test.
 _REASONING_MARKERS = (
-    'not published', 'because', 'chosen', 'taken', 'typical', 'matches',
-    'halved', 'midpoint', 'proportionate', 'so that', 'so a', 'so the', '=',
+    'not published', 'not yet measured', 'because', 'chosen', 'taken',
+    'typical', 'matches', 'halved', 'midpoint', 'proportionate', 'estimate of',
+    'therefore', 'so that', 'so a', 'so the', '=',
 )
 
 
@@ -132,6 +142,28 @@ def test_geometry_is_self_consistent(spec):
         'protective field must sit inside the warning field')
     assert v['scanner_warning_range'] <= v['scanner_measuring_range'], (
         'warning field cannot exceed the measuring range')
+
+
+def test_self_filter_margin_covers_the_scanner_pods(spec):
+    """The filter must reject the whole vehicle, pods included.
+
+    The optics sit 5 mm proud of the envelope corner and the housing is a box
+    rotated 45 degrees, so the pods reach further than the chassis does. When
+    the margin was smaller than that, those returns survived the self filter,
+    landed inside the protective field, and the vehicle held a permanent
+    protective stop against its own corners without moving once.
+    """
+    v = spec['values']
+    c = math.cos(math.pi / 4.0)
+    hx = v['scanner_mount_x'] - v['scanner_housing_inset'] * c
+    hy = v['scanner_mount_y'] - v['scanner_housing_inset'] * c
+    half = (v['scanner_body_x'] / 2.0) * c + (v['scanner_body_y'] / 2.0) * c
+    proud_x = hx + half - v['chassis_length'] / 2.0
+    proud_y = hy + half - v['chassis_width'] / 2.0
+    needed = max(proud_x, proud_y)
+    assert v['self_filter_margin'] >= needed, (
+        f'self filter margin {v["self_filter_margin"] * 1000:.1f} mm does not '
+        f'cover pods standing {needed * 1000:.1f} mm proud of the envelope')
 
 
 def test_scanner_pair_covers_360_degrees(spec):

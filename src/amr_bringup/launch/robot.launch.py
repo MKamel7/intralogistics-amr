@@ -48,6 +48,9 @@ def generate_launch_description():
         DeclareLaunchArgument('y', default_value='-1.0'),
         DeclareLaunchArgument('yaw', default_value='0.0'),
         DeclareLaunchArgument('world', default_value='warehouse'),
+        DeclareLaunchArgument(
+            'safety', default_value='true',
+            description='protective and warning fields between command and wheels'),
         DeclareLaunchArgument('payload', default_value='0.0',
                               description='kg on the load deck, for the energy model'),
         DeclareLaunchArgument(
@@ -188,7 +191,10 @@ def generate_launch_description():
                 'publish_rate': v['scanner_update_rate'],
                 'footprint_length': v['chassis_length'],
                 'footprint_width': v['chassis_width'],
-                'footprint_margin': 0.02,
+                # Must cover the scanner pods, which stand proud of the
+                # published envelope. Too small and the vehicle sees its own
+                # corners and holds a permanent protective stop.
+                'footprint_margin': v['self_filter_margin'],
             }])]
 
     scan_merger = OpaqueFunction(function=make_scan_merger)
@@ -201,6 +207,23 @@ def generate_launch_description():
                      # evaluation can score both and the improvement from the
                      # motion test is measurable rather than assumed.
                      'publish_moving_only': False}])
+
+    # Protective and warning fields. Placed between the velocity command and the
+    # controller, so nothing can reach the wheels without passing through it.
+    collision_monitor = Node(
+        package='nav2_collision_monitor', executable='collision_monitor',
+        output='screen',
+        condition=IfCondition(LaunchConfiguration('safety')),
+        parameters=[PathJoinSubstitution(
+            [FindPackageShare('amr_safety'), 'config', 'collision_monitor.yaml']),
+            {'use_sim_time': True}])
+
+    safety_lifecycle = Node(
+        package='nav2_lifecycle_manager', executable='lifecycle_manager',
+        name='lifecycle_manager_safety', output='screen',
+        condition=IfCondition(LaunchConfiguration('safety')),
+        parameters=[{'use_sim_time': True, 'autostart': True,
+                     'node_names': ['collision_monitor']}])
 
     leg_detector = Node(
         package='amr_perception', executable='leg_detector', output='screen',
@@ -215,7 +238,7 @@ def generate_launch_description():
         parameters=[{'use_sim_time': True}])
 
     return LaunchDescription(args + [
-        gz, rsp, bridge, spawn, rviz, battery, scan_merger, leg_detector, people_tracker,
+        gz, rsp, bridge, spawn, rviz, battery, scan_merger, leg_detector, people_tracker, collision_monitor, safety_lifecycle,
         # Chain on spawn exiting rather than on a timer. `create` exits once the
         # model is in the world, which is exactly the precondition the
         # controller_manager needs.

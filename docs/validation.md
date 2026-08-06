@@ -489,6 +489,46 @@ channel and the motion test are what address it.
 
 ---
 
+## V-13. The protective stop, and three bugs on the way to it
+
+**Status: working and measured. See docs/safety_concept.md for the geometry.**
+
+| command | active protective field | obstacle at 0.778 m inside it | result |
+|---|---|---|---|
+| 0.25 m/s | 0.561 m from base_link | no | moves, at 0.081 m/s |
+| 0.80 m/s | 0.854 m from base_link | yes | **stops, 0.000 m/s** |
+
+That single table shows the protective stop firing, the field switching with speed so the same
+obstacle is safe at one speed and not another, and the warning field slowing the vehicle to 0.081
+from a 0.25 m/s command at the configured 0.3 ratio.
+
+**Three failures on the way, each of which presented as something else.**
+
+1. **The monitor published the wrong message type.** `diff_drive_controller` 4.x consumes
+   `TwistStamped`; the monitor defaults to plain `Twist`. Both types then appear on the same topic,
+   the controller ignores the one it does not want, and the robot never moves with **no error
+   anywhere**. It looked exactly like a permanent protective stop. Found because `ros2 topic hz`
+   refused the topic, reporting it carried two types. Fixed by `enable_stamped_cmd_vel`, now
+   asserted by a test.
+
+2. **The vehicle stopped for its own scanner pods.** The optics sit flush at the envelope corner and
+   the housing is a 107 x 80 mm box rotated 45 degrees, so the pods reach **28.7 mm proud** of the
+   published envelope. The self-return filter used a 20 mm margin, those returns survived it, landed
+   inside the protective field, and the vehicle held a permanent stop against itself. The margin is
+   now derived from the pod geometry and a test asserts it covers them.
+
+3. **Nav2 wants polygon points as a string**, not a numeric array. Configuring with an array fails
+   with `parameter points has invalid type`, and the lifecycle manager reports only `failed to
+   change state`. The node had to be run standalone to see the real message.
+
+**And one of my own claims was false.** The platform spec recorded control latency as *measured*
+end to end. It was not measured; it is an estimate, and it feeds the protective field size directly.
+The provenance gate caught it only indirectly. That is the second fabricated citation in this
+project, after the camera mass, and both were found by reading rather than by a test, which is now
+written into the gate's own docstring as a limit of what it can check.
+
+---
+
 ## Known limitations of the model
 
 Recorded here rather than discovered later. None of these are bugs; they are places where the model

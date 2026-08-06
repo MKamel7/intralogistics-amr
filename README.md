@@ -146,6 +146,20 @@ consumes the classifier, which is both how ISO 3691-4 protective fields work and
 architecture that does not make safety depend on a component measured at 0.218 precision. V-11 in
 [docs/validation.md](docs/validation.md).
 
+**Protective and warning fields** (`amr_safety`). Speed-switched fields on `nav2_collision_monitor`,
+sitting between the velocity command and the wheels. The geometry is not chosen: it is generated
+from a stopping-distance calculation over the platform spec, rounded outward only, and 11 tests
+assert each field covers its own stopping distance, that the bands leave no uncovered speed, and
+that the observation source is the merged scan rather than any classifier output.
+
+Measured with an obstacle 0.778 m ahead: at a 0.25 m/s command the active field reaches 0.561 m, the
+obstacle is outside it and the vehicle moves at 0.081 m/s under warning-field slowdown; at 0.80 m/s
+the field reaches 0.854 m, the obstacle is inside and the vehicle **stops at 0.000 m/s**. Same
+obstacle, different speed, different outcome, which is the whole point of speed-dependent fields.
+
+The reasoning, the two estimated inputs it rests on, and what it does not prove are in
+[docs/safety_concept.md](docs/safety_concept.md).
+
 **Battery and state of charge.** A power model fitted to the three runtimes the platform sheet
 publishes, exposed as `sensor_msgs/BatteryState`. Deliberately labelled as calibration rather than
 validation in [docs/validation.md](docs/validation.md): three published figures and three model

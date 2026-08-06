@@ -75,6 +75,13 @@ values:
   max_angular_speed: 1.5         # rad/s
   max_incline: 0.05              # fraction, at 0.5 m/s
 
+  # ---- emergency braking, for protective field sizing ------------------
+  # A protective field is only as good as the stopping distance behind it, and
+  # that distance is a calculation, not a choice. See docs/safety_concept.md.
+  emergency_decel: 1.50          # m/s^2
+  brake_actuation_delay: 0.05    # s
+  control_latency: 0.10          # s, sensor to command; NOT YET MEASURED
+
   # ---- energy --------------------------------------------------------
   battery_capacity_kwh: 1.63
   battery_nominal_voltage: 47.7  # V
@@ -99,6 +106,14 @@ values:
   scanner_mount_x: 0.405         # m, from robot centre
   scanner_mount_y: 0.295         # m
   scanner_housing_inset: 0.060   # m, housing drawn inboard of the optics
+  # Margin the self-return filter must add to the chassis envelope.
+  #
+  # The scanner pods stand proud of the published envelope by 28.7 mm, because
+  # the optics sit flush at the corner and the housing is a box rotated 45
+  # degrees. At the previous 20 mm margin those pod returns survived the filter,
+  # landed inside the protective field, and the vehicle STOPPED FOR ITSELF and
+  # never moved. Derived, with 6 mm over the requirement.
+  self_filter_margin: 0.035      # m
   scanner_update_rate: 14.28     # Hz, rounded DOWN from 1/70 ms; see provenance
 
   # ---- 3D cameras (2x) -----------------------------------------------
@@ -181,6 +196,9 @@ provenance:
   max_angular_speed:   {kind: estimated, src: "not published; chosen so a spot turn stays inside the 950 mm 90 degree corridor target"}
   max_incline:         {kind: datasheet, src: "MiR250 sheet, Maximum incline/decline 5 percent at 0.5 m/s"}
 
+  emergency_decel:         {kind: estimated, src: "NOT published in either sheet. The MiR sheet gives an acceleration LIMIT of 0.3 m/s2, which is a comfort and payload-retention figure for normal driving and is not an emergency braking rate; using it would oversize every protective field by a factor of five. 1.5 m/s2 is a conservative emergency rate for a wheeled indoor vehicle on a dry floor. This is the single least-supported number in the safety calculation and it is called out in docs/safety_concept.md"}
+  brake_actuation_delay:   {kind: estimated, src: "not published; the delay between a stop command and torque actually falling, taken as one control period plus margin"}
+  control_latency:         {kind: estimated, src: "NOT YET MEASURED, and the earlier version of this line claimed it was, which was false. It is an estimate of the sensor-to-command path: merge, collision monitor cycle and transport. It feeds the protective field size directly, so measuring it end to end on the running system is an outstanding item recorded in docs/validation.md, and the safety concept must not claim a measured latency until it is"}
   battery_capacity_kwh:    {kind: datasheet, src: "MiR250 sheet, Battery capacity 1.63 kWh"}
   battery_nominal_voltage: {kind: datasheet, src: "MiR250 sheet, Battery voltage 47.7 V nominal"}
   battery_capacity_ah:     {kind: datasheet, src: "MiR250 sheet, Battery capacity 34.2 Ah at 47.7 V"}
@@ -198,6 +216,7 @@ provenance:
   scanner_mount_height:          {kind: estimated, src: "not published; 150 mm puts the 80 mm tall scanner body inside the 300 mm chassis with the scan plane low enough to see a foot"}
   scanner_mount_x:               {kind: estimated, src: "not published; diagonally opposite corners, inside the 800 mm length"}
   scanner_mount_y:               {kind: estimated, src: "not published; diagonally opposite corners, inside the 580 mm width"}
+  self_filter_margin:            {kind: derived,   src: "computed = 28.7 mm, because the scanner housing is a 107 x 80 mm box rotated 45 degrees about a mount 5 mm proud of the corner and therefore reaches beyond the envelope in both axes; the filter margin must exceed that or the vehicle sees its own pods and holds a permanent protective stop"}
   scanner_housing_inset:         {kind: estimated, src: "not published; the housing is drawn inboard of the optical centre so the body sits in the corner recess while the optics stay flush, which is how a corner-mounted safety scanner is packaged"}
   scanner_update_rate:           {kind: derived,   src: "1 / 70 ms response time = 14.2857 Hz, rounded DOWN to 14.28. Rounding a protective device UP claims it reports faster than it responds, which flatters every stopping distance computed from it, so the direction of the rounding is deliberate"}
 
