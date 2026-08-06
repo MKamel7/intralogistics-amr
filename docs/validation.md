@@ -101,6 +101,44 @@ dependence, and capacity fade over the rated 3000 cycles. Discharge is linear in
 
 ---
 
+## V-05. The vehicle must occlude its own scanners
+
+**Status: defect found and fixed.** Measured 2026-08-06 on the running system.
+
+The scanners were mounted at (0.34, 0.245) relative to the chassis centre, inside a chassis modelled
+as a single 800 x 580 mm box. That put each sensor **inside** solid geometry, with the nearest wall
+40 mm away in x and 30 mm in y, both below the 50 mm minimum range.
+
+The scans looked perfectly healthy: 1618 returns, no infinities, a 0.27 m minimum and a 5 m median.
+Nothing indicated a problem. The reason is that the renderer culls backfaces, so a sensor sitting
+inside a box sees no box at all, and the vehicle was simply invisible to its own lidar.
+
+Probing the arc that points into the vehicle made it obvious:
+
+| front-left scanner, arc | before | after |
+|---|---|---|
+| outward, towards the world | 470 returns, median 4.55 m | 470 returns, median 4.57 m |
+| inward, into the vehicle | 159 returns, **median 9.34 m** | 159 returns, **median 0.06 m** |
+
+A 9.34 m median on rays aimed at the robot's own centre means the scanner was seeing straight
+through the chassis to the far wall of the warehouse. Any later claim about 360 degree coverage,
+protective field geometry or blind sectors would have rested on that artifact.
+
+**Fix.** The chassis is now two overlapping boxes forming a plus shape, leaving the four corners
+open as recesses for the scanners. Both boxes stay inside the published 800 x 580 mm envelope, the
+sensors sit in the open corners rather than inside solid geometry, and the remaining body is a real
+occluder. After the change the inward arc returns 0.06 m, which is the chassis wall where it should
+be.
+
+**Consequence for the perception work.** Those self-returns are real and must be removed by a
+footprint filter in the scan merge. That was already planned; it is now a demonstrated requirement
+with a measurement behind it rather than an anticipated one.
+
+**Generalisation worth remembering.** A sensor that produces plausible-looking data is not a working
+sensor. This was only caught by asking what a specific arc *should* return and checking that it did.
+
+---
+
 ## Known limitations of the model
 
 Recorded here rather than discovered later. None of these are bugs; they are places where the model

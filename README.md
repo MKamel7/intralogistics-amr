@@ -70,6 +70,13 @@ acceleration figure and therefore accelerates more aggressively than the real ma
 any future throughput number optimistic. Recorded in [docs/validation.md](docs/validation.md)
 rather than tuned away.
 
+**The vehicle occludes its own scanners**, which took a fix. The scanners were originally mounted
+inside a single solid chassis box, and because the renderer culls backfaces the vehicle was
+invisible to its own lidar: rays aimed into the robot returned a median of 9.34 m, seeing through
+the chassis to the far wall, while the scans otherwise looked entirely healthy. The chassis is now
+two overlapping boxes leaving open corner recesses for the sensors, inside the published envelope,
+and the same arc now returns 0.06 m. See V-05 in [docs/validation.md](docs/validation.md).
+
 **Battery and state of charge.** A power model fitted to the three runtimes the platform sheet
 publishes, exposed as `sensor_msgs/BatteryState`. Deliberately labelled as calibration rather than
 validation in [docs/validation.md](docs/validation.md): three published figures and three model

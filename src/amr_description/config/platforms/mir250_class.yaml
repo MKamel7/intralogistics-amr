@@ -31,6 +31,11 @@ values:
   chassis_width: 0.580           # m
   chassis_height: 0.300          # m
   ground_clearance: 0.026        # m
+  # Corner recesses that house the safety scanners. Without them the scanners
+  # sit INSIDE a solid chassis box and the vehicle stops occluding its own
+  # lidar, see docs/validation.md.
+  corner_cut_x: 0.120            # m
+  corner_cut_y: 0.090            # m
   tare_mass: 83.0                # kg, without battery or payload
   battery_mass: 14.0             # kg
   max_payload: 250.0             # kg
@@ -87,8 +92,8 @@ values:
   scanner_detection_resolution: 0.020   # m
   scanner_protective_supplement: 0.065  # m
   scanner_mount_height: 0.150    # m above ground, scan plane
-  scanner_mount_x: 0.360         # m, from robot centre
-  scanner_mount_y: 0.260         # m
+  scanner_mount_x: 0.340         # m, from robot centre, inside the corner recess
+  scanner_mount_y: 0.245         # m
   scanner_update_rate: 14.28     # Hz, rounded DOWN from 1/70 ms; see provenance
 
   # ---- 3D cameras (2x) -----------------------------------------------
@@ -129,6 +134,8 @@ provenance:
   chassis_width:       {kind: datasheet, src: "MiR250 sheet, Dimensions/Width 580 mm"}
   chassis_height:      {kind: datasheet, src: "MiR250 sheet, Dimensions/Height 300 mm"}
   ground_clearance:    {kind: derived,   src: "MiR250 sheet gives a 25 to 28 mm range; midpoint taken"}
+  corner_cut_x:        {kind: estimated, src: "not published; sized so a scanner body fits in the recess and the remaining chassis still occludes the sensor's inward arc"}
+  corner_cut_y:        {kind: estimated, src: "not published; sized so a scanner body fits in the recess and the remaining chassis still occludes the sensor's inward arc"}
   tare_mass:           {kind: datasheet, src: "MiR250 sheet, Weight without battery or payload 83 kg"}
   battery_mass:        {kind: datasheet, src: "MiR250 sheet, Battery weight 14 kg"}
   max_payload:         {kind: datasheet, src: "MiR250 sheet, Maximum payload 250 kg"}

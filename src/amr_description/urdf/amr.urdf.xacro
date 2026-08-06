@@ -78,23 +78,46 @@
        ground plane. The drive axis is central on this platform, so that is also
        the geometric centre of the footprint. -->
   <link name="base_link">
+    <!-- Inertia is taken over the full 800 x 580 envelope rather than the plus
+         shape. The corner recesses are a small fraction of the volume and the
+         bounding box slightly over-estimates the yaw moment, which is the
+         conservative direction for turning. Approximation, stated. -->
     <xacro:box_inertia m="${body_mass}"
                        x="${p['chassis_length']}"
                        y="${p['chassis_width']}"
                        z="${body_h}"
                        cz="${body_cz}"/>
-    <visual>
+    <!-- The chassis is TWO overlapping boxes, not one, forming a plus shape that
+         leaves the four corners open. Those recesses house the safety scanners.
+
+         This is not styling. With a single solid box the scanners sit inside it,
+         and because the renderer culls backfaces a sensor inside a box makes
+         that box invisible: measured on the running system, rays aimed into the
+         vehicle returned a median of 9.34 m, seeing straight through the robot
+         to the far wall. The vehicle has to be a real occluder or every claim
+         about scanner coverage rests on a rendering artifact.
+
+         Both boxes stay inside the published 800 x 580 mm envelope. -->
+    <xacro:property name="body_long_w" value="${p['chassis_width'] - 2 * p['corner_cut_y']}"/>
+    <xacro:property name="body_wide_l" value="${p['chassis_length'] - 2 * p['corner_cut_x']}"/>
+
+    <visual name="body_longitudinal">
       <origin xyz="0 0 ${body_cz}"/>
-      <geometry>
-        <box size="${p['chassis_length']} ${p['chassis_width']} ${body_h}"/>
-      </geometry>
+      <geometry><box size="${p['chassis_length']} ${body_long_w} ${body_h}"/></geometry>
       <material name="amr_body"/>
     </visual>
-    <collision>
+    <visual name="body_transverse">
       <origin xyz="0 0 ${body_cz}"/>
-      <geometry>
-        <box size="${p['chassis_length']} ${p['chassis_width']} ${body_h}"/>
-      </geometry>
+      <geometry><box size="${body_wide_l} ${p['chassis_width']} ${body_h}"/></geometry>
+      <material name="amr_body"/>
+    </visual>
+    <collision name="body_longitudinal">
+      <origin xyz="0 0 ${body_cz}"/>
+      <geometry><box size="${p['chassis_length']} ${body_long_w} ${body_h}"/></geometry>
+    </collision>
+    <collision name="body_transverse">
+      <origin xyz="0 0 ${body_cz}"/>
+      <geometry><box size="${body_wide_l} ${p['chassis_width']} ${body_h}"/></geometry>
     </collision>
   </link>
 
