@@ -179,6 +179,35 @@ def test_robot_fits_the_corridor_it_claims(spec):
         'would make that target trivially satisfiable and not worth asserting')
 
 
+def test_camera_pair_spans_the_published_combined_field_of_view(spec):
+    """Two sheets, one number, and they have to agree.
+
+    The platform sheet publishes 114 degrees horizontal for the pair; the Intel
+    sheet gives 87 degrees for one D435. The toe-out is derived from those two,
+    so this asserts the derivation still holds. It also documents the resolution
+    of an ambiguity that was live for several commits: 114 is COMBINED, not per
+    camera, and modelling each camera at 114 overstated the sensor by 27
+    degrees.
+    """
+    v, t = spec['values'], spec['validation_targets']
+    combined = v['camera_hfov'] + 2.0 * v['camera_splay']
+    assert combined == pytest.approx(t['camera_combined_hfov'], abs=0.5), (
+        f"two {v['camera_hfov']} deg cameras toed out {v['camera_splay']} deg span "
+        f"{combined} deg, but the platform sheet publishes "
+        f"{t['camera_combined_hfov']} deg for the pair")
+    assert v['camera_hfov'] < t['camera_combined_hfov'], (
+        'a single camera cannot be as wide as the pair; that was the original error')
+
+
+def test_camera_clip_planes_are_the_sensor_limits(spec):
+    """Min-Z and maximum range are sensor properties, not framing choices."""
+    v = spec['values']
+    assert v['camera_min_depth'] < v['camera_min_ground_view'], (
+        'the sensor minimum depth should be nearer than the mounting-derived '
+        'minimum ground view; these are different quantities and were conflated')
+    assert v['camera_max_range'] > v['camera_fov_distance']
+
+
 def test_validation_targets_are_not_silently_dropped(spec):
     """These are the claims the project promises to measure itself against."""
     required = {

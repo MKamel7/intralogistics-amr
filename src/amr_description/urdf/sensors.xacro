@@ -88,14 +88,15 @@
   <!-- ============ RGB-D camera ============
        Reference part: Intel RealSense D435, as named by the platform sheet.
 
-       OPEN ITEM, deliberately visible: the platform sheet gives a 114 degree
-       horizontal field of view under a heading covering TWO cameras, without
-       saying whether that figure is per camera or the pair combined. A single
-       D435 is narrower than 114 degrees, so modelling each camera at 114
-       degrees is the OPTIMISTIC reading and probably overstates the sensor.
-       It is used only so the geometry exists; no detection or coverage number
-       may be published from this model until the Intel data sheet is archived
-       and the figure resolved. Tracked in docs/datasheets/README.md. -->
+       RESOLVED. The platform sheet gives 114 degrees horizontal under a heading
+       covering TWO cameras, without saying whether that is per camera or
+       combined. The archived Intel sheet settles it: one D435 sees 87 degrees
+       +/- 3. So 114 is the COMBINED figure, and modelling each camera at 114
+       overstated it by 27 degrees, which is what the earlier note warned about.
+
+       Each camera is now 87 degrees, toed out by 13.5 degrees, and the pair
+       spans exactly the 114 degrees the platform sheet publishes. The two
+       sheets agree, which is a real cross-check rather than an assumption. -->
   <xacro:macro name="rgbd_camera" params="name y yaw">
     <link name="${name}_link">
       <xacro:box_inertia m="${p['camera_mass']}" x="${p['camera_body_x']}" y="${p['camera_body_y']}" z="${p['camera_body_z']}"/>
@@ -137,9 +138,14 @@
             <height>480</height>
             <format>R8G8B8</format>
           </image>
+          <!-- Clip planes are the SENSOR's limits, not a convenient framing.
+               Min-Z 0.105 m and about 10 m maximum range, both from the Intel
+               sheet. The platform sheet's 0.25 m is the minimum distance at
+               which the camera sees the GROUND, which is a mounting geometry
+               figure and a different quantity. -->
           <clip>
-            <near>${p['camera_min_ground_view']}</near>
-            <far>10.0</far>
+            <near>${p['camera_min_depth']}</near>
+            <far>${p['camera_max_range']}</far>
           </clip>
           <noise>
             <type>gaussian</type>

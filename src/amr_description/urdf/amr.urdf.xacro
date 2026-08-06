@@ -247,12 +247,18 @@
     <xacro:safety_scanner name="scanner_rear_right"  rx="-1" ry="-1" yaw="${-3*pi/4}"/>
   </xacro:if>
 
-  <!-- Two forward RGB-D cameras, splayed so their combined horizontal field of
-       view exceeds either one alone. These cover the volume above the scan
-       plane, which is where a torso, a fork tip or an overhanging load is. -->
+  <!-- Two forward RGB-D cameras, toed out so the pair spans the combined field
+       of view the platform sheet publishes. They cover the volume ABOVE the
+       scan plane, which is where a torso is and where a rack upright simply
+       continues: the only thing that separates a standing person from a post.
+       Splay is derived, not chosen; see the spec. -->
   <xacro:if value="$(arg use_cameras)">
-    <xacro:rgbd_camera name="camera_left"  y="0.15"  yaw="${radians(20)}"/>
-    <xacro:rgbd_camera name="camera_right" y="-0.15" yaw="${radians(-20)}"/>
+    <xacro:rgbd_camera name="camera_left"
+                       y="${p['camera_mount_y']}"
+                       yaw="${radians(p['camera_splay'])}"/>
+    <xacro:rgbd_camera name="camera_right"
+                       y="${-p['camera_mount_y']}"
+                       yaw="${radians(-p['camera_splay'])}"/>
   </xacro:if>
 
   <xacro:imu_sensor name="imu"/>

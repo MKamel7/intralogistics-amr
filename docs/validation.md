@@ -286,6 +286,45 @@ output.
 
 ---
 
+## V-09. Camera field of view: an ambiguity resolved against a second source
+
+**Status: resolved. The model was wrong by 27 degrees per camera and is now corrected.**
+
+The platform sheet lists "2 pcs 3D camera Intel RealSense D435" and, under the same heading,
+"FoV horizontal angle: 114 deg". It never says whether that figure describes one camera or the pair.
+The model took the optimistic reading, 114 degrees per camera, and the description carried an
+explicit note that no detection or coverage figure could be published until a second source settled
+it. This entry is that settlement.
+
+The archived Intel D435i specification gives a depth field of view of **87 deg +/- 3 horizontal by
+58 deg +/- 1 vertical**. A single camera therefore cannot be 114 degrees, so the platform figure is
+the pair.
+
+| quantity | before | after | source |
+|---|---|---|---|
+| horizontal FoV per camera | 114 deg | **87 deg** | Intel sheet |
+| vertical FoV per camera | not modelled | **58 deg** | Intel sheet |
+| toe-out per camera | 20 deg, chosen | **13.5 deg, derived** | (114 - 87) / 2 |
+| near clip | 0.25 m | **0.105 m** | Intel Min-Z |
+| far clip | 10 m, assumed | **10 m** | Intel maximum range |
+
+Two 87 degree cameras toed out 13.5 degrees span 114 degrees, which reproduces the platform figure
+exactly. The two documents now agree, and `test_platform_spec.py` asserts the derivation so it
+cannot drift.
+
+**A conflation corrected at the same time.** The near clip had been set from the platform sheet's
+0.25 m "minimum distance in front of robot for ground view". That is a mounting-geometry figure,
+the closest point on the floor the camera can see given where it sits, and it is not the sensor's
+minimum depth. Those are different quantities and had been used interchangeably. Min-Z is 0.105 m.
+
+**A provenance claim corrected too.** The camera mass carried the source "taken as the published
+mass of the named Intel RealSense D435 module". The Intel sheet gives dimensions and no mass, so
+that citation was to a document that had not been read. It now says the mass is estimated and that
+neither sheet publishes it. The module dimensions, which the sheet does give as 90 x 25 x 25 mm,
+moved from estimated to datasheet and happened to match the estimates exactly.
+
+---
+
 ## Known limitations of the model
 
 Recorded here rather than discovered later. None of these are bugs; they are places where the model

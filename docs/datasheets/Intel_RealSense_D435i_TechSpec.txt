@@ -1,0 +1,71 @@
+Tech Specs D435i RealsenseTM
+Manufacturer
+
+Intel
+Use Environment:
+Indoor/Outdoor
+
+Features
+
+Image Sensor Technology:
+Global Shutter, 3μm x 3μm
+pixel size
+
+Depth Technology:
+Active IR Stereo
+Depth
+Depth Field of View (FOV):
+87°±3° x 58°±1° x 95°±3°
+
+RGB
+
+RGB Sensor Resolution &
+Frame Rate):
+1920 x 1080
+RGB Frame Rate:
+30 fps
+
+Maximum Range:
+Approx. 10 meters.
+Accuracy varies
+depending on calibration,
+scene, and lighting
+condition.
+Minimum Depth
+Distance (Min-Z):
+0.105 m
+Depth Output
+Resolution & Frame
+Rate:
+Up to 1280 x 720 active
+stereo depth resolution.
+Up to 90 fps.
+
+RGB Sensor FOV (H x
+V x D):
+69.4° x 42.5° x 77° (+/3°)
+
+Camera Module:
+Vision Processor Board:
+Major Components Intel RealSense Module D430 + Intel RealSense Vision
+RGB Camera
+Processor D4
+
+Physical
+
+Form Factor:
+Camera Peripheral
+
+Connectors:
+USB-C* 3.1 Gen 1*
+Mounting Mechanism:
+
+Length x Depth x Height:
+90 mm x 25 mm x 25 mm
+
+One 1/4-20 UNC thread
+mounting point.
+Two M3 thread mounting
+points.
+
+

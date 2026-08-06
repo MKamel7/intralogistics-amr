@@ -102,11 +102,19 @@ values:
   scanner_update_rate: 14.28     # Hz, rounded DOWN from 1/70 ms; see provenance
 
   # ---- 3D cameras (2x) -----------------------------------------------
-  camera_hfov: 114.0             # deg
+  # PER CAMERA, from the Intel sheet. The platform sheet's 114 deg is the
+  # COMBINED figure for the pair, not one camera; see camera_splay below and
+  # V-09 in docs/validation.md.
+  camera_hfov: 87.0              # deg
+  camera_vfov: 58.0              # deg
+  camera_min_depth: 0.105        # m
+  camera_max_range: 10.0         # m
+  camera_splay: 13.5             # deg, each camera toed out from straight ahead
   camera_fov_height: 1.800       # m, at the distance below
   camera_fov_distance: 1.200     # m, in front of the robot
   camera_min_ground_view: 0.250  # m
   camera_mount_height: 0.270     # m
+  camera_mount_y: 0.150          # m, lateral offset of each camera
   camera_update_rate: 15.0       # Hz
 
 # Published figures the model is validated AGAINST rather than tuned to.
@@ -119,6 +127,7 @@ validation_targets:
   min_object_at_1m: 0.020            # m
   min_object_at_2p5m: 0.070          # m
   distance_to_max_speed: 9.5         # m
+  camera_combined_hfov: 114.0        # deg, MiR sheet; the pair must span this
   runtime_loaded_h: 13.0
   runtime_unloaded_h: 17.4
   runtime_standby_h: 22.0
@@ -162,10 +171,10 @@ provenance:
   scanner_body_x:      {kind: datasheet, src: "SICK nanoScan3 sheet, Dimensions W x H x D 106.6 mm, rounded to 107 mm"}
   scanner_body_y:      {kind: datasheet, src: "SICK nanoScan3 sheet, Dimensions W x H x D, height 80 mm"}
   scanner_body_z:      {kind: datasheet, src: "SICK nanoScan3 sheet, Dimensions W x H x D, depth 117.5 mm, rounded to 118 mm"}
-  camera_body_x:       {kind: estimated, src: "not published in the MiR sheet; taken as the depth of the named Intel RealSense D435 module"}
-  camera_body_y:       {kind: estimated, src: "not published in the MiR sheet; taken as the width of the named Intel RealSense D435 module"}
-  camera_body_z:       {kind: estimated, src: "not published in the MiR sheet; taken as the height of the named Intel RealSense D435 module"}
-  camera_mass:         {kind: estimated, src: "not published in the MiR sheet; taken as the published mass of the named Intel RealSense D435 module"}
+  camera_body_x:       {kind: datasheet, src: "Intel RealSense D435i sheet, Length x Depth x Height 90 mm x 25 mm x 25 mm, depth 25 mm"}
+  camera_body_y:       {kind: datasheet, src: "Intel RealSense D435i sheet, Length x Depth x Height 90 mm x 25 mm x 25 mm, length 90 mm"}
+  camera_body_z:       {kind: datasheet, src: "Intel RealSense D435i sheet, Length x Depth x Height 90 mm x 25 mm x 25 mm, height 25 mm"}
+  camera_mass:         {kind: estimated, src: "not published in EITHER sheet; the Intel sheet gives dimensions but no mass, so this is estimated from the 90 x 25 x 25 mm module. An earlier version of this line claimed it was the published mass, which was wrong before the Intel sheet was archived"}
 
   max_linear_speed:    {kind: datasheet, src: "MiR250 sheet, Maximum speed 2.0 m/s"}
   max_linear_accel:    {kind: datasheet, src: "MiR250 sheet, Acceleration limits with maximum payload 0.3 m/s2"}
@@ -192,7 +201,12 @@ provenance:
   scanner_housing_inset:         {kind: estimated, src: "not published; the housing is drawn inboard of the optical centre so the body sits in the corner recess while the optics stay flush, which is how a corner-mounted safety scanner is packaged"}
   scanner_update_rate:           {kind: derived,   src: "1 / 70 ms response time = 14.2857 Hz, rounded DOWN to 14.28. Rounding a protective device UP claims it reports faster than it responds, which flatters every stopping distance computed from it, so the direction of the rounding is deliberate"}
 
-  camera_hfov:              {kind: datasheet, src: "MiR250 sheet, 3D cameras FoV horizontal angle 114 deg"}
+  camera_hfov:              {kind: datasheet, src: "Intel RealSense D435i sheet, Depth Field of View 87 deg +/- 3 deg horizontal"}
+  camera_vfov:              {kind: datasheet, src: "Intel RealSense D435i sheet, Depth Field of View 58 deg +/- 1 deg vertical"}
+  camera_min_depth:         {kind: datasheet, src: "Intel RealSense D435i sheet, Minimum Depth Distance Min-Z 0.105 m"}
+  camera_max_range:         {kind: datasheet, src: "Intel RealSense D435i sheet, Maximum Range approximately 10 metres"}
+  camera_splay:             {kind: derived,   src: "(114 - 87) / 2 = 13.5 deg, the toe-out at which two 87 deg cameras span the 114 deg combined figure the MiR sheet publishes"}
+  camera_mount_y:           {kind: estimated, src: "not published; lateral spacing chosen so the two cameras clear each other on the front face"}
   camera_fov_height:        {kind: datasheet, src: "MiR250 sheet, 3D cameras FoV height 1800 mm"}
   camera_fov_distance:      {kind: datasheet, src: "MiR250 sheet, FoV distance in front of robot 1200 mm"}
   camera_min_ground_view:   {kind: datasheet, src: "MiR250 sheet, FoV minimum distance for ground view 250 mm"}
