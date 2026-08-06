@@ -50,6 +50,22 @@ That table is the evidence for the three-tier design in
 only, and a perception tier of one fully equipped robot. Three robots carrying cameras runs below
 real time, which is the configuration the tiering exists to avoid.
 
+**Bringup that drives.** `ros2 launch amr_bringup robot.launch.py` puts the robot in the warehouse
+with `ros2_control`, the bridge and both controllers active. Controller spawning is chained to the
+spawn process exiting rather than to a timer, because `gz_ros2_control` only starts its
+controller_manager once the model is in the world.
+
+Verified against the platform sheet by `src/amr_evaluation/tools/drive_check.py`: 0.5 m/s command
+gives 2.59 m in 6.0 s (the deficit against 3.0 m is exactly the acceleration ramp), a 0.6 rad/s spot
+turn reaches 0.6 rad/s, and a full-speed ramp reaches 2.0 m/s in 6.55 m at an effective 0.30 m/s2.
+
+That last figure exposed an inconsistency in the reference itself: the sheet publishes both a
+0.3 m/s2 acceleration limit and a 9.5 m distance to reach 2.0 m/s, and under constant acceleration
+those imply 6.67 m and 0.21 m/s2 respectively. They cannot both hold. The model follows the
+acceleration figure and therefore accelerates more aggressively than the real machine, which makes
+any future throughput number optimistic. Recorded in [docs/validation.md](docs/validation.md)
+rather than tuned away.
+
 **Platform specification with an enforced provenance gate.** Every physical constant of the robot
 lives in `src/amr_description/config/platforms/mir250_class.yaml`, tagged `datasheet`, `derived`,
 `estimated` or `tuned`, with its source. Currently 20 datasheet values, 4 derived, 10 estimated.
@@ -139,11 +155,15 @@ a test fails the build if that decays.
 Results are measured, not asserted. Any performance number in this README names the machine it was
 measured on and the conditions it was measured under.
 
+Published figures from the reference platform are validated **against**, never tuned to. Where the
+model and the reference disagree, [docs/validation.md](docs/validation.md) says so and says which
+way the error points.
+
 ## Roadmap
 
 In order, each independently demonstrable:
 
-1. Bringup: controllers, `ros_gz_bridge`, RViz, battery model
+1. Battery and state-of-charge model, RViz configuration
 2. Perception: scan conditioning, human detection, tracking, prediction
 3. Mapping and localisation, including the aisle degeneracy benchmark
 4. KLT load transfer and precision docking

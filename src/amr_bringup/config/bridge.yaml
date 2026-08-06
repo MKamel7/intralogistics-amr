@@ -1,0 +1,73 @@
+# ros_gz_bridge configuration for a single un-namespaced robot.
+#
+# Only what is consumed is bridged. Every bridged topic costs a serialisation
+# on a 15 W CPU, and Gazebo renders a camera ONLY while its topic has a
+# subscriber, so an unused bridge entry is not free: it makes the simulator
+# render frames nobody reads. See docs/adr/0003-three-tier-simulation.md.
+#
+# The point clouds are deliberately NOT bridged by default. They are the most
+# expensive payload here and the perception pipeline will consume them inside
+# the simulator-side process once it exists.
+
+- ros_topic_name: "/clock"
+  gz_topic_name: "/clock"
+  ros_type_name: "rosgraph_msgs/msg/Clock"
+  gz_type_name: "gz.msgs.Clock"
+  direction: GZ_TO_ROS
+
+# ---- safety laser scanners -------------------------------------------
+- ros_topic_name: "/scanner_front_left/scan"
+  gz_topic_name: "/scanner_front_left/scan"
+  ros_type_name: "sensor_msgs/msg/LaserScan"
+  gz_type_name: "gz.msgs.LaserScan"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/scanner_rear_right/scan"
+  gz_topic_name: "/scanner_rear_right/scan"
+  ros_type_name: "sensor_msgs/msg/LaserScan"
+  gz_type_name: "gz.msgs.LaserScan"
+  direction: GZ_TO_ROS
+
+# ---- IMU --------------------------------------------------------------
+- ros_topic_name: "/imu"
+  gz_topic_name: "/imu"
+  ros_type_name: "sensor_msgs/msg/Imu"
+  gz_type_name: "gz.msgs.IMU"
+  direction: GZ_TO_ROS
+
+# ---- RGB-D cameras ----------------------------------------------------
+- ros_topic_name: "/camera_left/image"
+  gz_topic_name: "/camera_left/image"
+  ros_type_name: "sensor_msgs/msg/Image"
+  gz_type_name: "gz.msgs.Image"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/camera_left/depth_image"
+  gz_topic_name: "/camera_left/depth_image"
+  ros_type_name: "sensor_msgs/msg/Image"
+  gz_type_name: "gz.msgs.Image"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/camera_left/camera_info"
+  gz_topic_name: "/camera_left/camera_info"
+  ros_type_name: "sensor_msgs/msg/CameraInfo"
+  gz_type_name: "gz.msgs.CameraInfo"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/camera_right/image"
+  gz_topic_name: "/camera_right/image"
+  ros_type_name: "sensor_msgs/msg/Image"
+  gz_type_name: "gz.msgs.Image"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/camera_right/depth_image"
+  gz_topic_name: "/camera_right/depth_image"
+  ros_type_name: "sensor_msgs/msg/Image"
+  gz_type_name: "gz.msgs.Image"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/camera_right/camera_info"
+  gz_topic_name: "/camera_right/camera_info"
+  ros_type_name: "sensor_msgs/msg/CameraInfo"
+  gz_type_name: "gz.msgs.CameraInfo"
+  direction: GZ_TO_ROS

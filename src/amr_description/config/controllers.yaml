@@ -48,7 +48,9 @@ diff_drive_controller:
     enable_odom_tf: true
 
     cmd_vel_timeout: 0.5
-    use_stamped_vel: false
+    # No use_stamped_vel here: diff_drive_controller 4.x dropped it and the
+    # command interface is geometry_msgs/TwistStamped unconditionally. Leaving
+    # the old parameter in place would read as if it still selected something.
 
     # Limits from the platform spec. The acceleration figure is the published
     # value AT MAXIMUM PAYLOAD, so it is the conservative case and the right
