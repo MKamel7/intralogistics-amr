@@ -11,7 +11,7 @@ install(PROGRAMS ${PROJECT_NAME}/battery_model.py
         DESTINATION lib/${PROJECT_NAME}
         RENAME battery_model)
 
-install(DIRECTORY models worlds tools
+install(DIRECTORY models worlds tools scenarios launch
         DESTINATION share/${PROJECT_NAME}
         PATTERN "__pycache__" EXCLUDE)
 

@@ -90,6 +90,17 @@ degrees by moving the optics flush to the envelope corner. That is short of the 
 claim and V-06 in [docs/validation.md](docs/validation.md) says so, with the reason and the
 consequence for the later protective-field work.
 
+**Geometric people detection** (`amr_perception`, C++). Clusters the merged scan with an adaptive
+break threshold, keeps clusters that are leg sized and round rather than flat, and pairs them at a
+plausible stance width. 16 unit tests on synthesised scans with exact known truth.
+
+Scored against a scenario whose pedestrian positions are known: **recall 0.875, localisation p50
+5.4 cm, precision 0.168**. The precision figure is real and is not tuned away. A rack upright is a
+round leg-sized cylinder, so on a single 150 mm plane it is indistinguishable from a calf; 56 percent
+of the false positives come from nine fixed positions that are present in almost every frame. Height
+(from RGB-D) and motion (from tracking) are what separate the two, and both are next. V-07 in
+[docs/validation.md](docs/validation.md) has the analysis.
+
 **Battery and state of charge.** A power model fitted to the three runtimes the platform sheet
 publishes, exposed as `sensor_msgs/BatteryState`. Deliberately labelled as calibration rather than
 validation in [docs/validation.md](docs/validation.md): three published figures and three model

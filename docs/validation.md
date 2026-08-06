@@ -183,6 +183,57 @@ rather than the box primitives used here.
 
 ---
 
+## V-07. People detection from one scan plane
+
+**Status: measured. Recall and localisation are good; precision is poor, for a reason that is
+structural and that the next two components exist to fix.**
+
+Scored by `src/amr_evaluation/tools/score_detections.py` against the `static_people` scenario, which
+states exactly where four pedestrians stand. This is the first use of the simulator as a **label
+oracle** rather than as a source of control input, which is the inversion described at the top of
+this file.
+
+40 frames, 4 people, a match counted within 0.40 m:
+
+| metric | value |
+|---|---|
+| recall | **0.875** |
+| precision | **0.168** |
+| localisation error, mean | 9.7 cm |
+| localisation error, p50 | 5.4 cm |
+| localisation error, p95 | 33.2 cm |
+
+Per person: 100% at 2.00 m ahead, 100% at 2.50 m behind, 95% at 2.20 m to the side, and **55% at
+1.28 m**, the closest one. The near miss rate is the more interesting number and is discussed below.
+
+**Precision is 0.168 because a shelf upright is a leg.** 16.5 false positives per frame, but from
+only 32 distinct positions, and 9 of those appear in at least 80 percent of frames and account for
+56 percent of all false positives. They are not noise. They are warehouse structure: rack uprights,
+pallet-jack legs, clutter. A round, leg-sized, leg-separated pair of vertical cylinders is exactly
+what a shelf frame presents on a plane 150 mm off the floor.
+
+**No parameter tuning will fix this, and tuning would be the wrong response.** The detector is
+already discriminating on the only two things a single plane offers, size and roundness, and a shelf
+upright matches a calf on both. Narrowing the width band to exclude this particular warehouse's
+uprights would be fitting to one scene rather than detecting people. The result stands as measured.
+
+**What actually separates people from structure, in the order the plan builds them:**
+1. **Height above the scan plane.** The RGB-D channel sees that a person has a torso at 1.2 m and a
+   rack upright continues to the ceiling. One plane cannot see either.
+2. **Motion.** A rack upright is in the same place every frame, which is precisely what the analysis
+   above measured. A tracker with track confirmation and a velocity estimate removes persistent
+   static returns almost by construction.
+
+So this number is the baseline the fused detector and the tracker have to beat, and it is recorded
+so that improvement can be quantified rather than asserted.
+
+**The 55% at 1.28 m is a separate effect** and worth chasing: at close range a pedestrian subtends a
+large angle, the two legs merge into one wide cluster, and the width test rejects it. That is a real
+weakness in the near field, which is exactly where a protective stop matters most. Noted as an open
+item for the fused detector.
+
+---
+
 ## Known limitations of the model
 
 Recorded here rather than discovered later. None of these are bugs; they are places where the model
