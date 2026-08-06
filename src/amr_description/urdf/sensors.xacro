@@ -21,9 +21,24 @@
        responds, and overstating it would flatter every stopping-distance
        result downstream. -->
   <xacro:macro name="safety_scanner" params="name rx ry yaw">
+    <!-- The link origin is the OPTICAL CENTRE, not the centre of the housing.
+         That distinction is the whole reason this mount works.
+
+         A safety scanner recessed inboard of the vehicle's corner cannot see
+         tangentially along the vehicle's own sides: a ray from an inboard
+         position towards the far corner re-enters the chassis before it clears
+         the body. That is structural, not a tuning error, and it measured as a
+         contiguous 11.6 degree blind sector in the merged scan.
+
+         Sitting flush at the corner, the optics graze both adjacent faces and
+         see roughly the outward half plane. Two of them on opposite corners
+         then cover the full turn, which is what the platform claims. The
+         housing is drawn inboard so the physical body still sits in the recess
+         and inside the published envelope. -->
     <link name="${name}_link">
       <xacro:box_inertia m="${p['scanner_mass']}" x="${p['scanner_body_x']}" y="${p['scanner_body_y']}" z="${p['scanner_body_z']}"/>
       <visual>
+        <origin xyz="${-p['scanner_housing_inset']} 0 0"/>
         <geometry><box size="${p['scanner_body_x']} ${p['scanner_body_y']} ${p['scanner_body_z']}"/></geometry>
         <material name="amr_sensor"/>
       </visual>

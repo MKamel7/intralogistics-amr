@@ -103,8 +103,29 @@ def test_geometry_is_self_consistent(spec):
         'casters sit outside the chassis length')
     assert 2 * v['caster_inset_y'] < v['chassis_width'], (
         'casters sit outside the chassis width')
-    assert 2 * v['scanner_mount_x'] < v['chassis_length'], (
-        'scanner mounted outside the chassis length')
+    # The optical centre must sit AT OR PROUD OF the envelope corner, never
+    # inboard of it. This assertion used to require the opposite, and that is
+    # exactly what produced a contiguous 11.6 degree blind sector in the merged
+    # scan: a scanner recessed inboard cannot see tangentially along the
+    # vehicle's own sides, because the ray re-enters the chassis before
+    # clearing it. See V-06 in docs/validation.md.
+    assert 2 * v['scanner_mount_x'] >= v['chassis_length'], (
+        f"scanner optical centre at x={v['scanner_mount_x']} is inboard of the "
+        f"{v['chassis_length'] / 2} m envelope corner; the vehicle's own side "
+        f"will block its tangential view and open a blind sector")
+    assert 2 * v['scanner_mount_y'] >= v['chassis_width'], (
+        f"scanner optical centre at y={v['scanner_mount_y']} is inboard of the "
+        f"{v['chassis_width'] / 2} m envelope corner")
+    # ...but only just. A sensor sticking far out of the envelope is a different
+    # machine from the one on the data sheet.
+    proud_x = v['scanner_mount_x'] - v['chassis_length'] / 2
+    proud_y = v['scanner_mount_y'] - v['chassis_width'] / 2
+    assert proud_x <= 0.02 and proud_y <= 0.02, (
+        f'scanner optics stand {proud_x * 1000:.0f} x {proud_y * 1000:.0f} mm proud '
+        f'of the published envelope, which is no longer that platform')
+    assert v['scanner_housing_inset'] > 0.5 * v['scanner_body_x'], (
+        'housing inset is too small to pull the sensor body back inside the '
+        'corner recess')
     assert v['scanner_mount_height'] < v['chassis_height'], (
         'scan plane is above the deck, which would not see a person at floor level')
     assert v['scanner_protective_range'] < v['scanner_warning_range'], (

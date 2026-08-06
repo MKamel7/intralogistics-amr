@@ -139,6 +139,50 @@ sensor. This was only caught by asking what a specific arc *should* return and c
 
 ---
 
+## V-06. 360 degree coverage: improved, and still short of the claim
+
+**Status: partially reproduced. The reference claims more than this model delivers, and the gap is
+measured rather than glossed.**
+
+The platform sheet specifies two SICK nanoScan3 scanners giving "360 degree visual protection around
+robot". The merged scan is measured directly for contiguous blind sectors.
+
+The metric matters as much as the number. A count of empty bins is nearly useless here: re-binning
+polar data from an off-centre origin at the same angular resolution necessarily leaves scattered
+single-bin holes, which are an artifact of the re-binning and harmless. A **contiguous run** is a
+blind sector, and that is the only thing worth asserting.
+
+| scanner optics | empty bins | largest contiguous gap |
+|---|---|---|
+| recessed inboard at (0.340, 0.245) | 273 of 2118 (12.9%) | **11.56 degrees** |
+| flush at the corner, (0.405, 0.295) | 128 of 2118 (6.0%) | **4.25 degrees** |
+
+**Why recessing fails, and it is structural rather than a tuning error.** From (0.340, 0.245) a ray
+aimed at the opposite front corner must drop 45 mm in y to clear the chassis roof at y = 0.200, which
+at 45 degrees costs 45 mm in x and puts it at x = 0.385, still inside the chassis half-length of
+0.400. It re-enters the body before clearing it. Seeing tangentially along the vehicle's own side
+requires the optics to be at or beyond the envelope corner, full stop.
+
+**The fix.** The link origin is now the optical centre, flush at the corner and 5 mm proud, with the
+housing drawn 60 mm inboard so the physical body still sits in the recess and inside the published
+envelope. That is how a corner-mounted safety scanner is actually packaged. A test in
+`test_platform_spec.py` now asserts the optics are **not** inboard of the corner, and bounds how far
+proud they may stand; the previous version of that assertion required the opposite and had encoded
+the defect.
+
+**What remains, stated plainly.** A 4.25 degree seam persists at the two diagonal corners, roughly
+0.37 m of unobserved arc at 5 m range. **So the model does not fully reproduce the sheet's 360
+degree claim.** The residual is vehicle occlusion at grazing incidence, not a merge error: a unit
+test drives the same merge with two ideal unoccluded scanners at the deployed 2118-bin resolution
+and the largest gap is at most one bin, so the arithmetic is clean and the seam is geometry.
+
+**Consequence to carry forward.** The protective field design in the safety phase must treat these
+two sectors as unobserved rather than assuming full coverage, or it will claim protection the sensor
+set does not provide. Closing the seam entirely would need a chamfered chassis, which needs a mesh
+rather than the box primitives used here.
+
+---
+
 ## Known limitations of the model
 
 Recorded here rather than discovered later. None of these are bugs; they are places where the model

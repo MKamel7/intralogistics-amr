@@ -30,10 +30,10 @@ Visualization Manager:
       Show Names: true
       Marker Scale: 0.4
     - Class: rviz_default_plugins/LaserScan
-      Name: Safety scanners
+      Name: Merged scan
       Enabled: true
       Topic:
-        Value: /scanner_front_left/scan
+        Value: /scan
         Depth: 5
         Durability Policy: Volatile
         Reliability Policy: Best Effort

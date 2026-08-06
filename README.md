@@ -77,6 +77,19 @@ the chassis to the far wall, while the scans otherwise looked entirely healthy. 
 two overlapping boxes leaving open corner recesses for the sensors, inside the published envelope,
 and the same arc now returns 0.06 m. See V-05 in [docs/validation.md](docs/validation.md).
 
+**Merged 360 degree scan** (`amr_perception`, C++). The two 275 degree scanners are merged through
+TF into a single 2118-bin scan in `base_link` at the sensors' own 0.17 degree resolution. Each scan
+is transformed using the transform that held at its own timestamp, routed through the odometry
+frame, because the scanners are not phase locked and up to 35 ms of vehicle motion at 2 m/s is 70 mm,
+larger than the 20 mm object the scanner is specified to detect. Bins take the nearest return, never
+an average. Self-returns are removed by a footprint filter, which is not hypothetical: the corner
+scanners see their own chassis at about 0.06 m.
+
+Coverage is measured, not assumed: largest contiguous gap **4.25 degrees**, improved from 11.56
+degrees by moving the optics flush to the envelope corner. That is short of the sheet's "360 degree"
+claim and V-06 in [docs/validation.md](docs/validation.md) says so, with the reason and the
+consequence for the later protective-field work.
+
 **Battery and state of charge.** A power model fitted to the three runtimes the platform sheet
 publishes, exposed as `sensor_msgs/BatteryState`. Deliberately labelled as calibration rather than
 validation in [docs/validation.md](docs/validation.md): three published figures and three model
@@ -181,7 +194,7 @@ way the error points.
 
 In order, each independently demonstrable:
 
-1. Perception: scan conditioning, human detection, tracking, prediction
+1. Perception: human detection, tracking, prediction (scan conditioning and merge done)
 3. Mapping and localisation, including the aisle degeneracy benchmark
 4. KLT load transfer and precision docking
 5. Navigation: footprint-aware planning, MPPI, human-aware costs

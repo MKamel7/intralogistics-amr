@@ -159,6 +159,40 @@ def generate_launch_description():
 
     battery = OpaqueFunction(function=make_battery)
 
+    def make_scan_merger(context, *_, **__):
+        """Merge parameters come from the platform spec, like everything else.
+
+        The bin count is the full turn at the scanner's own angular resolution,
+        so the merged scan is neither coarser nor finer than the sensors that
+        feed it. Inventing resolution would be worse than losing it.
+        """
+        platform = LaunchConfiguration('platform').perform(context)
+        spec_path = PathJoinSubstitution(
+            [desc_share, 'config', 'platforms', f'{platform}.yaml']
+        ).perform(context)
+        v = yaml.safe_load(open(spec_path))['values']
+        bins = int(round(360.0 / v['scanner_angular_resolution']))
+        return [Node(
+            package='amr_perception', executable='scan_merger', output='screen',
+            condition=IfCondition(LaunchConfiguration('scanners')),
+            parameters=[{
+                'use_sim_time': True,
+                'front_topic': 'scanner_front_left/scan',
+                'rear_topic': 'scanner_rear_right/scan',
+                'output_topic': 'scan',
+                'target_frame': 'base_link',
+                'fixed_frame': 'odom',
+                'bins': bins,
+                'range_min': 0.05,
+                'range_max': v['scanner_measuring_range'],
+                'publish_rate': v['scanner_update_rate'],
+                'footprint_length': v['chassis_length'],
+                'footprint_width': v['chassis_width'],
+                'footprint_margin': 0.02,
+            }])]
+
+    scan_merger = OpaqueFunction(function=make_scan_merger)
+
     rviz = Node(
         package='rviz2', executable='rviz2', output='screen',
         condition=IfCondition(LaunchConfiguration('rviz')),
@@ -167,7 +201,7 @@ def generate_launch_description():
         parameters=[{'use_sim_time': True}])
 
     return LaunchDescription(args + [
-        gz, rsp, bridge, spawn, rviz, battery,
+        gz, rsp, bridge, spawn, rviz, battery, scan_merger,
         # Chain on spawn exiting rather than on a timer. `create` exits once the
         # model is in the world, which is exactly the precondition the
         # controller_manager needs.

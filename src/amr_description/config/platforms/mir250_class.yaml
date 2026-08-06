@@ -92,8 +92,13 @@ values:
   scanner_detection_resolution: 0.020   # m
   scanner_protective_supplement: 0.065  # m
   scanner_mount_height: 0.150    # m above ground, scan plane
-  scanner_mount_x: 0.340         # m, from robot centre, inside the corner recess
-  scanner_mount_y: 0.245         # m
+  # Optical centre, flush at the envelope corner and 5 mm proud of it. See the
+  # note in sensors.xacro: recessed anywhere inboard of this and the vehicle's
+  # own sides block the tangential view, which measured as an 11.6 degree blind
+  # sector in the merged scan.
+  scanner_mount_x: 0.405         # m, from robot centre
+  scanner_mount_y: 0.295         # m
+  scanner_housing_inset: 0.060   # m, housing drawn inboard of the optics
   scanner_update_rate: 14.28     # Hz, rounded DOWN from 1/70 ms; see provenance
 
   # ---- 3D cameras (2x) -----------------------------------------------
@@ -184,6 +189,7 @@ provenance:
   scanner_mount_height:          {kind: estimated, src: "not published; 150 mm puts the 80 mm tall scanner body inside the 300 mm chassis with the scan plane low enough to see a foot"}
   scanner_mount_x:               {kind: estimated, src: "not published; diagonally opposite corners, inside the 800 mm length"}
   scanner_mount_y:               {kind: estimated, src: "not published; diagonally opposite corners, inside the 580 mm width"}
+  scanner_housing_inset:         {kind: estimated, src: "not published; the housing is drawn inboard of the optical centre so the body sits in the corner recess while the optics stay flush, which is how a corner-mounted safety scanner is packaged"}
   scanner_update_rate:           {kind: derived,   src: "1 / 70 ms response time = 14.2857 Hz, rounded DOWN to 14.28. Rounding a protective device UP claims it reports faster than it responds, which flatters every stopping distance computed from it, so the direction of the rounding is deliberate"}
 
   camera_hfov:              {kind: datasheet, src: "MiR250 sheet, 3D cameras FoV horizontal angle 114 deg"}
