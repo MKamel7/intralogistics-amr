@@ -1,0 +1,16 @@
+cmake_minimum_required(VERSION 3.8)
+project(amr_description)
+
+find_package(ament_cmake REQUIRED)
+
+install(DIRECTORY config urdf meshes
+        DESTINATION share/${PROJECT_NAME}
+        PATTERN "__pycache__" EXCLUDE)
+
+if(BUILD_TESTING)
+  find_package(ament_cmake_pytest REQUIRED)
+  # Provenance gate: every platform constant must trace to a recorded source.
+  ament_add_pytest_test(test_platform_spec test/test_platform_spec.py)
+endif()
+
+ament_package()

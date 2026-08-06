@@ -1,0 +1,153 @@
+# MiR250-class AMR platform specification.
+#
+# Single source of truth for every physical constant of the robot. The xacro
+# description reads `values`, and nothing in the URDF may hardcode a dimension
+# that belongs here.
+#
+# This describes a *class* of machine derived from a published specification. It
+# is not a model of any vendor's product and carries no vendor branding. See
+# docs/adr/0002-mir250-class-reference-platform.md.
+#
+# EVERY key under `values` must have a matching entry under `provenance`, and
+# test/test_platform_spec.py fails the build if one is missing, extra, or
+# carries an unknown source kind. The four kinds are:
+#
+#   datasheet  taken directly from an archived data sheet, with the section
+#   derived    computed from datasheet values (the arithmetic is stated)
+#   estimated  not published anywhere; an engineering estimate, with reasoning
+#   tuned      chosen so the model reproduces a published figure, named in `check`
+#
+# Data sheets are in docs/datasheets/. Section references point at the
+# `pdftotext -layout` extraction beside each PDF so they can be grepped.
+
+platform:
+  id: mir250_class
+  description: 250 kg class differential-drive AMR for indoor intralogistics
+  reference: MiR250 (Mobile Industrial Robots A/S), public specification
+
+values:
+  # ---- chassis -------------------------------------------------------
+  chassis_length: 0.800          # m
+  chassis_width: 0.580           # m
+  chassis_height: 0.300          # m
+  ground_clearance: 0.026        # m
+  tare_mass: 83.0                # kg, without battery or payload
+  battery_mass: 14.0             # kg
+  max_payload: 250.0             # kg
+
+  # ---- drive ---------------------------------------------------------
+  drive_wheel_radius: 0.100      # m
+  drive_wheel_width: 0.050       # m
+  wheel_separation: 0.450        # m
+  caster_wheel_radius: 0.0625    # m
+  caster_wheel_width: 0.040      # m
+  caster_inset_x: 0.300          # m, from robot centre to caster axis
+  caster_inset_y: 0.230          # m
+
+  # ---- motion limits -------------------------------------------------
+  max_linear_speed: 2.0          # m/s
+  max_linear_accel: 0.3          # m/s^2, at maximum payload
+  max_angular_speed: 1.5         # rad/s
+  max_incline: 0.05              # fraction, at 0.5 m/s
+
+  # ---- energy --------------------------------------------------------
+  battery_capacity_kwh: 1.63
+  battery_nominal_voltage: 47.7  # V
+  battery_capacity_ah: 34.2
+  battery_cycles: 3000
+
+  # ---- safety laser scanners (2x, diagonally opposite corners) --------
+  scanner_scan_angle: 275.0      # deg
+  scanner_angular_resolution: 0.17   # deg
+  scanner_samples: 1618          # rays across the aperture
+  scanner_protective_range: 3.0  # m
+  scanner_warning_range: 10.0    # m
+  scanner_measuring_range: 40.0  # m
+  scanner_response_time: 0.070   # s
+  scanner_detection_resolution: 0.020   # m
+  scanner_protective_supplement: 0.065  # m
+  scanner_mount_height: 0.150    # m above ground, scan plane
+  scanner_mount_x: 0.360         # m, from robot centre
+  scanner_mount_y: 0.260         # m
+  scanner_update_rate: 14.3      # Hz
+
+  # ---- 3D cameras (2x) -----------------------------------------------
+  camera_hfov: 114.0             # deg
+  camera_fov_height: 1.800       # m, at the distance below
+  camera_fov_distance: 1.200     # m, in front of the robot
+  camera_min_ground_view: 0.250  # m
+  camera_mount_height: 0.270     # m
+  camera_update_rate: 15.0       # Hz
+
+# Published figures the model is validated AGAINST rather than tuned to.
+# Phase 5 and Phase 2 assert these; see test/ and the KPI harness.
+validation_targets:
+  corridor_width_default: 1.350      # m
+  corridor_width_dynamic: 1.000      # m
+  corridor_width_90_turn: 0.950      # m, muted protective fields
+  doorway_width_default: 1.300       # m
+  min_object_at_1m: 0.020            # m
+  min_object_at_2p5m: 0.070          # m
+  distance_to_max_speed: 9.5         # m
+  runtime_loaded_h: 13.0
+  runtime_unloaded_h: 17.4
+  runtime_standby_h: 22.0
+
+# Certification figures of the reference scanner. Recorded because the safety
+# concept quotes them; the simulation reproduces the TIMING, never the integrity.
+safety_reference:
+  scanner_performance_level: PL d      # EN ISO 13849
+  scanner_category: 3                  # EN ISO 13849
+  scanner_sil: 2                       # IEC 61508
+  scanner_type: 3                      # IEC 61496
+  scanner_mission_time_years: 20
+  vehicle_standards: [EN 1525, ISO 3691-4, ANSI B56.5, ANSI R15.08]
+  ambient_temp_range_c: [5, 40]        # ISO 3691-4 section 4.1.2
+
+provenance:
+  chassis_length:      {kind: datasheet, src: "MiR250 sheet, Dimensions/Length 800 mm"}
+  chassis_width:       {kind: datasheet, src: "MiR250 sheet, Dimensions/Width 580 mm"}
+  chassis_height:      {kind: datasheet, src: "MiR250 sheet, Dimensions/Height 300 mm"}
+  ground_clearance:    {kind: derived,   src: "MiR250 sheet gives a 25 to 28 mm range; midpoint taken"}
+  tare_mass:           {kind: datasheet, src: "MiR250 sheet, Weight without battery or payload 83 kg"}
+  battery_mass:        {kind: datasheet, src: "MiR250 sheet, Battery weight 14 kg"}
+  max_payload:         {kind: datasheet, src: "MiR250 sheet, Maximum payload 250 kg"}
+
+  drive_wheel_radius:  {kind: derived,   src: "MiR250 sheet, drive wheel diameter 200 mm, halved"}
+  drive_wheel_width:   {kind: estimated, src: "not published; 50 mm is typical for a 250 kg class drive wheel and only affects contact patch and visuals"}
+  wheel_separation:    {kind: estimated, src: "not published; 450 mm centres inside the 580 mm body leaves room for hub motors and matches the class"}
+  caster_wheel_radius: {kind: derived,   src: "MiR250 sheet, caster wheel diameter 125 mm, halved"}
+  caster_wheel_width:  {kind: estimated, src: "not published; proportionate to a 125 mm caster"}
+  caster_inset_x:      {kind: estimated, src: "not published; placed inside the 800 mm length to give a stable rectangle around the drive axis"}
+  caster_inset_y:      {kind: estimated, src: "not published; placed inside the 580 mm width clear of the drive wheels"}
+
+  max_linear_speed:    {kind: datasheet, src: "MiR250 sheet, Maximum speed 2.0 m/s"}
+  max_linear_accel:    {kind: datasheet, src: "MiR250 sheet, Acceleration limits with maximum payload 0.3 m/s2"}
+  max_angular_speed:   {kind: estimated, src: "not published; chosen so a spot turn stays inside the 950 mm 90 degree corridor target"}
+  max_incline:         {kind: datasheet, src: "MiR250 sheet, Maximum incline/decline 5 percent at 0.5 m/s"}
+
+  battery_capacity_kwh:    {kind: datasheet, src: "MiR250 sheet, Battery capacity 1.63 kWh"}
+  battery_nominal_voltage: {kind: datasheet, src: "MiR250 sheet, Battery voltage 47.7 V nominal"}
+  battery_capacity_ah:     {kind: datasheet, src: "MiR250 sheet, Battery capacity 34.2 Ah at 47.7 V"}
+  battery_cycles:          {kind: datasheet, src: "MiR250 sheet, Number of full charging cycles minimum 3000"}
+
+  scanner_scan_angle:            {kind: datasheet, src: "SICK nanoScan3 sheet, Scanning angle 275 deg"}
+  scanner_angular_resolution:    {kind: datasheet, src: "SICK nanoScan3 sheet, Angular resolution 0.17 deg"}
+  scanner_samples:               {kind: derived,   src: "275 deg / 0.17 deg = 1617.6, rounded up to 1618"}
+  scanner_protective_range:      {kind: datasheet, src: "SICK nanoScan3 sheet, Protective field range 3 m"}
+  scanner_warning_range:         {kind: datasheet, src: "SICK nanoScan3 sheet, Warning field range 10 m"}
+  scanner_measuring_range:       {kind: datasheet, src: "SICK nanoScan3 sheet, Distance measuring range 40 m"}
+  scanner_response_time:         {kind: datasheet, src: "SICK nanoScan3 sheet, Response time 70 ms"}
+  scanner_detection_resolution:  {kind: datasheet, src: "SICK nanoScan3 sheet, Resolution configurable, 20 mm setting chosen; matches the MiR250 sheet claim of a 20 mm object at 1000 mm"}
+  scanner_protective_supplement: {kind: datasheet, src: "SICK nanoScan3 sheet, Protective field supplement 65 mm"}
+  scanner_mount_height:          {kind: estimated, src: "not published; 150 mm puts the 80 mm tall scanner body inside the 300 mm chassis with the scan plane low enough to see a foot"}
+  scanner_mount_x:               {kind: estimated, src: "not published; diagonally opposite corners, inside the 800 mm length"}
+  scanner_mount_y:               {kind: estimated, src: "not published; diagonally opposite corners, inside the 580 mm width"}
+  scanner_update_rate:           {kind: derived,   src: "1 / 70 ms response time = 14.3 Hz; the scan rate the model can justify without inventing a faster one"}
+
+  camera_hfov:              {kind: datasheet, src: "MiR250 sheet, 3D cameras FoV horizontal angle 114 deg"}
+  camera_fov_height:        {kind: datasheet, src: "MiR250 sheet, 3D cameras FoV height 1800 mm"}
+  camera_fov_distance:      {kind: datasheet, src: "MiR250 sheet, FoV distance in front of robot 1200 mm"}
+  camera_min_ground_view:   {kind: datasheet, src: "MiR250 sheet, FoV minimum distance for ground view 250 mm"}
+  camera_mount_height:      {kind: estimated, src: "not published; just below the 300 mm deck so the stated 1800 mm at 1200 mm geometry is reproducible"}
+  camera_update_rate:       {kind: estimated, src: "not published; 15 Hz is a deliberate CPU budget choice for the perception tier, see ADR 0003"}

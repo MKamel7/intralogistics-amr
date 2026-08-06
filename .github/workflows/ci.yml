@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # Fast gate: no ROS, no simulator. Catches provenance and spec drift in
+  # seconds so the slow job is not the first thing to tell you.
+  checks:
+    name: lint and spec gates
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install
+        run: pip install pytest pyyaml ruff
+      - name: Lint
+        run: ruff check src
+      - name: Platform provenance gate
+        run: python3 -m pytest src/amr_description/test -q
+
+  build:
+    name: colcon build and test
+    runs-on: ubuntu-24.04
+    container: ros:jazzy-ros-base
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve dependencies
+        run: |
+          apt-get update
+          rosdep update
+          rosdep install --from-paths src --ignore-src -y --rosdistro jazzy
+      - name: Build
+        shell: bash
+        run: . /opt/ros/jazzy/setup.bash && colcon build --event-handlers console_direct+
+      - name: Test
+        shell: bash
+        run: |
+          . /opt/ros/jazzy/setup.bash
+          colcon test --event-handlers console_direct+
+          colcon test-result --verbose

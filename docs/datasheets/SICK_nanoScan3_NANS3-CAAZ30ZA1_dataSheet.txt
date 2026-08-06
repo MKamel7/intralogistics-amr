@@ -1,0 +1,453 @@
+                        Data sheet
+NANS3-CAAZ30ZA1
+nanoScan3
+
+
+
+SAFETY LASER SCANNERS
+    NANS3-CAAZ30ZA1 | nanoScan3
+    SAFETY LASER SCANNERS
+
+
+A                                                 Ordering information
+
+                                                                            Type                          part no.
+
+B                                                                   NANS3-CAAZ30ZA1                       1126793
+
+
+
+
+C                                                 Other models and accessories   www.sick.com/nanoScan3
+
+
+
+
+D             Illustration may differ
+
+
+
+
+E
+F
+
+    Detailed technical data
+H   Features
+    Product version                                             nanoScan3 Pro - EFI-pro
+
+I   Model
+    Application
+                                                                Sensor without system plug
+
+                                                                Indoor
+
+
+J   Protective field range
+    Warning field range
+                                                                3m
+
+                                                                10 m
+
+
+K
+    Distance measuring range                                    40 m
+
+    Number of simultaneously monitored fields                   ≤ 8 1)
+
+
+L
+    Number of fields                                            128
+
+    Number of monitoring cases                                  128
+
+    Scanning angle                                              275°
+
+M   Resolution (can be configured)                              20 mm
+                                                                30 mm
+                                                                40 mm
+
+N                                                               50 mm
+                                                                60 mm
+                                                                70 mm
+                                                                150 mm
+
+O   Angular resolution
+                                                                200 mm
+                                                                0.17°
+
+
+
+P
+    Response time                                               70 ms
+
+    Protective field supplement                                 65 mm
+
+
+
+Q
+    1)
+         Protection, warning or contour detection fields.
+
+    Safety-related parameters
+
+R
+    Type                                                        Type 3 (IEC 61496)
+
+    Safety integrity level                                      SIL 2 (IEC 61508)
+
+    Category                                                    Category 3 (EN ISO 13849)
+
+S
+T   2          SAFETY LASER SCANNERS | SICK                                                                   Data sheet | 2026-04-14 01:48:50
+                                                                                                               Subject to change without notice
+                                                                                          NANS3-CAAZ30ZA1 | nanoScan3
+                                                                                                              SAFETY LASER SCANNERS
+
+ Performance level                                     PL d (EN ISO 13849)
+
+ PFHD (mean probability of a dangerous fail-           8.0 x 10-8
+ ure per hour)
+ TM (mission time)                                     20 years (EN ISO 13849)
+
+ Safe state in the event of a fault                    The safety outputs via the network are logic 0.
+
+Functions
+ Restart interlock                                     ✔
+
+ External device monitoring (EDM)                      ✔
+
+ Multiple sampling                                     ✔
+
+ Monitoring case switching                             ✔
+
+ Simultaneous monitoring                               ✔
+
+ Static protective field switching                     ✔
+
+ Dynamic protective field switching                    ✔
+
+ Safe contour detection                                ✔
+
+ Contour as a reference                                ✔
+
+ Integrated configuration memory                       ✔
+
+ Measured data output                                  Via Ethernet
+
+ Safe SICK device communication via EFI-               ✔
+ pro
+
+Interfaces
+ Connection type                                       Depending on system plug
+
+ Outputs
+                                          OSSD pairs 0
+                            Safety outputs via network 8
+
+ Configuration method                                  PC with Safety Designer (Configuration and Diagnostic Software)
+
+ Configuration and diagnostics interface               USB 2.0, micro USB
+
+ Data interface
+                                            Services EtherNet/IP™ CIP Safety™
+                                                       CoLa 2 (configuration and diagnostics using Safety Designer)
+                                                       Data output
+                                                       DHCP
+                                                       SNMP
+                                                       SNTP (client and server)
+ Fieldbus, industrial network                          EFI-pro
+                       RPI (requested packet interval) 5 ms ... 1,000 ms, multiple of 5 ms
+
+ Display elements                                      Graphic color display, LEDs
+
+Electronics
+ Protection class                                      III (EN 61140)
+
+ Supply voltage Vs                                     24 V DC (16.8 V DC ... 30 V DC)
+
+ Power consumption typical                             5.5 W
+
+
+
+
+2026-04-14 01:48:50 | Data sheet                                                                                      SAFETY LASER SCANNERS | SICK   3
+﻿
+Subject to change without notice
+    NANS3-CAAZ30ZA1 | nanoScan3
+    SAFETY LASER SCANNERS
+
+
+A   Mechanics
+    Dimensions (W x H x D)                                       106.6 mm x 80 mm x 117.5 mm (including system plug)
+
+
+B
+    Weight                                                       0.67 kg
+
+    Housing material                                             Aluminum
+
+    Housing color                                                RAL 1021 (yellow), RAL 9005 (black)
+
+C   Optics cover material                                        Polycarbonate
+
+    Ambient data
+D   Enclosure rating                                             IP65 (IEC 60529)
+
+    Ambient light immunity                                       ≤ 40 klx (IEC 61496-3) 1)
+
+E   Ambient operating temperature                                –10 °C ... +50 °C
+
+    Storage temperature                                          –25 °C ... +70 °C
+
+F   Vibration resistance                                         IEC 60068-2-6, IEC 60068-2-64, IEC 60721-3-5, IEC TR 60721-4-5, IEC 61496-3
+                                                        Class 5M1 (IEC 60721-3-5)
+
+    Shock resistance                                             IEC 60068-2-27, IEC 60721-3-5, IEC TR 60721-4-5, IEC 61496-3
+                                                        Class 5M1 (IEC 60721-3-5)
+                                          Continuous shock 50 m/s², 11 ms
+
+H                                                                100 m/s², 16 ms
+    EMC                                                          IEC 61496-1, IEC 61000-6-2, IEC 61000-6-3
+
+I   1)
+         Typical ambient light immunity, for ambient light sources directly in the scan plane in accordance with IEC 61496-3: ≤ 3 klx.
+
+    Other information
+J   Type of light                                                Pulsed laser diode
+
+    Wave length                                                  905 nm
+
+K   Detectable remission factor
+    Laser class
+                                                                 1.8% to several 1000%
+
+                                                                 1 (21 CFR 1040.10 and 1040.11, IEC 60825-1)
+
+
+L   Certificates
+    EU declaration of conformity                                 ✔
+
+
+M   UK declaration of conformity
+    ACMA declaration of conformity
+                                                                 ✔
+
+                                                                 ✔
+
+
+N   China RoHS
+    UK-Type-Examination approval
+                                                                 ✔
+
+                                                                 ✔
+
+    cULus certificate                                            ✔
+
+O   EC-Type-Examination approval                                 ✔
+
+    China GB certificate                                         ✔
+
+P   Information according to Art. 3 of Data Act
+    (Regulation EU 2023/2854)
+                                                                 ✔
+
+
+
+
+Q   Classifications
+    ECLASS 5.0                                                   27272705
+
+
+R
+    ECLASS 5.1.4                                                 27272705
+
+    ECLASS 6.0                                                   27272705
+
+    ECLASS 6.2                                                   27272705
+
+S
+T   4          SAFETY LASER SCANNERS | SICK                                                                                              Data sheet | 2026-04-14 01:48:50
+                                                                                                                                          Subject to change without notice
+                                                                                       NANS3-CAAZ30ZA1 | nanoScan3
+                                                                                                 SAFETY LASER SCANNERS
+
+ ECLASS 7.0                                                    27272705
+
+ ECLASS 8.0                                                    27272705
+
+ ECLASS 8.1                                                    27272705
+
+ ECLASS 9.0                                                    27272705
+
+ ECLASS 10.0                                                   27272705
+
+ ECLASS 11.0                                                   27272705
+
+ ECLASS 12.0                                                   27272705
+
+ ETIM 5.0                                                      EC002550
+
+ ETIM 6.0                                                      EC002550
+
+ ETIM 7.0                                                      EC002550
+
+ ETIM 8.0                                                      EC002550
+
+ UNSPSC 16.0901                                                39121528
+
+
+
+
+Dimensional drawing
+
+                   106,6                                             a
+                    ø 86                                1
+                                                                          2
+                                                                                   b
+                                      19 31,5 29,7
+
+
+
+
+                                                                               3
+  80,2
+
+
+
+
+                                                                                               50,5
+                                                                                   c
+
+
+
+
+                                                     26,3 24
+                         65                                         M5 × 7,5
+                                                            44
+117,5
+
+
+
+
+                  -45°         225°
+                                      102,5
+
+
+
+
+                         90°
+
+
+
+
+                   100,6
+
+
+
+Dimensions in mm (inch)
+① mirror axis of rotation
+② scan plane
+③ required viewing slit (a: length of the viewing slit, b: minimum height above the scan plane, c: minimum height below the scan
+plane. See the operating instructions for details.)
+
+
+
+
+2026-04-14 01:48:50 | Data sheet                                                                      SAFETY LASER SCANNERS | SICK   5
+﻿
+Subject to change without notice
+    NANS3-CAAZ30ZA1 | nanoScan3
+    SAFETY LASER SCANNERS
+
+
+A   Recommended accessories
+    Other models and accessories   www.sick.com/nanoScan3
+
+                      Brief description                                                                                             Type                   part no.
+B   Mounting systems
+                      • Description: Mounting bracket                                                                          Mounting kit 1a            2111767
+
+C
+                      • Material: Stainless steel
+                      • Details: Stainless steel V2A (1.4301), powder-coated IGP-DURA face 5803A
+                      • Packing unit: 1 piece
+
+                      • Description: Mounting bracket with optics cover protection                                             Mounting kit 1b            2111768
+
+D                     • Material: Stainless steel
+                      • Details: Stainless steel V2A (1.4301), powder-coated IGP-DURA face 5803A
+                      • Packing unit: 1 piece
+
+
+
+E                     • Description: Alignment bracket, alignment with cross-wise axis and depth axis possible
+                      • Material: Stainless steel
+                      • Details: Stainless steel V2A (1.4301), powder-coated IGP-DURA face 5803A
+                                                                                                                               Mounting kit 2a            2111769
+
+
+                      • Packing unit: 1 piece
+
+
+F                     • Description: Alignment bracket with protection for the optics cover, alignment with cross-wise axis
+                        and depth axis possible
+                      • Material: Stainless steel
+                                                                                                                               Mounting kit 2b            2111770
+
+
+                      • Details: Stainless steel V2A (1.4301), powder-coated IGP-DURA face 5803A
+                      • Packing unit: 1 piece
+
+    system plugs and extension modules
+
+
+H
+                      • Description: Integrated configuration memory                                                          NANSX-AAAAAEZZ1             2105154
+
+
+
+
+I
+J
+K
+L
+M
+N
+O
+P
+Q
+R
+S
+T   6       SAFETY LASER SCANNERS | SICK                                                                                               Data sheet | 2026-04-14 01:48:50
+                                                                                                                                           Subject to change without notice
+                    SICK at a glance
+Online data sheet
+
+
+
+
+                    SICK is one of the leading manufacturers of intelligent sensors and sensor solutions for industrial applica-
+                    tions. A unique range of products and services creates the perfect basis for controlling processes securely
+                    and efficiently, protecting individuals from accidents and preventing damage to the environment.
+
+                    We have extensive experience in a wide range of industries and understand their processes and require-
+                    ments. With intelligent sensors, we can deliver exactly what our customers need. In application centers in
+                    Europe, Asia and North America, system solutions are tested and optimized in accordance with customer
+                    specifications. All this makes us a reliable supplier and development partner.
+
+                    Comprehensive services complete our offering: SICK LifeTime Services provide support throughout the ma-
+                    chine life cycle and ensure safety and productivity.
+
+                    For us, that is “Sensor Intelligence.”
+
+
+
+
+                    Worldwide presence:
+                    Contacts and other locations – www.sick.com
+
+
+
+
+                    SICK AG | Waldkirch | Germany | www.sick.com
+

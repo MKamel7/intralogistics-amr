@@ -1,0 +1,347 @@
+                                                                                      MiR250 Specifications
+
+
+
+
+MiR250 specifications
+General information
+                                                   For internal transportation of goods and automation of
+Designated use
+                                                   internal logistics
+
+Type                                               Autonomous Mobile Robot (AMR)
+
+Color                                              RAL 7011 / Iron Gray
+
+Color - ESD version                                RAL 9005 / Jet Black
+
+Cover material                                     Polycarbonate, Lexan Resin 221R
+
+Product design life                                5 years or 20 000 hours, whichever comes first
+
+                                                   Specifications may vary based on local conditions and
+Disclaimer
+                                                   application setup
+
+
+
+Dimensions
+Length                                             800 mm | 31.5 in
+
+Width                                              580 mm | 22.8 in
+
+Height                                             300 mm | 11.8 in
+
+Weight (without battery or
+                                                   83 kg | 183 lbs
+payload)
+
+Ground clearance                                   25 - 28 mm | 1.0 - 1.1 in
+
+Load surface                                       800 x 580 mm | 31.5 x 22.8 in
+
+Wheel diameter (drive wheel)                       200 mm | 7.9 in
+
+Wheel diameter (caster wheel)                      125 mm | 4.9 in
+
+
+
+
+MiR250 Specifications ©Copyright 2021: Mobile Industrial Robots A/S.                                        1
+                                                                                       MiR250 Specifications
+
+
+
+
+Dimensions for mounting top                        Equal to robot footprint. Contact MiR if a bigger top
+modules                                            module is required.
+
+Top plate                                          Anodized aluminum, 5 mm | 0.2 in
+
+
+
+Payload
+Maximum payload                                    250 kg | 551 lbs
+
+                                                   Equal to robot footprint. Contact MiR if a bigger
+Footprint of payload
+                                                   payload footprint is required.
+
+                                                   Place center of mass according to directions in the user
+Payload placement
+                                                   guide
+
+
+
+Speed and performance
+Maximum speed (with
+maximum payload on a flat                          2.0 m/s (7.2 km/h) | 6.6 ft/s (4.4 mph)
+surface)
+
+Acceleration limits with
+                                                   0.3 m/s2 | 1 ft/s2
+maximum payload
+
+Minimum distance to achieve
+                                                   9.5 m | 31.2 ft
+maximum speed
+
+                                                   1 350 mm | 53.1 in
+Operational corridor width
+                                                   With dynamic footprint and SICK safety configuration: 1
+                                                   000 mm | 39.4 in
+
+
+
+
+MiR250 Specifications ©Copyright 2021: Mobile Industrial Robots A/S.                                       2
+                                                                                       MiR250 Specifications
+
+
+
+
+                                                   With default footprint and SICK safety configuration: 1
+                                                   500 mm | 60 in
+
+Operational corridor width for                     With default footprint and SICK safety configuration
+a 90° turn                                         and muted protective fields: 950 mm | 37.4 in
+
+                                                   With dynamic footprint and SICK safety configuration: 1
+                                                   250 mm | 50 in
+
+Operational corridor width for                     With dynamic footprint and SICK safety configuration: 1
+a 180° turn                                        250 mm | 49.2 in
+
+                                                   0-20 mm | 0.79 in
+
+                                                   Above 20 mm | 0.79 in: Instructions must be followed
+Traversable gap and sill
+tolerance                                          Above 30 mm | 1.18 in: Not recommended, risk of
+                                                   personal injury
+
+                                                   Above 50 mm | 1.97 in: Prohibited
+
+                                                   With default footprint and SICK safety configuration: 1
+                                                   300 mm | 52 in
+
+                                                   With default footprint and SICK safety configuration
+Operational doorway width
+                                                   and muted protective fields: 800 mm | 32 in
+
+                                                   With dynamic footprint and SICK safety configuration:
+                                                   950 m | 38 in
+
+Active operation time with                         13 h at 22°C | 72°F, from 100–0% power in the robot
+maximum payload                                    interface and with no top module
+
+Active operation time with no                      17.4 h at 22°C | 72°F, from 100–0% power in the robot
+payload                                            interface and with no top module
+
+Standby time (robot is on and
+                                                   22 h
+idle)
+
+
+
+
+MiR250 Specifications ©Copyright 2021: Mobile Industrial Robots A/S.                                         3
+                                                                                     MiR250 Specifications
+
+
+
+
+                                                   Scanner: 20 mm | 0.79 in at 1 000 mm | 39.4 in
+Minimum size of detectable                         distance
+object
+                                                   70 mm | 2.76 in at 2 500 mm | 98.4 in distance
+
+                                                   Forward and reverse to bar, V, and VL markers, and
+Docking types
+                                                   sideways docking to L-markers
+
+Maximum incline/decline                            ± 5% at 0.5 m/s
+
+
+
+Power
+Battery type                                       Lithium ion
+
+Charging time with
+                                                   10%–90%: 52 min
+MiR Charge 48V
+
+Charging time with cable
+                                                   10%–90%: 1 h and 10 min
+charger
+
+                                                   MiR Charge 48V, Battery Charger 48V 12A, Cable
+Charging options
+                                                   Charger Lite 48V 3 Amp
+
+                                                   The robot communicates with MiR Charge 48V through
+Charger communication                              a CAN interface. Charging starts only when the robot
+                                                   connection is present
+
+                                                   Up to 35 A depending on battery temperature and
+Charging current,
+                                                   constant voltage ramping down towards end of charge
+MiR Charge 48V
+                                                   cycle.
+
+Battery weight                                     14 kg | 30 lbs
+
+                                                   546 mm length × 204 mm width × 76 mm height | 21.5
+Battery dimensions
+                                                   in length × 8 in with × 3 in height
+
+Number of full charging cycles                     Minimum 3 000 cycles
+
+Battery voltage                                    47.7 V nominal, minimum 41 V, maximum 54 V
+
+
+
+
+MiR250 Specifications ©Copyright 2021: Mobile Industrial Robots A/S.                                     4
+                                                                                      MiR250 Specifications
+
+
+
+
+Battery capacity                                   1.63 kWh (34.2 Ah at 47.7 V)
+
+                                                   Only possible with the cable charger. To dock to MiR
+Charging an empty battery                          Charge 48V, the robot requires at least 3% battery (or
+                                                   equal to 10 m of operating time).
+
+                                                   Robot cannot drive with cable charger connected and
+Cable charger
+                                                   charging
+
+                                                   10 min charging: 1:16 (2 h and 40 min runtime with
+                                                   maximum payload)
+
+                                                   20 m charging: 1:14 (4 h and 30 min runtime with
+                                                   maximum payload))
+Charging ratio and runtime for
+                                                   30 min charging: 1:12 (6 h and 5 min run time with
+                                                   maximum payload)
+
+                                                   60 min charging: 1:10 (10 h and 20 min runtime with
+                                                   maximum payload) Fully charged
+
+
+
+Environment
+Environment                                        For indoor use only
+
+Ambient temperature range,                         5°C–40°C | 41°F–104°F according to ISO3691-4 section
+operation                                          4.1.2
+
+                                                   1 month: -10°C–60°C | 14°F–140°F
+Ambient temperature range,
+storage
+                                                   3 months: -20°C–+45°C | 14°F–140°F
+
+Humidity                                           10-85% non-condensing
+
+IP Class                                           IP21
+
+Maximum altitude                                   2 000 m | 6 561 ft
+
+
+
+
+MiR250 Specifications ©Copyright 2021: Mobile Industrial Robots A/S.                                        5
+                                                                                         MiR250 Specifications
+
+
+
+Compliance
+EMC                                                EN61000-6-2, EN61000-6-4, (EN12895)
+
+Safety standards for industrial
+                                                   CE, EN1525, ANSI B56.5, ANSI R15.08
+vehicles
+
+
+
+Safety
+Personnel detection safety                         Triggered when obstacles or people are detected too
+function                                           close to the robot
+
+Emergency stop                                     Triggered by pressing the Emergency stop button
+
+                                                   Prevents the robot from driving faster than the
+Overspeed avoidance
+                                                   predefined safety limit
+
+
+
+Communication
+WiFi (router)                                      2.4 GHz 802.11 g/n, 5 GHz 802.11 a/n/ac.
+
+WiFi (internal PC)                                 WiFi adapter: 2.4 GHz and 5 GHz, 2 internal antennas
+
+                                                   4 digital inputs, 4 digital outputs (GPIO), 1 Ethernet
+I/O connections
+                                                   port, 1 Auxiliary emergency stop
+
+Safety I/O connections                             6 digital inputs, 6 digital outputs
+
+                                                   M12 plug, 4p. 10/100 Mbit Ethernet with Modbus
+Ethernet
+                                                   protocol, adapter for external antenna
+
+
+
+
+Top module
+Power for top modules                              48 V (41-54 V, nom 47.7 V), 10 A combined. 24 V/2 A.
+
+
+
+
+MiR250 Specifications ©Copyright 2021: Mobile Industrial Robots A/S.                                         6
+                                                                                       MiR250 Specifications
+
+
+
+Sensors
+                                                   2 pcs nanoScan3 (front and rear) 360° visual protection
+SICK safety laser scanners
+                                                   around robot
+
+                                                   2 pcs 3D camera Intel RealSense™ D435
+
+                                                   FoV height: 1 800 mm | 70.9 in
+
+                                                   FoV distance in front of robot: 1 200 mm | 47.2 in
+3D cameras
+                                                   FoV horizontal angle: 114°
+
+                                                   FoV minimum distance in front of robot for ground
+                                                   view: 250 mm | 9.8 in
+
+Proximity sensors                                  8 pcs
+
+
+
+Lights and audio
+Audio                                              Speaker
+
+Status lights                                      LED light band
+
+Signal lights                                      8 pcs, 2 on each corner
+
+
+
+Maintenance
+Maintenance                                        Maintenance hatches on four sides of the robot
+
+Service intervals                                  6 months or according to user guide
+
+
+
+
+MiR250 Specifications ©Copyright 2021: Mobile Industrial Robots A/S.                                       7
+
