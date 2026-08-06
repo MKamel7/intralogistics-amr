@@ -81,7 +81,7 @@ Visualization Manager:
         Head Length: 0.1
   Global Options:
     Background Color: 38; 40; 44
-    Fixed Frame: map
+    Fixed Frame: odom
     Frame Rate: 20
   Tools:
     - Class: rviz_default_plugins/MoveCamera

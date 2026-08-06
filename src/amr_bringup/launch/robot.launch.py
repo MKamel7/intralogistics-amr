@@ -206,7 +206,7 @@ def generate_launch_description():
                 'front_topic': 'scanner_front_left/scan',
                 'rear_topic': 'scanner_rear_right/scan',
                 'output_topic': 'scan',
-                'target_frame': 'base_link',
+                'target_frame': 'base_scan',
                 'fixed_frame': 'odom',
                 'bins': bins,
                 'range_min': 0.05,
@@ -231,6 +231,18 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('slam')),
         parameters=[PathJoinSubstitution(
             [FindPackageShare('amr_navigation'), 'config', 'slam.yaml'])])
+
+    # slam_toolbox is a LIFECYCLE node and declares nothing until it is
+    # configured. Left unmanaged it sits in `unconfigured` forever: no
+    # parameters (ros2 param get returns "Parameter not set" and the node logs
+    # "Failed to get parameters: resolution"), no map, no map->odom, and no
+    # error anywhere. Exactly the same trap as the collision monitor.
+    slam_lifecycle = Node(
+        package='nav2_lifecycle_manager', executable='lifecycle_manager',
+        name='lifecycle_manager_slam', output='screen',
+        condition=IfCondition(LaunchConfiguration('slam')),
+        parameters=[{'use_sim_time': True, 'autostart': True,
+                     'node_names': ['slam_toolbox']}])
 
     people_tracker = Node(
         package='amr_perception', executable='people_tracker', output='screen',
@@ -281,7 +293,7 @@ def generate_launch_description():
         # both start fine with this one variable cleared. Narrowed by unsetting
         # the candidates one at a time; GTK_PATH was the only one that mattered.
         SetEnvironmentVariable('GTK_PATH', ''),
-        gz, aim_camera, rsp, bridge, spawn, rviz, battery, scan_merger, leg_detector, people_tracker, slam, collision_monitor, safety_lifecycle,
+        gz, aim_camera, rsp, bridge, spawn, rviz, battery, scan_merger, leg_detector, people_tracker, slam, slam_lifecycle, collision_monitor, safety_lifecycle,
         # Chain on spawn exiting rather than on a timer. `create` exits once the
         # model is in the world, which is exactly the precondition the
         # controller_manager needs.

@@ -178,6 +178,21 @@
        test_description.py asserts the controller's base_frame_id is the root
        link, which is the invariant that was violated. -->
 
+  <!-- Frame the MERGED scan is published in.
+
+       Coincident with base_link by construction, because the merge already
+       resolves both scanners into base_link coordinates. It exists as a
+       separate frame because a laser whose frame_id IS the SLAM base frame
+       leaves slam_toolbox computing an identity laser transform, and it then
+       accepts the scan and publishes no map at all, silently. A sensor should
+       have its own frame regardless. -->
+  <link name="base_scan"/>
+  <joint name="base_scan_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="base_scan"/>
+    <origin xyz="0 0 ${p['scanner_mount_height']}"/>
+  </joint>
+
   <!-- Load deck: the surface a top module or a KLT sits on. Named so the
        payload work in a later phase has a frame to attach to. -->
   <link name="load_deck">

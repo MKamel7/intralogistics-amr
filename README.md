@@ -160,6 +160,12 @@ obstacle, different speed, different outcome, which is the whole point of speed-
 The reasoning, the two estimated inputs it rests on, and what it does not prove are in
 [docs/safety_concept.md](docs/safety_concept.md).
 
+**Mapping.** `slam_toolbox` on the merged 360 degree scan rather than either raw scanner, since a
+single 275 degree corner-mounted sensor sees less than half the surroundings and loop closure on a
+partial view is much weaker. Produces a 5 cm occupancy grid and `map -> odom`. Three separate silent
+faults had to be fixed to get there, none of which logged an error; V-14 in
+[docs/validation.md](docs/validation.md) has them.
+
 **Battery and state of charge.** A power model fitted to the three runtimes the platform sheet
 publishes, exposed as `sensor_msgs/BatteryState`. Deliberately labelled as calibration rather than
 validation in [docs/validation.md](docs/validation.md): three published figures and three model
@@ -267,7 +273,6 @@ Two things are configured but do not work, recorded here rather than left to be 
 - **Walking pedestrians.** Static ones are correct and are what the demo uses. Walking ones cover
   only part of their lane or do not move; five approaches are documented in OPEN-1 of
   [docs/validation.md](docs/validation.md), along with the fix that should be done instead.
-- **SLAM produces no map.** `slam_toolbox` launches on the merged scan and stays silent. See OPEN-2.
 
 ## Roadmap
 

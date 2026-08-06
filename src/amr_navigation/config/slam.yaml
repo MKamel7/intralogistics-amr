@@ -10,7 +10,13 @@
 # 20 mm at 1 m, so a finer grid would claim detail the sensor does not carry,
 # and a coarser one would lose the rack uprights that make an aisle recognisable.
 
-slam_toolbox:
+# Keyed with the /** wildcard rather than the node name.
+#
+# Keyed as `slam_toolbox:` the file silently did not apply: `ros2 param get
+# /slam_toolbox scan_topic` returned "Parameter not set", the node came up on
+# its own defaults and published no map and no map->odom, with nothing logged.
+# A wildcard key cannot miss.
+/**:
   ros__parameters:
     use_sim_time: true
     odom_frame: odom

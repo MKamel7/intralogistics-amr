@@ -559,20 +559,34 @@ waypoint list, which is how moving obstacles are normally done and which removes
 question entirely. That is scoped work, not another guess, and it belongs with R4 of the revised
 plan.
 
-## OPEN-2. SLAM runs but produces no map
+## V-14. SLAM: three separate faults, each silent
 
-**Status: not working.**
+**Status: working.** Map 276 x 414 at 5 cm resolution, 88.1 m2 mapped free and 1.9 m2 occupied, with
+`map -> odom` published.
 
-`slam_toolbox` is configured on the merged scan, launches, and stays silent: no map on `/map`, no
-`map -> odom` transform, and nothing logged. The scan itself is healthy, 3102 returns per frame with
-155 of 2118 bins empty.
+Getting there took three fixes and **not one of them logged an error**. The node ran, the scan was
+healthy at 3102 returns per frame, and nothing at all appeared on `/map`.
 
-One real bug was found and fixed while chasing this: the merged scan declared
-`angle_max = angle_min + 2*pi`, so the first and last ray described the same bearing. That is a
-malformed scan and a consumer walking from `angle_min` in steps of `angle_increment` gets one ray too
-many. It is now one increment short of a full turn, with a test. **It did not fix the map**, so the
-cause lies elsewhere; the next things to check are whether slam_toolbox will accept a scan whose
-`frame_id` equals `base_frame`, and whether it needs the robot to move before publishing anything.
+1. **The merged scan was malformed.** It declared `angle_max = angle_min + 2*pi`, so the first and
+   last ray described the same bearing and a consumer stepping from `angle_min` by
+   `angle_increment` ends up with one ray too many. Now one increment short of a full turn, with a
+   test. This was a real bug and fixing it was correct, but it was **not** the cause.
+2. **The scan had no frame of its own.** Its `frame_id` was `base_link`, which is also
+   slam_toolbox's `base_frame`, leaving the laser transform as identity. The merged scan is now
+   published in `base_scan`. Also not the cause on its own.
+3. **`async_slam_toolbox_node` is a LIFECYCLE node and nothing was managing it.** It sat in
+   `unconfigured` indefinitely, which is why it declared no parameters at all: `ros2 param get
+   /slam_toolbox resolution` returned "Parameter not set" and the node logged only
+   "Failed to get parameters: resolution". A `nav2_lifecycle_manager` now brings it up. **This was
+   the cause.**
+
+The diagnostic that cracked it was checking `ros2 lifecycle get`, which is exactly the check that
+cracked the identical problem on `nav2_collision_monitor` earlier in the project. A silent node
+should be checked for lifecycle state before anything else.
+
+A fourth thing was found along the way and is worth recording separately: the params file was keyed
+`slam_toolbox:` and is now keyed `/**:`. That change is harmless and more robust, but it did not fix
+anything, because an unconfigured lifecycle node has no parameters to set under any key.
 
 ---
 
