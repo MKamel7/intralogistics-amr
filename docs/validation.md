@@ -414,8 +414,8 @@ re-binned one, and the distinction had been missed.
 | person at 1.28 m | 55% | **60%** |
 | person at 2.20 m | 95% | **100%** |
 
-**60 percent is still poor, and no further classifier work fixes it**, which brings us to the part
-that matters.
+**60 percent is still poor.** Bridging holes treated a symptom; the representation was the cause,
+and V-12 fixes it properly. The reframing below stands regardless, and is the more important half.
 
 ### The protective stop must not depend on classification, and does not
 
@@ -443,6 +443,49 @@ directly, through `nav2_collision_monitor`, and will not consume `people_detecti
 `people_tracks` at all. Wiring classification into a protective function would make safety depend on
 a component measured at 0.218 precision, which would be the wrong architecture no matter how good
 the classifier later becomes.
+
+---
+
+## V-12. Fixing the representation, not the symptom
+
+**Status: root cause fixed. Recall 1.000 on the static scenario.**
+
+V-11 bridged holes in the binned scan, which lifted the near-field rate from 55 to 60 percent. That
+treated a symptom. The cause is that **a LaserScan is a lossy container for two sensors at different
+origins**: re-binning about the robot centre skips bins, and no amount of bridging recovers what the
+binning discarded.
+
+The merger now also publishes every accepted return **un-binned**, as a point cloud, and the
+detector clusters those. The binned scan remains, because a costmap and a collision monitor both
+want a LaserScan and for that purpose the holes are harmless: a protective field asks whether a
+return is inside it, not whether its neighbours are contiguous.
+
+**The first attempt at this made things worse, which is worth recording.** Clustering the merged
+points by walking them in bearing order dropped recall to 0.250 and reduced the pedestrian at 2.2 m
+to a three-point fragment. The reason is specific to a merged sensor set: **the two scanners see
+different surfaces of the same object**, so bearing order interleaves them, consecutive points jump
+between surfaces, and the run splits. Any ordering-based clustering has this failure.
+
+A grid plus connected components has no ordering, so neither failure mode can occur. A test asserts
+the result is invariant under a permutation of the input.
+
+**Cell size then had to be chosen, not guessed.** At 0.06 m the eight-neighbour reach is 0.085 m,
+which exceeds the 0.090 m gap between two 110 mm calves only marginally, and the pedestrian at
+2.50 m merged into one 0.31 m cluster, too wide for the leg test: **detection went to zero for that
+person while the near-field one went to 100 percent.** At 0.040 m the reach is 0.057 m, comfortably
+below the leg gap, and a leg stays whole out past 12 m where its own point spacing is 0.036 m.
+
+| | binned scan | + hole bridging | un-binned points |
+|---|---|---|---|
+| recall | 0.875 | 0.900 | **1.000** |
+| precision | 0.168 | 0.218 | 0.175 |
+| localisation p50 | 5.4 cm | 5.2 cm | **4.5 cm** |
+| person at 1.28 m | 55% | 60% | **100%** |
+| person at 2.50 m | 100% | 100% | **100%** |
+
+**Every person, in every frame.** Precision is essentially unchanged, which is expected and is not
+this fix's job: it is structural, a rack upright really is a leg-shaped object, and the height
+channel and the motion test are what address it.
 
 ---
 

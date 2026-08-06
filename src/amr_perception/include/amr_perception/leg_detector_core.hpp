@@ -76,6 +76,11 @@ struct DetectorParams
   /// preserved.
   std::size_t max_bridge_bins{3};
 
+  /// Grid cell for spatial clustering. Two returns in the same or adjoining
+  /// cells belong to the same object. Sized between a leg's width and the gap
+  /// between two legs, so calves still resolve separately.
+  double cluster_cell{0.040};
+
   double leg_width_min{0.040};
   double leg_width_max{0.250};
   /// A leg is round, so its run bows away from its own chord. A flat run of the
@@ -101,6 +106,29 @@ struct DetectorParams
   double blob_width_min{0.16};
   double blob_width_max{0.75};
 };
+
+/// A measured return in the sensor frame.
+struct Point2
+{
+  double x{0.0};
+  double y{0.0};
+};
+
+/// Cluster merged returns SPATIALLY, independent of their order.
+///
+/// This is the preferred entry point, and the ordering independence is the
+/// whole point. Clustering the binned scan perforates close objects, which was
+/// the measured cause of poor near-field detection. But walking the merged
+/// POINTS in bearing order is wrong too, and measurably so: the two scanners
+/// see different surfaces of the same object, so bearing order interleaves
+/// them, consecutive points jump between surfaces, and runs split. Sorting made
+/// recall worse, not better, and a pedestrian at 2.2 m collapsed to a
+/// three-point fragment.
+///
+/// A grid plus connected components has no ordering at all, so neither failure
+/// can occur. Cell size is the adjacency distance.
+std::vector<Cluster> clusterPoints(
+  const std::vector<Point2> & points, const DetectorParams & p);
 
 /// Break a scan into clusters using an adaptive distance threshold.
 ///

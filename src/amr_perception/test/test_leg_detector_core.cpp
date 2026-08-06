@@ -16,6 +16,8 @@ using amr_perception::Cluster;
 using amr_perception::DetectorParams;
 using amr_perception::looksLikeLeg;
 using amr_perception::pairLegs;
+using amr_perception::Point2;
+using amr_perception::clusterPoints;
 using amr_perception::detectPeople;
 using amr_perception::segmentScan;
 
@@ -374,6 +376,109 @@ TEST(DetectPeople, ABlobIsLessConfidentThanAResolvedPair)
   EXPECT_FALSE(a[0].paired);
   EXPECT_TRUE(b[0].paired);
   EXPECT_LT(a[0].confidence, b[0].confidence);
+}
+
+// ---- spatial clustering ---------------------------------------------------
+//
+// The production path. Both ordering-based approaches failed on real data: the
+// binned scan perforates close objects, and walking merged points in bearing
+// order interleaves two scanners looking at different surfaces of the same
+// thing. A grid has no ordering, so neither can happen.
+
+namespace
+{
+/// Points on the surface of a circle, as two sensors at different places would
+/// see it: interleaved, and not in any useful order.
+std::vector<Point2> circlePoints(double cx, double cy, double rad, std::size_t n)
+{
+  std::vector<Point2> pts;
+  for (std::size_t i = 0; i < n; ++i) {
+    const double a = 2.0 * M_PI * static_cast<double>(i) / static_cast<double>(n);
+    pts.push_back(Point2{cx + rad * std::cos(a), cy + rad * std::sin(a)});
+  }
+  return pts;
+}
+}  // namespace
+
+TEST(ClusterPoints, EmptyInputYieldsNothing)
+{
+  DetectorParams p;
+  EXPECT_TRUE(clusterPoints({}, p).empty());
+}
+
+TEST(ClusterPoints, OneObjectBecomesOneCluster)
+{
+  DetectorParams p;
+  const auto pts = circlePoints(2.0, 0.0, 0.055, 40);
+  const auto cs = clusterPoints(pts, p);
+  ASSERT_EQ(cs.size(), 1u);
+  EXPECT_NEAR(cs[0].cx, 2.0, 0.02);
+  EXPECT_NEAR(cs[0].cy, 0.0, 0.02);
+  EXPECT_NEAR(cs[0].width, 0.110, 0.02);
+}
+
+TEST(ClusterPoints, TheResultDoesNotDependOnInputOrder)
+{
+  // The property the previous implementation lacked, and the reason recall
+  // collapsed when points were sorted by bearing.
+  DetectorParams p;
+  auto pts = circlePoints(2.0, -0.10, 0.055, 30);
+  const auto other = circlePoints(2.0, 0.10, 0.055, 30);
+  pts.insert(pts.end(), other.begin(), other.end());
+
+  const auto a = clusterPoints(pts, p);
+
+  std::vector<Point2> shuffled;
+  for (std::size_t i = 0; i < pts.size(); ++i) {
+    shuffled.push_back(pts[(i * 7 + 3) % pts.size()]);
+  }
+  const auto b = clusterPoints(shuffled, p);
+
+  ASSERT_EQ(a.size(), b.size());
+  EXPECT_EQ(a.size(), 2u) << "two legs 0.2 m apart should stay two clusters";
+}
+
+TEST(ClusterPoints, TwoLegsStaySeparateAtTheModelledStance)
+{
+  // Cell size is chosen so eight-neighbour adjacency reaches 0.057 m, which is
+  // less than the 0.090 m gap between two 110 mm calves 200 mm apart. If they
+  // merged, the combined cluster would be about 0.31 m wide, too wide for the
+  // leg test, and the person would vanish. That is exactly what happened at a
+  // 0.06 m cell: the pedestrian at 2.5 m went to zero detections.
+  DetectorParams p;
+  auto pts = circlePoints(2.5, -0.10, 0.055, 30);
+  const auto other = circlePoints(2.5, 0.10, 0.055, 30);
+  pts.insert(pts.end(), other.begin(), other.end());
+
+  const auto cs = clusterPoints(pts, p);
+  ASSERT_EQ(cs.size(), 2u);
+  for (const auto & c : cs) {
+    EXPECT_TRUE(looksLikeLeg(c, p)) << "cluster width " << c.width;
+  }
+  EXPECT_EQ(pairLegs(cs, p).size(), 1u);
+}
+
+TEST(ClusterPoints, InterleavedSurfacesOfOneObjectStayOneCluster)
+{
+  // Two scanners see opposite sides of the same leg. In bearing order those
+  // returns alternate between surfaces and the run splits; spatially they are
+  // plainly one object.
+  DetectorParams p;
+  std::vector<Point2> pts;
+  const auto near = circlePoints(2.0, 0.0, 0.055, 20);
+  const auto far = circlePoints(2.0, 0.0, 0.050, 20);
+  for (std::size_t i = 0; i < near.size(); ++i) {
+    pts.push_back(near[i]);
+    pts.push_back(far[i]);
+  }
+  EXPECT_EQ(clusterPoints(pts, p).size(), 1u);
+}
+
+TEST(ClusterPoints, SparseNoiseIsDiscarded)
+{
+  DetectorParams p;
+  std::vector<Point2> pts{{1.0, 0.0}, {3.0, 1.0}, {-2.0, 2.0}};
+  EXPECT_TRUE(clusterPoints(pts, p).empty());
 }
 
 int main(int argc, char ** argv)

@@ -132,7 +132,14 @@ by the re-binning in the merge, into runs of one to four points separated by two
 Bridging those holes, only where the points either side agree in space, lifted precision to 0.218,
 recall to 0.900 and the near-field rate to 60 percent.
 
-60 percent is still poor, and the important measurement is what it does and does not mean: on the
+That was treating a symptom. The representation was the cause: a LaserScan is a lossy container for
+two sensors at different origins. The merger now also publishes the returns un-binned as a point
+cloud and the detector clusters those spatially, which took **recall to 1.000** and the near-field
+rate to **100 percent** with localisation p50 of 4.5 cm. The binned scan stays for the costmap and
+the collision monitor, where holes are harmless.
+
+Precision is still around 0.18 and that is not this fix's job: it is structural, a rack upright
+really is a leg-shaped object. The important measurement is what that does and does not mean: on the
 same 40 frames, **returns from that pedestrian are present in 100 percent of them**. What fails is
 naming them, not seeing them. So the protective stop is built on the merged scan directly and never
 consumes the classifier, which is both how ISO 3691-4 protective fields work and the only

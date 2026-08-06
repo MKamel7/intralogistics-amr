@@ -5,6 +5,7 @@
 // of that lives in leg_detector_core so it can be tested without a simulator;
 // this node is plumbing and parameters.
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <vector>
@@ -13,7 +14,8 @@
 
 #include "geometry_msgs/msg/pose_array.hpp"
 #include "rclcpp/rclcpp.hpp"
-#include "sensor_msgs/msg/laser_scan.hpp"
+#include "sensor_msgs/msg/point_cloud2.hpp"
+#include "sensor_msgs/point_cloud2_iterator.hpp"
 #include "vision_msgs/msg/detection3_d_array.hpp"
 
 namespace amr_perception
@@ -39,10 +41,15 @@ public:
     params_.blob_max_range = declare_parameter("blob_max_range", 2.20);
     params_.blob_width_min = declare_parameter("blob_width_min", 0.16);
     params_.blob_width_max = declare_parameter("blob_width_max", 0.75);
+    params_.cluster_cell = declare_parameter("cluster_cell", 0.040);
 
     auto qos = rclcpp::SensorDataQoS();
-    sub_ = create_subscription<sensor_msgs::msg::LaserScan>(
-      "scan", qos, [this](sensor_msgs::msg::LaserScan::SharedPtr m) {onScan(*m);});
+    // The un-binned merged returns, not the binned scan. Clustering the binned
+    // form perforates close objects: a pedestrian at 1.28 m fragmented into ten
+    // runs of one to four points, which is why near-field detection was poor.
+    sub_ = create_subscription<sensor_msgs::msg::PointCloud2>(
+      "scan_points", qos,
+      [this](sensor_msgs::msg::PointCloud2::SharedPtr m) {onPoints(*m);});
     det_pub_ = create_publisher<vision_msgs::msg::Detection3DArray>("people_detections", 10);
     // A plain PoseArray alongside the typed message, purely so RViz can show
     // the result without a custom display.
@@ -55,10 +62,19 @@ public:
   }
 
 private:
-  void onScan(const sensor_msgs::msg::LaserScan & scan)
+  void onPoints(const sensor_msgs::msg::PointCloud2 & cloud)
   {
-    const auto clusters = segmentScan(
-      scan.ranges, scan.angle_min, scan.angle_increment, params_);
+    std::vector<Point2> points;
+    points.reserve(cloud.width);
+    sensor_msgs::PointCloud2ConstIterator<float> ix(cloud, "x");
+    sensor_msgs::PointCloud2ConstIterator<float> iy(cloud, "y");
+    for (std::size_t i = 0; i < cloud.width; ++i, ++ix, ++iy) {
+      points.push_back(Point2{static_cast<double>(*ix), static_cast<double>(*iy)});
+    }
+    // No sorting. Clustering is spatial and order independent on purpose: the
+    // two scanners see different surfaces of the same object, so ANY ordering,
+    // including by bearing, interleaves them and splits runs.
+    const auto clusters = clusterPoints(points, params_);
 
     const auto people = detectPeople(clusters, params_);
     std::size_t legs = 0;
@@ -67,13 +83,13 @@ private:
     }
 
     vision_msgs::msg::Detection3DArray out;
-    out.header = scan.header;
+    out.header = cloud.header;
     geometry_msgs::msg::PoseArray viz;
-    viz.header = scan.header;
+    viz.header = cloud.header;
 
     for (const auto & person : people) {
       vision_msgs::msg::Detection3D det;
-      det.header = scan.header;
+      det.header = cloud.header;
       det.bbox.center.position.x = person.x;
       det.bbox.center.position.y = person.y;
       det.bbox.center.orientation.w = 1.0;
@@ -107,7 +123,7 @@ private:
   }
 
   DetectorParams params_;
-  rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr sub_;
+  rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr sub_;
   rclcpp::Publisher<vision_msgs::msg::Detection3DArray>::SharedPtr det_pub_;
   rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr viz_pub_;
 };

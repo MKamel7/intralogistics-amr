@@ -1,5 +1,8 @@
 #include "amr_perception/leg_detector_core.hpp"
 
+#include <map>
+#include <utility>
+
 namespace amr_perception
 {
 
@@ -32,6 +35,82 @@ double distanceToChord(const Point & a, const Point & b, const Point & p)
 }
 
 }  // namespace
+
+std::vector<Cluster> clusterPoints(
+  const std::vector<Point2> & points, const DetectorParams & p)
+{
+  const double cell = p.cluster_cell > 1e-6 ? p.cluster_cell : 0.06;
+  std::map<std::pair<int, int>, std::vector<std::size_t>> grid;
+  for (std::size_t i = 0; i < points.size(); ++i) {
+    grid[{static_cast<int>(std::floor(points[i].x / cell)),
+      static_cast<int>(std::floor(points[i].y / cell))}].push_back(i);
+  }
+
+  std::map<std::pair<int, int>, bool> seen;
+  std::vector<Cluster> clusters;
+
+  for (const auto & entry : grid) {
+    if (seen[entry.first]) {continue;}
+    std::vector<std::size_t> members;
+    std::vector<std::pair<int, int>> stack{entry.first};
+    seen[entry.first] = true;
+
+    while (!stack.empty()) {
+      const auto k = stack.back();
+      stack.pop_back();
+      auto it = grid.find(k);
+      if (it == grid.end()) {continue;}
+      members.insert(members.end(), it->second.begin(), it->second.end());
+      for (int dx = -1; dx <= 1; ++dx) {
+        for (int dy = -1; dy <= 1; ++dy) {
+          if (dx == 0 && dy == 0) {continue;}
+          const std::pair<int, int> nb{k.first + dx, k.second + dy};
+          if (grid.count(nb) && !seen[nb]) {
+            seen[nb] = true;
+            stack.push_back(nb);
+          }
+        }
+      }
+    }
+
+    if (members.size() < p.min_points) {continue;}
+
+    Cluster c;
+    c.points = members.size();
+    double sx = 0.0, sy = 0.0;
+    for (const auto i : members) {sx += points[i].x; sy += points[i].y;}
+    c.cx = sx / static_cast<double>(members.size());
+    c.cy = sy / static_cast<double>(members.size());
+    c.range = std::hypot(c.cx, c.cy);
+
+    // Width is the widest separation in the cluster, and the chord it defines
+    // is what depth is measured against. Clusters here are tens of points, so
+    // the quadratic scan costs nothing and avoids assuming any ordering.
+    std::size_t a = members.front(), b = members.front();
+    double best = 0.0;
+    for (std::size_t i = 0; i < members.size(); ++i) {
+      for (std::size_t j = i + 1; j < members.size(); ++j) {
+        const double d = std::hypot(
+          points[members[i]].x - points[members[j]].x,
+          points[members[i]].y - points[members[j]].y);
+        if (d > best) {best = d; a = members[i]; b = members[j];}
+      }
+    }
+    c.width = best;
+
+    const Point pa{points[a].x, points[a].y};
+    const Point pb{points[b].x, points[b].y};
+    double bow = 0.0;
+    for (const auto i : members) {
+      bow = std::max(bow, distanceToChord(pa, pb, Point{points[i].x, points[i].y}));
+    }
+    c.depth = bow;
+
+    clusters.push_back(c);
+  }
+
+  return clusters;
+}
 
 std::vector<Cluster> segmentScan(
   const std::vector<float> & ranges,

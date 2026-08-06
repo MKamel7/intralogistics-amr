@@ -21,6 +21,8 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/laser_scan.hpp"
+#include "sensor_msgs/msg/point_cloud2.hpp"
+#include "sensor_msgs/point_cloud2_iterator.hpp"
 #include "tf2/LinearMath/Quaternion.h"
 #include "tf2/LinearMath/Matrix3x3.h"
 #include "tf2_ros/buffer.h"
@@ -66,6 +68,10 @@ public:
     rear_sub_ = create_subscription<sensor_msgs::msg::LaserScan>(
       rear_topic_, qos, [this](sensor_msgs::msg::LaserScan::SharedPtr m) {rear_ = m;});
     pub_ = create_publisher<sensor_msgs::msg::LaserScan>(output_topic_, qos);
+    // The un-binned returns. Anything that CLUSTERS should consume these; the
+    // binned scan above perforates close objects. See scan_merge_core.hpp.
+    points_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>(
+      output_topic_ + "_points", qos);
 
     timer_ = create_wall_timer(
       std::chrono::duration<double>(1.0 / publish_rate_), [this] {merge();});
@@ -155,6 +161,26 @@ private:
     out.ranges = accumulator_->ranges();
     pub_->publish(out);
 
+    const auto & pts = accumulator_->points();
+    sensor_msgs::msg::PointCloud2 cloud;
+    cloud.header = out.header;
+    cloud.height = 1;
+    cloud.width = static_cast<uint32_t>(pts.size());
+    cloud.is_dense = true;
+    sensor_msgs::PointCloud2Modifier mod(cloud);
+    mod.setPointCloud2FieldsByString(1, "xyz");
+    mod.resize(pts.size());
+    sensor_msgs::PointCloud2Iterator<float> ix(cloud, "x");
+    sensor_msgs::PointCloud2Iterator<float> iy(cloud, "y");
+    sensor_msgs::PointCloud2Iterator<float> iz(cloud, "z");
+    for (const auto & q : pts) {
+      *ix = static_cast<float>(q.x);
+      *iy = static_cast<float>(q.y);
+      *iz = 0.0F;
+      ++ix; ++iy; ++iz;
+    }
+    points_pub_->publish(cloud);
+
     RCLCPP_INFO_THROTTLE(
       get_logger(), *get_clock(), 10000,
       "merged %zu returns, dropped %zu self / %zu out of range / %zu invalid; "
@@ -176,6 +202,7 @@ private:
   sensor_msgs::msg::LaserScan::SharedPtr front_, rear_;
   rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr front_sub_, rear_sub_;
   rclcpp::Publisher<sensor_msgs::msg::LaserScan>::SharedPtr pub_;
+  rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr points_pub_;
   rclcpp::TimerBase::SharedPtr timer_;
 };
 

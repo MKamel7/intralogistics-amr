@@ -76,11 +76,29 @@ struct ScanView
   const std::vector<float> * ranges{nullptr};
 };
 
+/// One merged return, in the output frame.
+struct MergedPoint
+{
+  double x{0.0};
+  double y{0.0};
+  double bearing{0.0};
+};
+
 /// Accumulates points from any number of scanners into a single 360 degree scan.
 ///
 /// Bins take the MINIMUM range, never an average. A safety-relevant scan must
 /// report the nearest thing in a direction; averaging a 0.4 m obstacle with a
 /// 10 m wall would invent 5 m of clear space that is not there.
+///
+/// The binned scan is NOT the whole output. Re-binning two scanners mounted off
+/// the robot centre about that centre is lossy: the angular mapping is
+/// non-uniform, output bins get skipped, and close objects arrive perforated.
+/// Measured, a pedestrian at 1.28 m fragmented into runs of one to four points.
+/// So every accepted return is also kept as a POINT, un-binned, and anything
+/// that needs to cluster should use those. The binned scan remains because a
+/// costmap and a collision monitor both want a LaserScan, and for THAT purpose
+/// the holes are harmless: a protective field asks whether a return is inside
+/// it, not whether its neighbours are contiguous.
 class ScanAccumulator
 {
 public:
@@ -90,12 +108,15 @@ public:
 
   std::size_t bins() const {return ranges_.size();}
   const std::vector<float> & ranges() const {return ranges_;}
+  /// Every accepted return, un-binned and in the output frame.
+  const std::vector<MergedPoint> & points() const {return points_;}
 
   double angleIncrement() const {return 2.0 * M_PI / static_cast<double>(ranges_.size());}
   double angleMin() const {return -M_PI;}
 
   void reset()
   {
+    points_.clear();
     std::fill(ranges_.begin(), ranges_.end(), std::numeric_limits<float>::infinity());
     accepted_ = 0;
     self_returns_ = 0;
@@ -129,6 +150,7 @@ public:
 
       auto & slot = ranges_[static_cast<std::size_t>(bin)];
       if (static_cast<float>(out_r) < slot) {slot = static_cast<float>(out_r);}
+      points_.push_back(MergedPoint{x, y, out_a});
       ++accepted_;
     }
   }
@@ -153,6 +175,7 @@ private:
   double range_min_;
   double range_max_;
   std::vector<float> ranges_;
+  std::vector<MergedPoint> points_;
   std::size_t accepted_{0};
   std::size_t self_returns_{0};
   std::size_t out_of_range_{0};
