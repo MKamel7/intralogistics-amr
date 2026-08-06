@@ -81,7 +81,8 @@
     <xacro:box_inertia m="${body_mass}"
                        x="${p['chassis_length']}"
                        y="${p['chassis_width']}"
-                       z="${body_h}"/>
+                       z="${body_h}"
+                       cz="${body_cz}"/>
     <visual>
       <origin xyz="0 0 ${body_cz}"/>
       <geometry>
@@ -97,14 +98,16 @@
     </collision>
   </link>
 
-  <!-- Ground projection frame. Nav2 and the costmaps work in this frame; the
-       inertial body is base_link above it. -->
-  <link name="base_footprint"/>
-  <joint name="base_footprint_joint" type="fixed">
-    <parent link="base_link"/>
-    <child link="base_footprint"/>
-    <origin xyz="0 0 0"/>
-  </joint>
+  <!-- There is deliberately NO base_footprint link.
+
+       base_link already sits on the ground plane at the centre of the drive
+       axis, so a base_footprint would be an exact duplicate of it. Worse, it
+       was actively broken: the description made it a CHILD of base_link while
+       diff_drive_controller published odom -> base_footprint, giving that frame
+       two parents and a malformed TF tree. Nothing warned. Nav2's default
+       robot_base_frame is base_link, so this costs nothing.
+       test_description.py asserts the controller's base_frame_id is the root
+       link, which is the invariant that was violated. -->
 
   <!-- Load deck: the surface a top module or a KLT sits on. Named so the
        payload work in a later phase has a frame to attach to. -->

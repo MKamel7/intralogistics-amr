@@ -88,10 +88,63 @@ def test_every_inertia_is_physically_realisable(urdf):
     assert not bad, 'unrealisable inertia tensors:\n  ' + '\n  '.join(bad)
 
 
+def test_root_link_is_unique_and_named(urdf):
+    """Exactly one link must have no parent joint."""
+    children = {j.find('child').get('link') for j in urdf.findall('joint')}
+    roots = [link.get('name') for link in urdf.findall('link')
+             if link.get('name') not in children]
+    assert roots == ['base_link'], (
+        f'expected base_link to be the only root, found {roots}')
+
+
+def test_odometry_frame_is_the_root_link(urdf):
+    """The odometry publisher's base frame must be the description's root.
+
+    This is the invariant that was violated: the description carried a
+    base_footprint link as a CHILD of base_link while the controller published
+    odom -> base_footprint. That frame then had two parents, one static and one
+    dynamic, and the TF tree was malformed with no warning from anything.
+    """
+    cfg = yaml.safe_load((PKG / 'config' / 'controllers.yaml').read_text())
+    base = cfg['diff_drive_controller']['ros__parameters']['base_frame_id']
+    children = {j.find('child').get('link') for j in urdf.findall('joint')}
+    assert base not in children, (
+        f'controllers.yaml publishes odom -> {base}, but {base} is already the '
+        f'child of a joint in the description. That frame would have two '
+        f'parents. Point base_frame_id at the root link.')
+    assert base in {link.get('name') for link in urdf.findall('link')}, (
+        f'base_frame_id {base} is not a link in the description at all')
+
+
+def test_link_inertia_sits_where_the_geometry_does(urdf):
+    """Mass must be where the body is.
+
+    The chassis inertial origin defaulted to the link origin, at ground level,
+    while its geometry is centred 163 mm higher. That lowers the centre of mass
+    by the full body half-height and makes the robot markedly harder to tip than
+    the real machine, which would have quietly flattered every payload and
+    cornering result.
+    """
+    bad = []
+    for link in urdf.findall('link'):
+        inertial = link.find('inertial')
+        visual = link.find('visual')
+        if inertial is None or visual is None:
+            continue
+        io = inertial.find('origin')
+        vo = visual.find('origin')
+        iz = float(io.get('xyz', '0 0 0').split()[2]) if io is not None else 0.0
+        vz = float(vo.get('xyz', '0 0 0').split()[2]) if vo is not None else 0.0
+        if abs(iz - vz) > 1e-6:
+            bad.append(f'{link.get("name")}: mass at z={iz:.4f}, geometry at z={vz:.4f}')
+    assert not bad, ('centre of mass does not coincide with the geometry:\n  '
+                     + '\n  '.join(bad))
+
+
 def test_required_frames_exist(urdf):
     """Frames the rest of the stack binds to by name."""
     required = {
-        'base_link', 'base_footprint', 'load_deck',
+        'base_link', 'load_deck',
         'drive_left_wheel', 'drive_right_wheel',
         'scanner_front_left_link', 'scanner_rear_right_link',
         'camera_left_link', 'camera_right_link',
@@ -215,4 +268,5 @@ def test_controllers_yaml_matches_the_platform_spec(spec):
     assert dd['linear.x.max_velocity'] == pytest.approx(v['max_linear_speed'])
     assert dd['linear.x.max_acceleration'] == pytest.approx(v['max_linear_accel'])
     assert dd['angular.z.max_velocity'] == pytest.approx(v['max_angular_speed'])
-    assert dd['base_frame_id'] == 'base_footprint'
+    # base_frame_id itself is checked against the description's root in
+    # test_odometry_frame_is_the_root_link, which is the property that matters.

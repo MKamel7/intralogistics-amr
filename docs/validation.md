@@ -75,3 +75,48 @@ on the strength of the two sheets agreeing, rather than to make a result come ou
 
 13 h at maximum payload, 17.4 h unloaded, 22 h standby, from a 1.63 kWh pack. These constrain the
 energy model tightly enough to be a real check on it.
+
+---
+
+## Known limitations of the model
+
+Recorded here rather than discovered later. None of these are bugs; they are places where the model
+is deliberately narrower than the machine.
+
+**Caster joint states are not published.** The four casters are passive and are simulated correctly
+by the physics engine, but they are not declared in `ros2_control`, so nothing publishes their joint
+positions and their frames therefore do not appear in TF. This is faithful to the real platform,
+where casters carry no encoders, but it means RViz draws them at their zero position no matter what
+the robot is doing. If a demonstration video needs them to look right, a simulator-only joint state
+publisher can supply them, and that would have to be labelled as sim-only.
+
+**`scan_time` is zero on the laser messages.** Gazebo does not populate the field. Nothing in the
+stack currently uses it, but any consumer that does would need it filled in.
+
+**No jerk limit.** See V-01. The velocity smoother steps acceleration rather than ramping it, which
+is why the model reaches top speed sooner than the reference.
+
+**A cosmetic CMake dev warning on build.** `colcon build --symlink-install` emits a CMP0009 policy
+warning from ament's own install code when it globs a directory containing symlinks. It comes from
+upstream, not from this project, and setting the policy locally does not reach the scope that
+raises it. Left alone rather than papered over; builds are otherwise clean.
+
+**Camera field of view is the optimistic reading of an ambiguous sheet.** See the note in
+`urdf/sensors.xacro`. No detection or coverage figure may be published until the Intel data sheet is
+archived.
+
+---
+
+## Repeatability
+
+**The drive check was not repeatable, and the fix is recorded because the failure was instructive.**
+Run twice in a row, the second run began its acceleration ramp at roughly 1.75 m/s left over from
+the first, and duly reported reaching top speed in 4.99 m at an effective 0.35 m/s2, above the limit
+the controller enforces. It looked like a physics finding and was measurement error: the check
+commanded zero for a fixed number of spins instead of waiting for the robot to actually stop. It now
+blocks until velocity is below tolerance for ten consecutive samples, and two back-to-back runs
+produce identical figures.
+
+The simulation benchmark repeats to within a few percent on the expensive configurations. The cheap
+ones vary by around 8 percent, because their per-step cost is a small difference between two larger
+wall times, so those are quoted to two significant digits.

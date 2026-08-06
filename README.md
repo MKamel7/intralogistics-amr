@@ -28,22 +28,26 @@ and that Harmonic correctly rejects. The import is a script, so it is repeatable
 **Robot description.** A MiR250-class AMR generated entirely from the platform spec: two drive
 wheels on `ros2_control`, four real two-degree-of-freedom casters, two 275 degree safety scanners at
 diagonally opposite corners, two RGB-D cameras and an IMU. Sensor sets are switchable so the
-simulation tiers below are real rather than aspirational. 23 tests cover it.
+simulation tiers below are real rather than aspirational. 26 tests cover it.
 
 **Measured simulation cost**, by `src/amr_evaluation/tools/benchmark_sim_cost.py` on an i5-1235U,
 with the real-time throttle disabled and a subscriber attached to every sensor topic:
 
 | configuration | us/step | marginal RTF | verdict |
 |---|---|---|---|
-| world only, no robot | 52.8 | 75.7x | scenery is nearly free |
-| 1 robot, no sensors | 302.6 | 13.2x | |
-| 1 robot, 2 safety scanners | 668.5 | 6.0x | |
-| 1 robot, scanners + 2 RGB-D | 1977.6 | 2.0x | **perception tier** |
-| 3 robots, scanners only | 2016.4 | 2.0x | **fleet tier** |
-| 5 robots, scanners only | 3509.5 | 1.1x | fleet tier ceiling |
-| 3 robots, scanners + RGB-D | 6330.7 | 0.6x | **below real time** |
+| world only, no robot | 57 | ~70x | scenery is nearly free |
+| 1 robot, no sensors | 290 | ~14x | |
+| 1 robot, 2 safety scanners | 643 | 6.2x | |
+| 1 robot, scanners + 2 RGB-D | 1977 | 2.0x | **perception tier** |
+| 3 robots, scanners only | 2001 | 2.0x | **fleet tier** |
+| 5 robots, scanners only | 3492 | 1.1x | fleet tier ceiling |
+| 3 robots, scanners + RGB-D | 6468 | 0.6x | **below real time** |
 
-Fixed startup is about 2.2 s per run regardless of configuration.
+Fixed startup is about 2.2 s per run regardless of configuration. The cheap configurations vary by
+roughly 8 percent between runs, because their per-step cost is a small difference between two larger
+wall times, so the leading figures there are quoted to two significant digits rather than implying
+precision the method does not have. The expensive rows, which are the ones the tier split turns on,
+repeat to within a few percent.
 
 That table is the evidence for the three-tier design in
 [ADR 0003](docs/adr/0003-three-tier-simulation.md): a fleet tier of 3 to 5 robots with scanners
@@ -68,7 +72,7 @@ rather than tuned away.
 
 **Platform specification with an enforced provenance gate.** Every physical constant of the robot
 lives in `src/amr_description/config/platforms/mir250_class.yaml`, tagged `datasheet`, `derived`,
-`estimated` or `tuned`, with its source. Currently 20 datasheet values, 4 derived, 10 estimated.
+`estimated` or `tuned`, with its source. Currently 54 constants: 29 from a data sheet, 5 derived from data sheet values, 20 estimated with the reasoning recorded.
 `test_platform_spec.py` fails the build if a value has no source, a source has no value, a
 non-datasheet value gives no reasoning, or the geometry contradicts itself.
 

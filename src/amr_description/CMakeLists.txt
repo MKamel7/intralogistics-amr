@@ -3,7 +3,7 @@ project(amr_description)
 
 find_package(ament_cmake REQUIRED)
 
-install(DIRECTORY config urdf meshes
+install(DIRECTORY config urdf
         DESTINATION share/${PROJECT_NAME}
         PATTERN "__pycache__" EXCLUDE)
 

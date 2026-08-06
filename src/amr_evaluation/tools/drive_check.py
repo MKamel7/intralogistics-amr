@@ -64,8 +64,39 @@ class DriveCheck(Node):
         m.twist.angular.z = float(wz)
         self.pub.publish(m)
 
+    def wait_until_stopped(self, v_tol=0.02, w_tol=0.02, settled=10, timeout=30.0):
+        """Block until the robot is genuinely at rest.
+
+        Commanding zero for a fixed number of spins is NOT enough, and assuming
+        it made this check unrepeatable: run it twice in a row and the second
+        run began its acceleration ramp at roughly 1.75 m/s left over from the
+        first, then reported reaching top speed in 4.99 m at an effective
+        0.35 m/s2, which is above the limit the controller enforces. The number
+        was measurement error, not physics.
+        """
+        self.samples.clear()
+        stable = 0
+        start = None
+        while rclpy.ok():
+            self.command(0.0, 0.0)
+            rclpy.spin_once(self, timeout_sec=0.02)
+            if not self.samples:
+                continue
+            now = self.samples[-1][0]
+            start = now if start is None else start
+            if abs(self.samples[-1][3]) < v_tol and abs(self.samples[-1][4]) < w_tol:
+                stable += 1
+                if stable >= settled:
+                    return True
+            else:
+                stable = 0
+            if now - start > timeout:
+                self.get_logger().warn('robot never came to rest; results suspect')
+                return False
+
     def drive(self, vx, wz, seconds):
-        """Hold a command for `seconds` of SIMULATED time."""
+        """Hold a command for `seconds` of SIMULATED time, starting from rest."""
+        self.wait_until_stopped()
         self.samples.clear()
         while rclpy.ok() and not self.samples:
             self.command(vx, wz)
@@ -75,10 +106,7 @@ class DriveCheck(Node):
             self.command(vx, wz)
             rclpy.spin_once(self, timeout_sec=0.02)
         out = list(self.samples)
-        self.command(0.0, 0.0)
-        for _ in range(40):
-            self.command(0.0, 0.0)
-            rclpy.spin_once(self, timeout_sec=0.02)
+        self.wait_until_stopped()
         return out
 
 
@@ -148,17 +176,17 @@ def main():
         # discrepancy be visible rather than choosing whichever one passes.
         implied = v['max_linear_speed'] ** 2 / (2 * targets['distance_to_max_speed'])
         expected = v['max_linear_speed'] ** 2 / (2 * v['max_linear_accel'])
-        print(f'                  those two sheet figures are NOT consistent with each '
-              f'other under constant acceleration:')
+        print('                  those two sheet figures are NOT consistent with each '
+              'other under constant acceleration:')
         print(f'                    {targets["distance_to_max_speed"]} m implies '
               f'{implied:.2f} m/s2, while the stated limit of '
               f'{v["max_linear_accel"]} m/s2 implies {expected:.2f} m')
-        print(f'                  the model follows the ACCELERATION figure, so it '
-              f'reaches speed sooner than the distance figure suggests.')
-        print(f'                  most likely the real platform ramps with a jerk '
-              f'limit (an S-curve), which stretches the distance without raising')
-        print(f'                  the peak acceleration. Not modelled; recorded '
-              f'rather than tuned away.')
+        print('                  the model follows the ACCELERATION figure, so it '
+              'reaches speed sooner than the distance figure suggests.')
+        print('                  most likely the real platform ramps with a jerk '
+              'limit (an S-curve), which stretches the distance without raising')
+        print('                  the peak acceleration. Not modelled; recorded '
+              'rather than tuned away.')
         if abs(dist - expected) > 0.5:
             failures.append(
                 f'ramp distance {dist:.2f} m does not match the {expected:.2f} m '

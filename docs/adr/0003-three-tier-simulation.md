@@ -18,15 +18,19 @@ MEASURED, by `src/amr_evaluation/tools/benchmark_sim_cost.py`, on an i5-1235U:
 
 | configuration | us/step | marginal RTF | verdict |
 |---|---|---|---|
-| world only, no robot | 52.8 | 75.7x | scenery is nearly free |
-| 1 robot, no sensors | 302.6 | 13.2x | |
-| 1 robot, 2 safety scanners | 668.5 | 6.0x | |
-| 1 robot, scanners + 2 RGB-D | 1977.6 | 2.0x | **perception tier** |
-| 3 robots, scanners only | 2016.4 | 2.0x | **fleet tier** |
-| 5 robots, scanners only | 3509.5 | 1.1x | fleet tier ceiling |
-| 3 robots, scanners + RGB-D | 6330.7 | 0.6x | **below real time** |
+| world only, no robot | 57 | ~70x | scenery is nearly free |
+| 1 robot, no sensors | 290 | ~14x | |
+| 1 robot, 2 safety scanners | 643 | 6.2x | |
+| 1 robot, scanners + 2 RGB-D | 1977 | 2.0x | **perception tier** |
+| 3 robots, scanners only | 2001 | 2.0x | **fleet tier** |
+| 5 robots, scanners only | 3492 | 1.1x | fleet tier ceiling |
+| 3 robots, scanners + RGB-D | 6468 | 0.6x | **below real time** |
 
-Fixed startup is about 2.2 s per run regardless of configuration.
+Fixed startup is about 2.2 s per run regardless of configuration. The cheap configurations vary by
+roughly 8 percent between runs, because their per-step cost is a small difference between two larger
+wall times, so the leading figures there are quoted to two significant digits rather than implying
+precision the method does not have. The expensive rows, which are the ones the tier split turns on,
+repeat to within a few percent.
 
 Three measurement traps were found while producing that table, all of which gave wrong answers
 first:

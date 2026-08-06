@@ -37,7 +37,10 @@ diff_drive_controller:
 
     publish_rate: 50.0
     odom_frame_id: odom
-    base_frame_id: base_footprint
+    # MUST be the description's root link. Naming a non-root link here gives
+    # that frame two parents (the odometry publisher and robot_state_publisher)
+    # and silently malforms the TF tree.
+    base_frame_id: base_link
     # Odometry from wheel encoders alone is optimistic about heading. The
     # covariance says so, and an EKF fuses it with the IMU in a later phase.
     pose_covariance_diagonal: [0.001, 0.001, 1e6, 1e6, 1e6, 0.03]
