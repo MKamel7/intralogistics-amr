@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<!-- Inertia tensors computed from geometry and mass, never typed in by hand.
+
+     The predecessor project inherited a SolidWorks export whose tensors were a
+     density artifact, and two of the imported warehouse models ship tensors
+     that violate the triangle inequality (see amr_sim/models/README.md). Both
+     failure modes come from hand-carried numbers. Computing them from the same
+     dimensions the visual and collision geometry use makes them consistent by
+     construction. -->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- Solid cuboid about its centre of mass. -->
+  <xacro:macro name="box_inertia" params="m x y z">
+    <inertial>
+      <mass value="${m}"/>
+      <inertia
+        ixx="${m * (y*y + z*z) / 12.0}" ixy="0.0" ixz="0.0"
+        iyy="${m * (x*x + z*z) / 12.0}" iyz="0.0"
+        izz="${m * (x*x + y*y) / 12.0}"/>
+    </inertial>
+  </xacro:macro>
+
+  <!-- Solid cylinder whose axis lies along the link Y axis, which is how every
+       wheel in this description is oriented (spin axis = Y). -->
+  <xacro:macro name="wheel_inertia" params="m r width">
+    <inertial>
+      <mass value="${m}"/>
+      <inertia
+        ixx="${m * (3.0*r*r + width*width) / 12.0}" ixy="0.0" ixz="0.0"
+        iyy="${m * r * r / 2.0}" iyz="0.0"
+        izz="${m * (3.0*r*r + width*width) / 12.0}"/>
+    </inertial>
+  </xacro:macro>
+
+</robot>

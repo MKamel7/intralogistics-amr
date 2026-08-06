@@ -1,0 +1,206 @@
+<?xml version="1.0"?>
+<!-- Sensor links and their Gazebo Harmonic definitions.
+
+     Every sensor parameter comes from the platform spec, which traces it to an
+     archived data sheet. Where a sheet is ambiguous that is stated here rather
+     than resolved by picking whichever reading flatters the result. -->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- Sensor topics are prefixed with the robot namespace. This is not
+       cosmetic: Gazebo honours an explicit <topic>, so without the prefix every
+       robot in a fleet publishes onto the SAME topic and the scans interleave
+       with no error anywhere. Caught by the multi-robot benchmark. -->
+
+  <!-- ============ safety laser scanner ============
+       Reference part: SICK nanoScan3. 275 degree aperture, 0.17 degree angular
+       resolution, 3 m protective field, 10 m warning field, 40 m measuring
+       range, 70 ms response time.
+
+       The scan rate is one over the response time rather than a number chosen
+       for convenience: a protective device cannot report faster than it
+       responds, and overstating it would flatter every stopping-distance
+       result downstream. -->
+  <xacro:macro name="safety_scanner" params="name rx ry yaw">
+    <link name="${name}_link">
+      <xacro:box_inertia m="${p['scanner_mass']}" x="${p['scanner_body_x']}" y="${p['scanner_body_y']}" z="${p['scanner_body_z']}"/>
+      <visual>
+        <geometry><box size="${p['scanner_body_x']} ${p['scanner_body_y']} ${p['scanner_body_z']}"/></geometry>
+        <material name="amr_sensor"/>
+      </visual>
+    </link>
+    <joint name="${name}_joint" type="fixed">
+      <parent link="base_link"/>
+      <child link="${name}_link"/>
+      <origin xyz="${rx * p['scanner_mount_x']} ${ry * p['scanner_mount_y']}
+                   ${p['scanner_mount_height']}"
+              rpy="0 0 ${yaw}"/>
+    </joint>
+
+    <gazebo reference="${name}_link">
+      <material>Gazebo/Grey</material>
+      <sensor name="${name}" type="gpu_lidar">
+        <topic>${ns}${name}/scan</topic>
+        <update_rate>${p['scanner_update_rate']}</update_rate>
+        <always_on>1</always_on>
+        <visualize>false</visualize>
+        <gz_frame_id>${name}_link</gz_frame_id>
+        <lidar>
+          <scan>
+            <horizontal>
+              <samples>${p['scanner_samples']}</samples>
+              <resolution>1</resolution>
+              <min_angle>${-radians(p['scanner_scan_angle']) / 2.0}</min_angle>
+              <max_angle>${radians(p['scanner_scan_angle']) / 2.0}</max_angle>
+            </horizontal>
+          </scan>
+          <range>
+            <min>0.05</min>
+            <max>${p['scanner_measuring_range']}</max>
+            <!-- Range quantisation matched to the detection resolution the
+                 scanner is configured for. -->
+            <resolution>${p['scanner_detection_resolution']}</resolution>
+          </range>
+          <noise>
+            <type>gaussian</type>
+            <mean>0.0</mean>
+            <stddev>0.01</stddev>
+          </noise>
+        </lidar>
+      </sensor>
+    </gazebo>
+  </xacro:macro>
+
+  <!-- ============ RGB-D camera ============
+       Reference part: Intel RealSense D435, as named by the platform sheet.
+
+       OPEN ITEM, deliberately visible: the platform sheet gives a 114 degree
+       horizontal field of view under a heading covering TWO cameras, without
+       saying whether that figure is per camera or the pair combined. A single
+       D435 is narrower than 114 degrees, so modelling each camera at 114
+       degrees is the OPTIMISTIC reading and probably overstates the sensor.
+       It is used only so the geometry exists; no detection or coverage number
+       may be published from this model until the Intel data sheet is archived
+       and the figure resolved. Tracked in docs/datasheets/README.md. -->
+  <xacro:macro name="rgbd_camera" params="name y yaw">
+    <link name="${name}_link">
+      <xacro:box_inertia m="${p['camera_mass']}" x="${p['camera_body_x']}" y="${p['camera_body_y']}" z="${p['camera_body_z']}"/>
+      <visual>
+        <geometry><box size="${p['camera_body_x']} ${p['camera_body_y']} ${p['camera_body_z']}"/></geometry>
+        <material name="amr_sensor"/>
+      </visual>
+    </link>
+    <joint name="${name}_joint" type="fixed">
+      <parent link="base_link"/>
+      <child link="${name}_link"/>
+      <origin xyz="${p['chassis_length'] / 2.0 - 0.015} ${y} ${p['camera_mount_height']}"
+              rpy="0 0 ${yaw}"/>
+    </joint>
+
+    <!-- Optical frame: REP 103 puts camera optical axes as z forward, x right,
+         y down, which is not the robot convention, so the two are kept as
+         separate frames rather than silently mixed. -->
+    <link name="${name}_optical_frame"/>
+    <joint name="${name}_optical_joint" type="fixed">
+      <parent link="${name}_link"/>
+      <child link="${name}_optical_frame"/>
+      <origin rpy="${-pi/2} 0 ${-pi/2}"/>
+    </joint>
+
+    <gazebo reference="${name}_link">
+      <sensor name="${name}" type="rgbd_camera">
+        <topic>${ns}${name}</topic>
+        <update_rate>${p['camera_update_rate']}</update_rate>
+        <always_on>1</always_on>
+        <visualize>false</visualize>
+        <gz_frame_id>${name}_optical_frame</gz_frame_id>
+        <camera>
+          <horizontal_fov>${radians(p['camera_hfov'])}</horizontal_fov>
+          <image>
+            <!-- 640x480 at 15 Hz is a CPU budget decision, not a sensor limit.
+                 See docs/adr/0003-three-tier-simulation.md. -->
+            <width>640</width>
+            <height>480</height>
+            <format>R8G8B8</format>
+          </image>
+          <clip>
+            <near>${p['camera_min_ground_view']}</near>
+            <far>10.0</far>
+          </clip>
+          <noise>
+            <type>gaussian</type>
+            <mean>0.0</mean>
+            <stddev>0.005</stddev>
+          </noise>
+        </camera>
+      </sensor>
+    </gazebo>
+  </xacro:macro>
+
+  <!-- ============ IMU ============ -->
+  <xacro:macro name="imu_sensor" params="name">
+    <link name="${name}_link">
+      <xacro:box_inertia m="${p['imu_mass']}" x="0.02" y="0.02" z="0.01"/>
+    </link>
+    <joint name="${name}_joint" type="fixed">
+      <parent link="base_link"/>
+      <child link="${name}_link"/>
+      <origin xyz="0 0 ${p['ground_clearance'] + 0.02}"/>
+    </joint>
+
+    <gazebo reference="${name}_link">
+      <sensor name="${name}" type="imu">
+        <topic>${ns}${name}</topic>
+        <update_rate>100</update_rate>
+        <always_on>1</always_on>
+        <gz_frame_id>${name}_link</gz_frame_id>
+      </sensor>
+    </gazebo>
+  </xacro:macro>
+
+  <!-- ============ optional 3D lidar ============
+       NOT part of the reference platform. Off by default so the robot stays
+       what the data sheet describes; enabled only for the overhang and voxel
+       mapping experiments, and labelled as an addition wherever it is used. -->
+  <xacro:macro name="lidar_3d" params="name">
+    <link name="${name}_link">
+      <xacro:box_inertia m="0.5" x="0.09" y="0.09" z="0.07"/>
+      <visual>
+        <geometry><cylinder radius="0.045" length="0.07"/></geometry>
+        <material name="amr_sensor"/>
+      </visual>
+    </link>
+    <joint name="${name}_joint" type="fixed">
+      <parent link="base_link"/>
+      <child link="${name}_link"/>
+      <origin xyz="0 0 ${p['chassis_height'] + 0.05}"/>
+    </joint>
+
+    <gazebo reference="${name}_link">
+      <sensor name="${name}" type="gpu_lidar">
+        <topic>${ns}${name}/points</topic>
+        <update_rate>10</update_rate>
+        <always_on>1</always_on>
+        <visualize>false</visualize>
+        <gz_frame_id>${name}_link</gz_frame_id>
+        <lidar>
+          <scan>
+            <horizontal>
+              <samples>512</samples>
+              <resolution>1</resolution>
+              <min_angle>${-pi}</min_angle>
+              <max_angle>${pi}</max_angle>
+            </horizontal>
+            <vertical>
+              <samples>16</samples>
+              <resolution>1</resolution>
+              <min_angle>${radians(-15)}</min_angle>
+              <max_angle>${radians(15)}</max_angle>
+            </vertical>
+          </scan>
+          <range><min>0.1</min><max>30.0</max><resolution>0.01</resolution></range>
+        </lidar>
+      </sensor>
+    </gazebo>
+  </xacro:macro>
+
+</robot>

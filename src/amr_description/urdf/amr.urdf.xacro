@@ -1,0 +1,241 @@
+<?xml version="1.0"?>
+<!--
+  MiR250-class AMR.
+
+  A 250 kg payload differential-drive platform: two central drive wheels, four
+  corner casters, two safety laser scanners at diagonally opposite corners, two
+  forward RGB-D cameras and an IMU.
+
+  This is a CLASS of machine derived from a published specification, with its
+  own livery. It is not a model of any vendor's product and carries no vendor
+  branding. See docs/adr/0002-mir250-class-reference-platform.md.
+
+  NO DIMENSION IS WRITTEN IN THIS FILE. Every physical constant is read from a
+  platform spec under config/platforms, where it carries a recorded source that
+  test_platform_spec.py enforces. To build a different platform class, pass a
+  different spec; nothing here changes.
+
+    xacro amr.urdf.xacro platform:=mir250_class
+-->
+<robot name="amr" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:arg name="platform"     default="mir250_class"/>
+  <xacro:arg name="namespace"    default=""/>
+  <!-- Simulation extras (gz sensors, ros2_control hardware) are opt-out so the
+       same description can drive real hardware unchanged. -->
+  <xacro:arg name="sim"          default="true"/>
+  <!-- The 3D lidar is NOT on the reference platform. Off by default so the
+       robot stays what the data sheet describes; enabled only for the overhang
+       and voxel-mapping experiments. -->
+  <xacro:arg name="use_3d_lidar" default="false"/>
+  <!-- Sensor tiers, per docs/adr/0003-three-tier-simulation.md. The fleet tier
+       runs many robots with scanners only; the perception tier runs one robot
+       with everything. These switches are what make that split real rather than
+       aspirational, and the benchmark in amr_evaluation measures the cost of
+       each. -->
+  <xacro:arg name="use_scanners" default="true"/>
+  <xacro:arg name="use_cameras"  default="true"/>
+
+  <!-- Namespace, normalised to either "" or "name/" so it can be prefixed to a
+       topic without callers having to remember the slash. -->
+  <xacro:property name="ns_raw" value="$(arg namespace)"/>
+  <xacro:property name="ns" value="${'' if ns_raw == '' else ns_raw.rstrip('/') + '/'}"/>
+  <xacro:property name="spec"
+    value="${xacro.load_yaml('$(find amr_description)/config/platforms/$(arg platform).yaml')}"/>
+  <xacro:property name="p" value="${spec['values']}"/>
+
+  <xacro:include filename="$(find amr_description)/urdf/inertia.xacro"/>
+  <xacro:include filename="$(find amr_description)/urdf/sensors.xacro"/>
+  <xacro:include filename="$(find amr_description)/urdf/ros2_control.xacro"/>
+
+  <!-- ================= derived geometry ================= -->
+  <!-- The data sheet's "height" is the overall height of the machine, and its
+       "ground clearance" is the gap under the chassis, so the body itself is
+       the difference. -->
+  <xacro:property name="body_h" value="${p['chassis_height'] - p['ground_clearance']}"/>
+  <xacro:property name="body_cz" value="${p['ground_clearance'] + body_h / 2.0}"/>
+
+  <!-- Chassis mass is the published total minus every modelled component, so
+       the robot always weighs what the data sheet says regardless of how the
+       component estimates move. -->
+  <xacro:property name="total_mass" value="${p['tare_mass'] + p['battery_mass']}"/>
+  <!-- Sensor masses are counted only when the sensor is actually built, so the
+       total still equals the published figure in every tier configuration. -->
+  <xacro:property name="scanner_total" value="${2*p['scanner_mass'] if '$(arg use_scanners)' == 'true' else 0}"/>
+  <xacro:property name="camera_total"  value="${2*p['camera_mass'] if '$(arg use_cameras)' == 'true' else 0}"/>
+  <xacro:property name="component_mass"
+    value="${2*p['drive_wheel_mass'] + 4*(p['caster_wheel_mass'] + p['caster_swivel_mass'])
+             + scanner_total + camera_total + p['imu_mass']}"/>
+  <xacro:property name="body_mass" value="${total_mass - component_mass}"/>
+
+  <material name="amr_body">    <color rgba="0.16 0.17 0.19 1.0"/></material>
+  <material name="amr_accent">  <color rgba="0.90 0.55 0.10 1.0"/></material>
+  <material name="amr_dark">    <color rgba="0.05 0.05 0.06 1.0"/></material>
+  <material name="amr_sensor">  <color rgba="0.30 0.31 0.33 1.0"/></material>
+
+  <!-- ================= chassis ================= -->
+  <!-- base_link sits at the centre of the drive wheel axis, projected to the
+       ground plane. The drive axis is central on this platform, so that is also
+       the geometric centre of the footprint. -->
+  <link name="base_link">
+    <xacro:box_inertia m="${body_mass}"
+                       x="${p['chassis_length']}"
+                       y="${p['chassis_width']}"
+                       z="${body_h}"/>
+    <visual>
+      <origin xyz="0 0 ${body_cz}"/>
+      <geometry>
+        <box size="${p['chassis_length']} ${p['chassis_width']} ${body_h}"/>
+      </geometry>
+      <material name="amr_body"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 ${body_cz}"/>
+      <geometry>
+        <box size="${p['chassis_length']} ${p['chassis_width']} ${body_h}"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- Ground projection frame. Nav2 and the costmaps work in this frame; the
+       inertial body is base_link above it. -->
+  <link name="base_footprint"/>
+  <joint name="base_footprint_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="base_footprint"/>
+    <origin xyz="0 0 0"/>
+  </joint>
+
+  <!-- Load deck: the surface a top module or a KLT sits on. Named so the
+       payload work in a later phase has a frame to attach to. -->
+  <link name="load_deck">
+    <visual>
+      <geometry>
+        <box size="${p['chassis_length']} ${p['chassis_width']} 0.005"/>
+      </geometry>
+      <material name="amr_accent"/>
+    </visual>
+  </link>
+  <joint name="load_deck_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="load_deck"/>
+    <origin xyz="0 0 ${p['chassis_height'] + 0.0025}"/>
+  </joint>
+
+  <!-- ================= drive wheels ================= -->
+  <xacro:macro name="drive_wheel" params="side reflect">
+    <link name="drive_${side}_wheel">
+      <xacro:wheel_inertia m="${p['drive_wheel_mass']}"
+                           r="${p['drive_wheel_radius']}"
+                           width="${p['drive_wheel_width']}"/>
+      <visual>
+        <origin rpy="${pi/2} 0 0"/>
+        <geometry>
+          <cylinder radius="${p['drive_wheel_radius']}" length="${p['drive_wheel_width']}"/>
+        </geometry>
+        <material name="amr_dark"/>
+      </visual>
+      <collision>
+        <origin rpy="${pi/2} 0 0"/>
+        <geometry>
+          <cylinder radius="${p['drive_wheel_radius']}" length="${p['drive_wheel_width']}"/>
+        </geometry>
+      </collision>
+    </link>
+    <joint name="drive_${side}_wheel_joint" type="continuous">
+      <parent link="base_link"/>
+      <child link="drive_${side}_wheel"/>
+      <origin xyz="0 ${reflect * p['wheel_separation'] / 2.0} ${p['drive_wheel_radius']}"/>
+      <axis xyz="0 1 0"/>
+      <dynamics damping="0.05" friction="0.2"/>
+    </joint>
+  </xacro:macro>
+
+  <xacro:drive_wheel side="left"  reflect="1"/>
+  <xacro:drive_wheel side="right" reflect="-1"/>
+
+  <!-- ================= casters =================
+       Modelled as real two-degree-of-freedom casters: a swivel about the
+       vertical axis, then a wheel spinning about the horizontal one, with the
+       wheel axis trailing the swivel axis so it self-aligns. The predecessor
+       used low-friction boxes as fake casters, which drove acceptably and
+       read as a workaround. -->
+  <xacro:macro name="caster" params="loc rx ry">
+    <link name="caster_${loc}_swivel">
+      <xacro:box_inertia m="${p['caster_swivel_mass']}" x="0.05" y="0.05" z="0.05"/>
+      <visual>
+        <geometry><box size="0.05 0.05 0.05"/></geometry>
+        <material name="amr_dark"/>
+      </visual>
+    </link>
+    <joint name="caster_${loc}_swivel_joint" type="continuous">
+      <parent link="base_link"/>
+      <child link="caster_${loc}_swivel"/>
+      <origin xyz="${rx * p['caster_inset_x']} ${ry * p['caster_inset_y']}
+                   ${2 * p['caster_wheel_radius']}"/>
+      <axis xyz="0 0 1"/>
+      <dynamics damping="0.02" friction="0.05"/>
+    </joint>
+
+    <link name="caster_${loc}_wheel">
+      <xacro:wheel_inertia m="${p['caster_wheel_mass']}"
+                           r="${p['caster_wheel_radius']}"
+                           width="${p['caster_wheel_width']}"/>
+      <visual>
+        <origin rpy="${pi/2} 0 0"/>
+        <geometry>
+          <cylinder radius="${p['caster_wheel_radius']}" length="${p['caster_wheel_width']}"/>
+        </geometry>
+        <material name="amr_dark"/>
+      </visual>
+      <collision>
+        <origin rpy="${pi/2} 0 0"/>
+        <geometry>
+          <cylinder radius="${p['caster_wheel_radius']}" length="${p['caster_wheel_width']}"/>
+        </geometry>
+      </collision>
+    </link>
+    <joint name="caster_${loc}_wheel_joint" type="continuous">
+      <parent link="caster_${loc}_swivel"/>
+      <child link="caster_${loc}_wheel"/>
+      <!-- Trailing offset: the wheel contact sits behind the swivel axis, which
+           is what makes a caster follow rather than shimmy. -->
+      <origin xyz="${-p['caster_swivel_offset']} 0 ${-p['caster_wheel_radius']}"/>
+      <axis xyz="0 1 0"/>
+      <dynamics damping="0.01" friction="0.05"/>
+    </joint>
+  </xacro:macro>
+
+  <xacro:caster loc="front_left"  rx="1"  ry="1"/>
+  <xacro:caster loc="front_right" rx="1"  ry="-1"/>
+  <xacro:caster loc="rear_left"   rx="-1" ry="1"/>
+  <xacro:caster loc="rear_right"  rx="-1" ry="-1"/>
+
+  <!-- ================= sensors ================= -->
+  <!-- Two scanners at DIAGONALLY OPPOSITE corners, each facing outward along
+       the diagonal. The reference part has a 275 degree aperture, so the pair
+       covers a full turn with margin; test_platform_spec.py asserts that, since
+       a blind sector would void the safety concept. -->
+  <xacro:if value="$(arg use_scanners)">
+    <xacro:safety_scanner name="scanner_front_left"  rx="1"  ry="1"  yaw="${pi/4}"/>
+    <xacro:safety_scanner name="scanner_rear_right"  rx="-1" ry="-1" yaw="${-3*pi/4}"/>
+  </xacro:if>
+
+  <!-- Two forward RGB-D cameras, splayed so their combined horizontal field of
+       view exceeds either one alone. These cover the volume above the scan
+       plane, which is where a torso, a fork tip or an overhanging load is. -->
+  <xacro:if value="$(arg use_cameras)">
+    <xacro:rgbd_camera name="camera_left"  y="0.15"  yaw="${radians(20)}"/>
+    <xacro:rgbd_camera name="camera_right" y="-0.15" yaw="${radians(-20)}"/>
+  </xacro:if>
+
+  <xacro:imu_sensor name="imu"/>
+
+  <xacro:if value="$(arg use_3d_lidar)">
+    <xacro:lidar_3d name="lidar_3d"/>
+  </xacro:if>
+
+  <!-- ================= actuation and simulation ================= -->
+  <xacro:amr_ros2_control sim="$(arg sim)" ns="${ns}"/>
+
+</robot>

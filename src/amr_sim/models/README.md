@@ -49,6 +49,11 @@ Nothing else about the geometry is altered.
 ## Measured
 
 World alone, 25 model instances, headless, no robots and no sensors, on an
-i5-1235U: **20.0 s of simulated time in 2.44 s wall, real-time factor 8.2, at
-38 percent CPU and 216 MB RSS**. The scenery is effectively free; the real-time
-budget belongs to the robots and their sensors.
+i5-1235U: **52.8 microseconds per physics step, a steady-state real-time factor
+of 75.7**, plus about 2.2 s of fixed startup. The scenery is effectively free;
+the real-time budget belongs to the robots and their sensors.
+
+An earlier note here claimed a real-time factor of 8.2. That figure was
+startup-dominated and understated the world by roughly nine times. See
+`src/amr_evaluation/tools/benchmark_sim_cost.py` for the method that replaced
+it.

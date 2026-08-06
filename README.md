@@ -25,8 +25,30 @@ is aimed squarely at those.
 models to prevent shadowing, and repairs two inertia tensors that violate the triangle inequality
 and that Harmonic correctly rejects. The import is a script, so it is repeatable.
 
-Measured, world only, 25 model instances, headless, no robots or sensors, on an i5-1235U:
-**20.0 s of simulated time in 2.44 s wall, real-time factor 8.2, 38 percent CPU, 216 MB RSS.**
+**Robot description.** A MiR250-class AMR generated entirely from the platform spec: two drive
+wheels on `ros2_control`, four real two-degree-of-freedom casters, two 275 degree safety scanners at
+diagonally opposite corners, two RGB-D cameras and an IMU. Sensor sets are switchable so the
+simulation tiers below are real rather than aspirational. 23 tests cover it.
+
+**Measured simulation cost**, by `src/amr_evaluation/tools/benchmark_sim_cost.py` on an i5-1235U,
+with the real-time throttle disabled and a subscriber attached to every sensor topic:
+
+| configuration | us/step | marginal RTF | verdict |
+|---|---|---|---|
+| world only, no robot | 52.8 | 75.7x | scenery is nearly free |
+| 1 robot, no sensors | 302.6 | 13.2x | |
+| 1 robot, 2 safety scanners | 668.5 | 6.0x | |
+| 1 robot, scanners + 2 RGB-D | 1977.6 | 2.0x | **perception tier** |
+| 3 robots, scanners only | 2016.4 | 2.0x | **fleet tier** |
+| 5 robots, scanners only | 3509.5 | 1.1x | fleet tier ceiling |
+| 3 robots, scanners + RGB-D | 6330.7 | 0.6x | **below real time** |
+
+Fixed startup is about 2.2 s per run regardless of configuration.
+
+That table is the evidence for the three-tier design in
+[ADR 0003](docs/adr/0003-three-tier-simulation.md): a fleet tier of 3 to 5 robots with scanners
+only, and a perception tier of one fully equipped robot. Three robots carrying cameras runs below
+real time, which is the configuration the tiering exists to avoid.
 
 **Platform specification with an enforced provenance gate.** Every physical constant of the robot
 lives in `src/amr_description/config/platforms/mir250_class.yaml`, tagged `datasheet`, `derived`,
@@ -41,8 +63,13 @@ runtimes.
 
 ### Not done yet
 
-Everything else. The robot description, perception, mapping, navigation, the load transfer, the
-people, the safety layer and the fleet interface are all still to build. See Roadmap.
+Everything else: bringup and control, perception, mapping, navigation, the load transfer, the
+people, the safety layer and the fleet interface. See Roadmap.
+
+One open item is tracked in the code rather than hidden: the platform sheet gives a 114 degree
+camera field of view under a heading covering two cameras, without saying whether the figure is per
+camera or combined. The model currently uses the optimistic reading, and no detection or coverage
+number may be published from it until the Intel data sheet is archived and the figure resolved.
 
 ## The robot
 
@@ -116,7 +143,7 @@ measured on and the conditions it was measured under.
 
 In order, each independently demonstrable:
 
-1. Robot description on `ros2_control`, dual safety scanners, 3D cameras, battery model
+1. Bringup: controllers, `ros_gz_bridge`, RViz, battery model
 2. Perception: scan conditioning, human detection, tracking, prediction
 3. Mapping and localisation, including the aisle degeneracy benchmark
 4. KLT load transfer and precision docking

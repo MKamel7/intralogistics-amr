@@ -43,6 +43,26 @@ values:
   caster_wheel_width: 0.040      # m
   caster_inset_x: 0.300          # m, from robot centre to caster axis
   caster_inset_y: 0.230          # m
+  caster_swivel_offset: 0.030    # m, trail from swivel axis to wheel axis
+
+  # ---- component masses ----------------------------------------------
+  # The chassis mass is NOT listed here: it is computed in the description as
+  # (tare_mass + battery_mass) minus everything below, so the total always
+  # equals the published figure no matter what the component estimates are.
+  drive_wheel_mass: 3.0          # kg, each
+  caster_wheel_mass: 0.8         # kg, each
+  caster_swivel_mass: 0.5        # kg, each
+  scanner_mass: 0.67             # kg, each
+  camera_mass: 0.072             # kg, each
+  imu_mass: 0.02                 # kg
+
+  # ---- sensor body dimensions (for visual and inertial proxies) -------
+  scanner_body_x: 0.107          # m
+  scanner_body_y: 0.080          # m
+  scanner_body_z: 0.118          # m
+  camera_body_x: 0.025           # m
+  camera_body_y: 0.090           # m
+  camera_body_z: 0.025           # m
 
   # ---- motion limits -------------------------------------------------
   max_linear_speed: 2.0          # m/s
@@ -69,7 +89,7 @@ values:
   scanner_mount_height: 0.150    # m above ground, scan plane
   scanner_mount_x: 0.360         # m, from robot centre
   scanner_mount_y: 0.260         # m
-  scanner_update_rate: 14.3      # Hz
+  scanner_update_rate: 14.28     # Hz, rounded DOWN from 1/70 ms; see provenance
 
   # ---- 3D cameras (2x) -----------------------------------------------
   camera_hfov: 114.0             # deg
@@ -120,6 +140,20 @@ provenance:
   caster_wheel_width:  {kind: estimated, src: "not published; proportionate to a 125 mm caster"}
   caster_inset_x:      {kind: estimated, src: "not published; placed inside the 800 mm length to give a stable rectangle around the drive axis"}
   caster_inset_y:      {kind: estimated, src: "not published; placed inside the 580 mm width clear of the drive wheels"}
+  caster_swivel_offset: {kind: estimated, src: "not published; a caster needs trail to self-align, and 30 mm is typical for a 125 mm wheel"}
+
+  drive_wheel_mass:    {kind: estimated, src: "not published; a driven 200 mm wheel with hub motor, chosen so the pair stays a small fraction of the 97 kg total"}
+  caster_wheel_mass:   {kind: estimated, src: "not published; proportionate to a 125 mm undriven caster"}
+  caster_swivel_mass:  {kind: estimated, src: "not published; the swivel fork and bearing, chosen small because it only affects yaw response of the caster"}
+  scanner_mass:        {kind: datasheet, src: "SICK nanoScan3 sheet, Weight 0.67 kg"}
+  imu_mass:            {kind: estimated, src: "not published; a MEMS IMU module, small enough that it is bookkeeping rather than dynamics"}
+  scanner_body_x:      {kind: datasheet, src: "SICK nanoScan3 sheet, Dimensions W x H x D 106.6 mm, rounded to 107 mm"}
+  scanner_body_y:      {kind: datasheet, src: "SICK nanoScan3 sheet, Dimensions W x H x D, height 80 mm"}
+  scanner_body_z:      {kind: datasheet, src: "SICK nanoScan3 sheet, Dimensions W x H x D, depth 117.5 mm, rounded to 118 mm"}
+  camera_body_x:       {kind: estimated, src: "not published in the MiR sheet; taken as the depth of the named Intel RealSense D435 module"}
+  camera_body_y:       {kind: estimated, src: "not published in the MiR sheet; taken as the width of the named Intel RealSense D435 module"}
+  camera_body_z:       {kind: estimated, src: "not published in the MiR sheet; taken as the height of the named Intel RealSense D435 module"}
+  camera_mass:         {kind: estimated, src: "not published in the MiR sheet; taken as the published mass of the named Intel RealSense D435 module"}
 
   max_linear_speed:    {kind: datasheet, src: "MiR250 sheet, Maximum speed 2.0 m/s"}
   max_linear_accel:    {kind: datasheet, src: "MiR250 sheet, Acceleration limits with maximum payload 0.3 m/s2"}
@@ -143,7 +177,7 @@ provenance:
   scanner_mount_height:          {kind: estimated, src: "not published; 150 mm puts the 80 mm tall scanner body inside the 300 mm chassis with the scan plane low enough to see a foot"}
   scanner_mount_x:               {kind: estimated, src: "not published; diagonally opposite corners, inside the 800 mm length"}
   scanner_mount_y:               {kind: estimated, src: "not published; diagonally opposite corners, inside the 580 mm width"}
-  scanner_update_rate:           {kind: derived,   src: "1 / 70 ms response time = 14.3 Hz; the scan rate the model can justify without inventing a faster one"}
+  scanner_update_rate:           {kind: derived,   src: "1 / 70 ms response time = 14.2857 Hz, rounded DOWN to 14.28. Rounding a protective device UP claims it reports faster than it responds, which flatters every stopping distance computed from it, so the direction of the rounding is deliberate"}
 
   camera_hfov:              {kind: datasheet, src: "MiR250 sheet, 3D cameras FoV horizontal angle 114 deg"}
   camera_fov_height:        {kind: datasheet, src: "MiR250 sheet, 3D cameras FoV height 1800 mm"}

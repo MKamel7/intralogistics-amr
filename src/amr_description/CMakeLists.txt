@@ -11,6 +11,7 @@ if(BUILD_TESTING)
   find_package(ament_cmake_pytest REQUIRED)
   # Provenance gate: every platform constant must trace to a recorded source.
   ament_add_pytest_test(test_platform_spec test/test_platform_spec.py)
+  ament_add_pytest_test(test_description test/test_description.py)
 endif()
 
 ament_package()

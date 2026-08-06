@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>amr_evaluation</name>
+  <version>0.1.0</version>
+  <description>
+    Measurement and analysis tooling. Benchmarks, the KPI harness and the
+    scripts that turn runs into the tables in the documentation. Every result
+    is written with the manifest of the machine and configuration that produced
+    it; a result without its manifest is not a result.
+  </description>
+  <maintainer email="mkamel860@gmail.com">Mohamed Kamel</maintainer>
+  <license>Apache-2.0</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <exec_depend>xacro</exec_depend>
+  <export><build_type>ament_cmake</build_type></export>
+</package>

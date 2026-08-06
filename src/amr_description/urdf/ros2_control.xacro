@@ -1,0 +1,84 @@
+<?xml version="1.0"?>
+<!-- Actuation through ros2_control.
+
+     The two drive joints are declared as a ros2_control system rather than
+     driven by a simulator-specific plugin. That is the whole point: this same
+     description, with sim:=false and a real hardware interface, drives real
+     hardware. The predecessor used libgazebo_ros_diff_drive, which is both
+     Gazebo Classic only and impossible to carry to hardware.
+
+     The casters are deliberately NOT in ros2_control. They are passive; the
+     physics engine turns them. Declaring them would imply they are actuated. -->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:macro name="amr_ros2_control" params="sim ns">
+
+    <ros2_control name="amr_drive" type="system">
+      <hardware>
+        <xacro:if value="${sim}">
+          <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+        </xacro:if>
+        <xacro:unless value="${sim}">
+          <!-- Placeholder until a real drive is wired. Named rather than
+               omitted so the hardware path is visibly unfinished instead of
+               silently absent. -->
+          <plugin>mock_components/GenericSystem</plugin>
+        </xacro:unless>
+      </hardware>
+
+      <joint name="drive_left_wheel_joint">
+        <command_interface name="velocity">
+          <!-- Wheel angular limit implied by the platform's top speed, not a
+               round number: v_max / r. -->
+          <param name="min">${-p['max_linear_speed'] / p['drive_wheel_radius']}</param>
+          <param name="max">${p['max_linear_speed'] / p['drive_wheel_radius']}</param>
+        </command_interface>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+      </joint>
+
+      <joint name="drive_right_wheel_joint">
+        <command_interface name="velocity">
+          <param name="min">${-p['max_linear_speed'] / p['drive_wheel_radius']}</param>
+          <param name="max">${p['max_linear_speed'] / p['drive_wheel_radius']}</param>
+        </command_interface>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+      </joint>
+    </ros2_control>
+
+    <xacro:if value="${sim}">
+      <gazebo>
+        <plugin filename="gz_ros2_control-system"
+                name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+          <parameters>$(find amr_description)/config/controllers.yaml</parameters>
+          <xacro:unless value="${ns == ''}">
+            <ros><namespace>${ns}</namespace></ros>
+          </xacro:unless>
+        </plugin>
+      </gazebo>
+
+      <!-- Surface properties. Drive wheels grip; caster wheels are low
+           friction in the lateral direction so they swivel rather than scrub.
+           mu2 on a caster being as high as mu1 is the classic reason a
+           four-caster robot fights its own turns. -->
+      <xacro:macro name="wheel_surface" params="link mu1 mu2">
+        <gazebo reference="${link}">
+          <mu1>${mu1}</mu1>
+          <mu2>${mu2}</mu2>
+          <kp>1e6</kp>
+          <kd>100.0</kd>
+        </gazebo>
+      </xacro:macro>
+
+      <xacro:wheel_surface link="drive_left_wheel"  mu1="1.0" mu2="1.0"/>
+      <xacro:wheel_surface link="drive_right_wheel" mu1="1.0" mu2="1.0"/>
+      <xacro:wheel_surface link="caster_front_left_wheel"  mu1="0.2" mu2="0.05"/>
+      <xacro:wheel_surface link="caster_front_right_wheel" mu1="0.2" mu2="0.05"/>
+      <xacro:wheel_surface link="caster_rear_left_wheel"   mu1="0.2" mu2="0.05"/>
+      <xacro:wheel_surface link="caster_rear_right_wheel"  mu1="0.2" mu2="0.05"/>
+    </xacro:if>
+
+  </xacro:macro>
+
+</robot>
