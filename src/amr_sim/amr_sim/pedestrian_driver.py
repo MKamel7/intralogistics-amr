@@ -1,15 +1,23 @@
 #!/usr/bin/env python3
 """Drive scenario pedestrians back and forth along straight legs.
 
-Open loop by design. Each person's traverse time is computed from its leg length
-and speed, and the direction flips on that timer. No pose feedback is used, so
-two runs of the same scenario produce identical motion, which is what makes
-detection and tracking numbers comparable between runs.
+CLOSED LOOP on the simulator's own pose feed, deliberately.
 
-Velocities go out on /model/<name>/cmd_vel, which the bridge forwards to the
-VelocityControl plugin carried by the person model.
+An earlier version was open loop: it computed a traverse time from leg length
+over speed and flipped direction on that timer. It did not work, and the way it
+failed is worth recording. The driver starts with the launch while the people
+are spawned a moment later, so every walker begins mid-phase; the errors never
+correct, and they accumulate. Measured, one walker commanded a 4.0 m leg
+travelled 5.6 m, walked off its aisle, climbed onto the warehouse clutter and
+ended up hovering 0.28 m above the floor with its feet in a pallet. Three of
+them left their lanes entirely.
+
+Reversing on measured displacement instead means a walker cannot drift out of
+its lane no matter when it spawned or what it bumped into. Runs are still
+repeatable, because the leg endpoints are fixed rather than the timing.
 """
 
+import math
 import sys
 from pathlib import Path
 
@@ -17,6 +25,7 @@ import rclpy
 import yaml
 from geometry_msgs.msg import Twist
 from rclpy.node import Node
+from tf2_msgs.msg import TFMessage
 
 SCENARIOS = Path(__file__).resolve().parent.parent / 'scenarios'
 
@@ -29,32 +38,50 @@ class PedestrianDriver(Node):
         source = Path(path) if path else (SCENARIOS / f'{name}.yaml')
         spec = yaml.safe_load(source.read_text())
 
-        self.walkers = []
+        self.walkers = {}
         for person in spec.get('people', []):
             leg = person.get('path')
             if not leg:
-                continue          # a standing worker needs no driver
-            self.walkers.append({
-                'pub': self.create_publisher(Twist, f'/model/{person["name"]}/cmd_vel', 10),
+                continue                      # a standing worker needs no driver
+            self.walkers[person['name']] = {
+                'pub': self.create_publisher(
+                    Twist, f'/model/{person["name"]}/cmd_vel', 10),
                 'speed': float(leg['speed']),
-                'period': float(leg['length']) / float(leg['speed']),
-                'name': person['name'],
-            })
+                'length': float(leg['length']),
+                'origin': None,               # captured on the first pose seen
+                'forward': True,
+                'pose': None,
+            }
 
-        self.t = 0.0
-        self.dt = 0.1
-        self.create_timer(self.dt, self._tick)
+        self.create_subscription(TFMessage, '/ground_truth/poses', self._poses, 10)
+        self.create_timer(0.05, self._tick)
         self.get_logger().info(
-            f'driving {len(self.walkers)} pedestrian(s) from {source.name}')
+            f'driving {len(self.walkers)} pedestrian(s) from {source.name}, '
+            f'reversing on measured displacement')
+
+    def _poses(self, msg):
+        for tf in msg.transforms:
+            w = self.walkers.get(tf.child_frame_id)
+            if w is None:
+                continue
+            p = tf.transform.translation
+            w['pose'] = (p.x, p.y)
+            if w['origin'] is None:
+                w['origin'] = (p.x, p.y)
 
     def _tick(self):
-        self.t += self.dt
-        for w in self.walkers:
-            # Square wave: forward for one traverse, back for the next.
-            phase = int(self.t // w['period']) % 2
-            v = w['speed'] if phase == 0 else -w['speed']
+        for name, w in self.walkers.items():
+            if w['pose'] is None or w['origin'] is None:
+                continue                      # not spawned yet; command nothing
+            travelled = math.hypot(w['pose'][0] - w['origin'][0],
+                                   w['pose'][1] - w['origin'][1])
+            if w['forward'] and travelled >= w['length']:
+                w['forward'] = False
+            elif not w['forward'] and travelled <= 0.15:
+                w['forward'] = True
+
             msg = Twist()
-            msg.linear.x = v
+            msg.linear.x = w['speed'] if w['forward'] else -w['speed']
             w['pub'].publish(msg)
 
 

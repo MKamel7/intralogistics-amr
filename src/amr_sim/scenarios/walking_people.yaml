@@ -1,47 +1,48 @@
-# Pedestrians walking fixed straight legs, back and forth.
+# Pedestrians walking fixed legs, back and forth, on VERIFIED FREE FLOOR.
 #
-# Open loop and deterministic on purpose. The driver computes each traverse from
-# the leg length and the speed and reverses on a timer, so two runs of this
-# scenario produce the same motion. Closed-loop steering would introduce
-# run-to-run variation into a file whose whole job is to make runs comparable.
+# Lane endpoints are taken from positions already confirmed clear: the
+# static_people scenario placed people at (4.0,-1.0), (2.0,-3.2), (-0.5,-1.0)
+# and (3.0,-1.8) and all four rested correctly on the ground and were detected
+# in every frame.
 #
-# Speeds are ordinary walking pace. A person at 1.4 m/s crossing in front of a
-# robot at 2.0 m/s is the case the safety layer has to handle.
+# This matters more than it sounds. Earlier lanes ran through the racking, and
+# because the velocity plugin overwrites the whole velocity vector every tick a
+# walker that rode up onto the clutter could never fall back: three of them
+# ended up hovering between 0.27 and 0.35 m with nothing underneath. One also
+# walked through the robot and shoved it 2.2 m. A scenario must not put people
+# inside the scenery and must not move the vehicle under test.
+#
+# The driver reverses on MEASURED displacement rather than a timer, so a walker
+# cannot drift out of its lane whatever time it spawned.
 
 name: walking_people
-description: Three pedestrians walking, one stationary worker
+description: Three pedestrians walking the open aisle, one stationary worker
 
 people:
-  # Walks across the aisle in front of the robot: the crossing case.
+  # Crosses the robot's path: the case the safety layer exists for.
   - name: walker_crossing
-    x: 4.0
-    y: -3.0
+    x: 3.0
+    y: -3.4
     yaw: 1.5708
-    path: {length: 4.0, speed: 1.3}
+    path: {length: 2.0, speed: 1.2}
 
-  # Walks along the aisle, away and back.
+  # Along the aisle, stopping short of the vehicle.
   - name: walker_aisle
-    x: 0.0
-    y: -2.0
+    x: -0.5
+    y: -1.0
     yaw: 0.0
-    path: {length: 3.5, speed: 1.0}
+    path: {length: 1.5, speed: 1.0}
 
-  # Slow walker behind the robot, on a lane that CLEARS the vehicle.
-  #
-  # This path used to run from (-1.0, -1.0) straight along y = -1.0, which is
-  # the robot's own row. A velocity-controlled pedestrian does not respond to
-  # contact, so it simply shoved the 97 kg robot 2.2 m backwards. Scenarios must
-  # not move the vehicle under test unless that is the thing being tested.
+  # Slow walker further down the aisle.
   - name: walker_slow
-    x: -1.0
-    y: 0.2
-    yaw: 0.0
-    path: {length: 2.5, speed: 0.6}
+    x: 2.0
+    y: -3.6
+    yaw: 1.5708
+    path: {length: 1.6, speed: 0.6}
 
   # A worker standing at a station. Deliberately included: a stationary person
-  # is the case the motion test CANNOT distinguish from structure, and leaving
-  # it out would flatter the result.
+  # is the case the motion test CANNOT distinguish from structure.
   - name: worker_standing
     x: 3.0
-    y: -0.2
+    y: -1.8
     yaw: 3.14159

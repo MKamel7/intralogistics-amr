@@ -60,7 +60,7 @@ def spawn_people(context, *_, **__):
                 '-name', person['name'],
                 '-x', str(person['x']),
                 '-y', str(person['y']),
-                '-z', '0.05',
+                '-z', '0.02',
                 '-Y', str(person.get('yaw', 0.0)),
             ],
             parameters=[{'use_sim_time': True}]))

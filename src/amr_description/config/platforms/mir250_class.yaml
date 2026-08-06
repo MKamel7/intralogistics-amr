@@ -60,6 +60,7 @@ values:
   scanner_mass: 0.67             # kg, each
   camera_mass: 0.072             # kg, each
   imu_mass: 0.02                 # kg
+  beacon_mass: 0.15              # kg, signal light
 
   # ---- sensor body dimensions (for visual and inertial proxies) -------
   scanner_body_x: 0.107          # m
@@ -182,6 +183,7 @@ provenance:
   caster_wheel_mass:   {kind: estimated, src: "not published; proportionate to a 125 mm undriven caster"}
   caster_swivel_mass:  {kind: estimated, src: "not published; the swivel fork and bearing, chosen small because it only affects yaw response of the caster"}
   scanner_mass:        {kind: datasheet, src: "SICK nanoScan3 sheet, Weight 0.67 kg"}
+  beacon_mass:         {kind: estimated, src: "not published; a small LED signal beacon, chosen light because it sits high and only affects the tipping calculation"}
   imu_mass:            {kind: estimated, src: "not published; a MEMS IMU module, small enough that it is bookkeeping rather than dynamics"}
   scanner_body_x:      {kind: datasheet, src: "SICK nanoScan3 sheet, Dimensions W x H x D 106.6 mm, rounded to 107 mm"}
   scanner_body_y:      {kind: datasheet, src: "SICK nanoScan3 sheet, Dimensions W x H x D, height 80 mm"}

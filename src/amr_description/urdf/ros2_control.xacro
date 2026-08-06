@@ -7,8 +7,15 @@
      hardware. The predecessor used libgazebo_ros_diff_drive, which is both
      Gazebo Classic only and impossible to carry to hardware.
 
-     The casters are deliberately NOT in ros2_control. They are passive; the
-     physics engine turns them. Declaring them would imply they are actuated. -->
+     The casters carry STATE interfaces only, never a command interface. That
+     distinction is the whole point: they are passive, the physics engine turns
+     them, and nothing commands them. But their angles do have to be published,
+     because otherwise robot_state_publisher cannot place those links, RViz
+     reports RobotModel Status: Error, and the casters do not render at all,
+     which made the vehicle look like a slab with no wheels.
+
+     On real hardware a caster has no encoder, so this is simulator-only
+     telemetry and is recorded as such in docs/validation.md. -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
   <xacro:macro name="amr_ros2_control" params="sim ns">
@@ -45,6 +52,21 @@
         <state_interface name="position"/>
         <state_interface name="velocity"/>
       </joint>
+
+      <xacro:macro name="passive_joint" params="name">
+        <joint name="${name}">
+          <state_interface name="position"/>
+          <state_interface name="velocity"/>
+        </joint>
+      </xacro:macro>
+      <xacro:passive_joint name="caster_front_left_swivel_joint"/>
+      <xacro:passive_joint name="caster_front_left_wheel_joint"/>
+      <xacro:passive_joint name="caster_front_right_swivel_joint"/>
+      <xacro:passive_joint name="caster_front_right_wheel_joint"/>
+      <xacro:passive_joint name="caster_rear_left_swivel_joint"/>
+      <xacro:passive_joint name="caster_rear_left_wheel_joint"/>
+      <xacro:passive_joint name="caster_rear_right_swivel_joint"/>
+      <xacro:passive_joint name="caster_rear_right_wheel_joint"/>
     </ros2_control>
 
     <xacro:if value="${sim}">

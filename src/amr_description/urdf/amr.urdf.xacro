@@ -65,13 +65,16 @@
   <xacro:property name="camera_total"  value="${2*p['camera_mass'] if '$(arg use_cameras)' == 'true' else 0}"/>
   <xacro:property name="component_mass"
     value="${2*p['drive_wheel_mass'] + 4*(p['caster_wheel_mass'] + p['caster_swivel_mass'])
-             + scanner_total + camera_total + p['imu_mass']}"/>
+             + scanner_total + camera_total + p['imu_mass'] + p['beacon_mass']}"/>
   <xacro:property name="body_mass" value="${total_mass - component_mass}"/>
 
   <material name="amr_body">    <color rgba="0.16 0.17 0.19 1.0"/></material>
   <material name="amr_accent">  <color rgba="0.90 0.55 0.10 1.0"/></material>
   <material name="amr_dark">    <color rgba="0.05 0.05 0.06 1.0"/></material>
   <material name="amr_sensor">  <color rgba="0.30 0.31 0.33 1.0"/></material>
+  <material name="amr_beacon">  <color rgba="0.95 0.75 0.10 1.0"/></material>
+  <material name="amr_tyre">    <color rgba="0.08 0.08 0.09 1.0"/></material>
+  <material name="amr_rim">     <color rgba="0.55 0.57 0.60 1.0"/></material>
 
   <!-- ================= chassis ================= -->
   <!-- base_link sits at the centre of the drive wheel axis, projected to the
@@ -100,26 +103,69 @@
          Both boxes stay inside the published 800 x 580 mm envelope. -->
     <xacro:property name="body_long_w" value="${p['chassis_width'] - 2 * p['corner_cut_y']}"/>
     <xacro:property name="body_wide_l" value="${p['chassis_length'] - 2 * p['corner_cut_x']}"/>
+    <!-- Wheel wells. The drive wheels sit at the middle of each side, and
+         without a cutout the chassis box simply swallows them: the robot
+         renders as a featureless slab with no visible means of moving. The
+         transverse section is therefore split into a front and a rear block,
+         leaving the middle of each flank open. -->
+    <xacro:property name="well_half" value="${p['drive_wheel_width'] + 0.055}"/>
+    <xacro:property name="block_len" value="${body_wide_l / 2.0 - well_half}"/>
+    <xacro:property name="block_off" value="${well_half + block_len / 2.0}"/>
 
     <visual name="body_longitudinal">
       <origin xyz="0 0 ${body_cz}"/>
       <geometry><box size="${p['chassis_length']} ${body_long_w} ${body_h}"/></geometry>
       <material name="amr_body"/>
     </visual>
-    <visual name="body_transverse">
-      <origin xyz="0 0 ${body_cz}"/>
-      <geometry><box size="${body_wide_l} ${p['chassis_width']} ${body_h}"/></geometry>
+    <visual name="body_front">
+      <origin xyz="${block_off} 0 ${body_cz}"/>
+      <geometry><box size="${block_len} ${p['chassis_width']} ${body_h}"/></geometry>
       <material name="amr_body"/>
     </visual>
+    <visual name="body_rear">
+      <origin xyz="${-block_off} 0 ${body_cz}"/>
+      <geometry><box size="${block_len} ${p['chassis_width']} ${body_h}"/></geometry>
+      <material name="amr_body"/>
+    </visual>
+    <!-- An accent band around the waist, which is what makes a low slab read as
+         a vehicle rather than a crate. -->
+    <visual name="body_band">
+      <origin xyz="0 0 ${p['ground_clearance'] + body_h * 0.72}"/>
+      <geometry>
+        <box size="${p['chassis_length'] + 0.004} ${body_long_w + 0.004} 0.022"/>
+      </geometry>
+      <material name="amr_accent"/>
+    </visual>
+
     <collision name="body_longitudinal">
       <origin xyz="0 0 ${body_cz}"/>
       <geometry><box size="${p['chassis_length']} ${body_long_w} ${body_h}"/></geometry>
     </collision>
-    <collision name="body_transverse">
-      <origin xyz="0 0 ${body_cz}"/>
-      <geometry><box size="${body_wide_l} ${p['chassis_width']} ${body_h}"/></geometry>
+    <collision name="body_front">
+      <origin xyz="${block_off} 0 ${body_cz}"/>
+      <geometry><box size="${block_len} ${p['chassis_width']} ${body_h}"/></geometry>
+    </collision>
+    <collision name="body_rear">
+      <origin xyz="${-block_off} 0 ${body_cz}"/>
+      <geometry><box size="${block_len} ${p['chassis_width']} ${body_h}"/></geometry>
     </collision>
   </link>
+
+  <!-- Signal beacon. ISO 3691-4 wants the vehicle state visible from outside,
+       and it also gives the silhouette something above the deck line. -->
+  <link name="beacon_link">
+    <xacro:box_inertia m="${p['beacon_mass']}" x="0.06" y="0.06" z="0.09" cz="0.045"/>
+    <visual>
+      <origin xyz="0 0 0.045"/>
+      <geometry><cylinder radius="0.035" length="0.09"/></geometry>
+      <material name="amr_beacon"/>
+    </visual>
+  </link>
+  <joint name="beacon_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="beacon_link"/>
+    <origin xyz="${-p['chassis_length'] / 2.0 + 0.09} 0 ${p['chassis_height'] + 0.005}"/>
+  </joint>
 
   <!-- There is deliberately NO base_footprint link.
 
@@ -154,12 +200,22 @@
       <xacro:wheel_inertia m="${p['drive_wheel_mass']}"
                            r="${p['drive_wheel_radius']}"
                            width="${p['drive_wheel_width']}"/>
-      <visual>
+      <visual name="tyre">
         <origin rpy="${pi/2} 0 0"/>
         <geometry>
           <cylinder radius="${p['drive_wheel_radius']}" length="${p['drive_wheel_width']}"/>
         </geometry>
-        <material name="amr_dark"/>
+        <material name="amr_tyre"/>
+      </visual>
+      <!-- A rim proud of the tyre, so the wheel reads as a wheel and its
+           rotation is visible when the robot drives. -->
+      <visual name="rim">
+        <origin rpy="${pi/2} 0 0"/>
+        <geometry>
+          <cylinder radius="${p['drive_wheel_radius'] * 0.55}"
+                    length="${p['drive_wheel_width'] + 0.006}"/>
+        </geometry>
+        <material name="amr_rim"/>
       </visual>
       <collision>
         <origin rpy="${pi/2} 0 0"/>

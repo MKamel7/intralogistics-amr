@@ -149,7 +149,8 @@ def test_required_frames_exist(urdf):
         'scanner_front_left_link', 'scanner_rear_right_link',
         'camera_left_link', 'camera_right_link',
         'camera_left_optical_frame', 'camera_right_optical_frame',
-        'imu_link',
+        'imu_link', 'beacon_link',
+        'caster_front_left_wheel', 'caster_rear_right_wheel',
     }
     missing = sorted(required - set(_links(urdf)))
     assert not missing, f'frames the stack depends on are missing: {missing}'
@@ -230,13 +231,25 @@ def test_scan_rate_does_not_outrun_the_response_time(urdf, spec):
                 f'{limit:.1f} Hz')
 
 
-def test_drive_joints_are_the_only_actuated_ones(urdf):
-    """Casters are passive. Declaring them in ros2_control would imply otherwise."""
+def test_only_the_drive_joints_are_commanded(urdf):
+    """Casters are passive and must never receive a command interface.
+
+    They do carry STATE interfaces, because their angles have to be published or
+    robot_state_publisher cannot place the links and they do not render at all.
+    The distinction between measured and commanded is the one that matters.
+    """
     control = urdf.find('ros2_control')
     assert control is not None, 'no ros2_control block in the description'
-    names = {j.get('name') for j in control.findall('joint')}
-    assert names == {'drive_left_wheel_joint', 'drive_right_wheel_joint'}, (
-        f'ros2_control should expose exactly the two drive joints, got {sorted(names)}')
+    commanded = {j.get('name') for j in control.findall('joint')
+                 if j.find('command_interface') is not None}
+    assert commanded == {'drive_left_wheel_joint', 'drive_right_wheel_joint'}, (
+        f'only the drive joints may be commanded, got {sorted(commanded)}')
+    for joint in control.findall('joint'):
+        if 'caster' in joint.get('name'):
+            assert joint.find('command_interface') is None, (
+                f'{joint.get("name")} is passive and must not be commanded')
+            assert joint.find('state_interface') is not None, (
+                f'{joint.get("name")} needs a state interface or it will not render')
 
 
 def test_wheel_command_limit_follows_the_platform_top_speed(urdf, spec):
@@ -245,6 +258,8 @@ def test_wheel_command_limit_follows_the_platform_top_speed(urdf, spec):
     control = urdf.find('ros2_control')
     for joint in control.findall('joint'):
         cmd = joint.find("command_interface[@name='velocity']")
+        if cmd is None:
+            continue          # passive joints carry state only
         hi = float(cmd.find("param[@name='max']").text)
         assert hi == pytest.approx(expected), (
             f'{joint.get("name")} velocity limit {hi} rad/s does not match '

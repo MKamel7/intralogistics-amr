@@ -18,9 +18,10 @@ Here the spawners are chained to the spawn process exiting.
 """
 
 from launch import LaunchDescription
-from launch.actions import (DeclareLaunchArgument, IncludeLaunchDescription,
-                            OpaqueFunction, RegisterEventHandler,
-                            SetEnvironmentVariable)
+from launch.actions import (DeclareLaunchArgument, ExecuteProcess,
+                            IncludeLaunchDescription, OpaqueFunction,
+                            RegisterEventHandler, SetEnvironmentVariable,
+                            TimerAction)
 from launch.conditions import IfCondition
 from launch.event_handlers import OnProcessExit
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -90,6 +91,24 @@ def generate_launch_description():
                               'on_exit_shutdown': 'true'}.items())]
 
     gz = OpaqueFunction(function=make_gz)
+
+    # Point the Gazebo camera at the robot once the GUI exists.
+    #
+    # Declaring a <gui> block in the world would also do this, and it was tried:
+    # it replaces Gazebo's entire default layout, so every panel comes back
+    # undocked and floating over the viewport. The move_to service leaves the
+    # standard layout alone and only moves the camera.
+    aim_camera = TimerAction(
+        period=12.0,
+        condition=IfCondition(LaunchConfiguration('gui')),
+        actions=[ExecuteProcess(
+            cmd=['gz', 'service', '-s', '/gui/move_to/pose',
+                 '--reqtype', 'gz.msgs.GUICamera',
+                 '--reptype', 'gz.msgs.Boolean',
+                 '--timeout', '3000',
+                 '--req', 'pose: {position: {x: -1.2, y: -5.6, z: 3.2}, '
+                          'orientation: {x: -0.155, y: 0.239, z: 0.564, w: 0.775}}'],
+            output='screen')])
 
     rsp = Node(
         package='robot_state_publisher',
@@ -249,7 +268,7 @@ def generate_launch_description():
         # both start fine with this one variable cleared. Narrowed by unsetting
         # the candidates one at a time; GTK_PATH was the only one that mattered.
         SetEnvironmentVariable('GTK_PATH', ''),
-        gz, rsp, bridge, spawn, rviz, battery, scan_merger, leg_detector, people_tracker, collision_monitor, safety_lifecycle,
+        gz, aim_camera, rsp, bridge, spawn, rviz, battery, scan_merger, leg_detector, people_tracker, collision_monitor, safety_lifecycle,
         # Chain on spawn exiting rather than on a timer. `create` exits once the
         # model is in the world, which is exactly the precondition the
         # controller_manager needs.
