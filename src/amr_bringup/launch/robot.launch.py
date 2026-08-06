@@ -19,7 +19,8 @@ Here the spawners are chained to the spawn process exiting.
 
 from launch import LaunchDescription
 from launch.actions import (DeclareLaunchArgument, IncludeLaunchDescription,
-                            OpaqueFunction, RegisterEventHandler)
+                            OpaqueFunction, RegisterEventHandler,
+                            SetEnvironmentVariable)
 from launch.conditions import IfCondition
 from launch.event_handlers import OnProcessExit
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -238,6 +239,16 @@ def generate_launch_description():
         parameters=[{'use_sim_time': True}])
 
     return LaunchDescription(args + [
+        # Neutralise GTK_PATH before anything with a window starts.
+        #
+        # A terminal opened from the VS Code snap exports GTK_PATH pointing into
+        # /snap/code/..., GTK then loads snap modules, and those drag in the
+        # core20 libpthread. Every GUI binary dies instantly with
+        # "undefined symbol: __libc_pthread_init, version GLIBC_PRIVATE", which
+        # looks like a broken ROS install and is not: RViz and the Gazebo GUI
+        # both start fine with this one variable cleared. Narrowed by unsetting
+        # the candidates one at a time; GTK_PATH was the only one that mattered.
+        SetEnvironmentVariable('GTK_PATH', ''),
         gz, rsp, bridge, spawn, rviz, battery, scan_merger, leg_detector, people_tracker, collision_monitor, safety_lifecycle,
         # Chain on spawn exiting rather than on a timer. `create` exits once the
         # model is in the world, which is exactly the precondition the
