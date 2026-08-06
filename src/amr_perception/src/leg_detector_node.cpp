@@ -34,6 +34,11 @@ public:
     params_.pair_separation_min = declare_parameter("pair_separation_min", 0.05);
     params_.pair_separation_max = declare_parameter("pair_separation_max", 0.55);
     params_.single_leg_max_range = declare_parameter("single_leg_max_range", 4.0);
+    params_.max_bridge_bins = static_cast<std::size_t>(
+      declare_parameter("max_bridge_bins", 3));
+    params_.blob_max_range = declare_parameter("blob_max_range", 2.20);
+    params_.blob_width_min = declare_parameter("blob_width_min", 0.16);
+    params_.blob_width_max = declare_parameter("blob_width_max", 0.75);
 
     auto qos = rclcpp::SensorDataQoS();
     sub_ = create_subscription<sensor_msgs::msg::LaserScan>(
@@ -55,12 +60,11 @@ private:
     const auto clusters = segmentScan(
       scan.ranges, scan.angle_min, scan.angle_increment, params_);
 
-    std::vector<Cluster> legs;
-    legs.reserve(clusters.size());
+    const auto people = detectPeople(clusters, params_);
+    std::size_t legs = 0;
     for (const auto & c : clusters) {
-      if (looksLikeLeg(c, params_)) {legs.push_back(c);}
+      if (looksLikeLeg(c, params_)) {++legs;}
     }
-    const auto people = pairLegs(legs, params_);
 
     vision_msgs::msg::Detection3DArray out;
     out.header = scan.header;
@@ -99,7 +103,7 @@ private:
 
     RCLCPP_INFO_THROTTLE(
       get_logger(), *get_clock(), 10000,
-      "%zu clusters -> %zu leg-like -> %zu people", clusters.size(), legs.size(), people.size());
+      "%zu clusters -> %zu leg-like -> %zu people", clusters.size(), legs, people.size());
   }
 
   DetectorParams params_;

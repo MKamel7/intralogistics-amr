@@ -126,6 +126,19 @@ carry a truncation flag and the detector declines to conclude anything from a he
 observed. The width profile is what actually carries the discrimination. V-10 in
 [docs/validation.md](docs/validation.md).
 
+**Near-field diagnosis, and where safety actually comes from.** Detection at 1.28 m was 55 percent.
+The cause recorded for it turned out to be wrong: the legs do not merge, the returns are *fragmented*
+by the re-binning in the merge, into runs of one to four points separated by two and three bin holes.
+Bridging those holes, only where the points either side agree in space, lifted precision to 0.218,
+recall to 0.900 and the near-field rate to 60 percent.
+
+60 percent is still poor, and the important measurement is what it does and does not mean: on the
+same 40 frames, **returns from that pedestrian are present in 100 percent of them**. What fails is
+naming them, not seeing them. So the protective stop is built on the merged scan directly and never
+consumes the classifier, which is both how ISO 3691-4 protective fields work and the only
+architecture that does not make safety depend on a component measured at 0.218 precision. V-11 in
+[docs/validation.md](docs/validation.md).
+
 **Battery and state of charge.** A power model fitted to the three runtimes the platform sheet
 publishes, exposed as `sensor_msgs/BatteryState`. Deliberately labelled as calibration rather than
 validation in [docs/validation.md](docs/validation.md): three published figures and three model

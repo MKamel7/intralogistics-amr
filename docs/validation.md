@@ -229,10 +229,9 @@ uprights would be fitting to one scene rather than detecting people. The result 
 So this number is the baseline the fused detector and the tracker have to beat, and it is recorded
 so that improvement can be quantified rather than asserted.
 
-**The 55% at 1.28 m is a separate effect** and worth chasing: at close range a pedestrian subtends a
-large angle, the two legs merge into one wide cluster, and the width test rejects it. That is a real
-weakness in the near field, which is exactly where a protective stop matters most. Noted as an open
-item for the fused detector.
+**The 55% at 1.28 m is a separate effect** and was chased in V-11. The cause stated here originally,
+that the legs merge into one wide cluster, was a HYPOTHESIS and it was wrong. See V-11 for what the
+scan actually shows.
 
 ---
 
@@ -366,6 +365,84 @@ width profile still rejects it.
 detector merges the legs into one wide cluster (V-07, 55 percent detection at 1.28 m) and the depth
 channel cannot see the torso. That is exactly where a protective stop matters most, and it is the
 open problem for the safety phase rather than something to be quietly averaged away.
+
+---
+
+## V-11. The near field: the cause was not what I claimed, and the fix is not classification
+
+**Status: cause diagnosed, partially fixed, and the safety argument re-grounded with a measurement.**
+
+V-07 measured 55 percent detection on a pedestrian at 1.28 m and asserted a cause: that close in, a
+person subtends a large angle and the two calves merge into one cluster too wide for the leg test.
+**That was a hypothesis written as if it were a finding, and it was wrong.**
+
+A unit test made it fail. Synthesising a pedestrian at 1.2 m, the legs resolved and paired perfectly
+well. So the merge story could not be right, and the running system was asked directly what it
+sees around that person:
+
+```
+  10 contiguous runs of returns under 3 m, around the right bearing:
+    3 pts   1.32 m   width 0.022 m
+    3 pts   1.31 m   width 0.019 m
+    4 pts   1.30 m   width 0.022 m
+   16 pts   1.04 m   width 0.249 m
+    1 pt    0.99 m
+    2 pts   0.95 m   width 0.009 m
+   14 pts   0.98 m   width 0.205 m
+```
+
+**Not merged. Fragmented.** Runs of one, two, three and four points separated by two and three bin
+holes, every fragment too short or too narrow to classify.
+
+**The cause is the merge itself.** Two scanners mounted 0.5 m off the robot centre are re-binned
+about that centre, and the angular mapping is non-uniform, so output bins are simply skipped. Close
+in it is severe. This is the same aliasing that shows up as scattered single-bin gaps in V-06, where
+it was harmless; here it destroys the evidence.
+
+**Fix.** The clusterer may now bridge up to three consecutive empty bins, but only when the measured
+points either side agree in space by the same adaptive threshold used for adjacency, and the
+allowance scales with how many bins were skipped. A genuine occlusion boundary still breaks the run.
+Note this required contradicting an earlier test whose comment read "a hole is absence of
+measurement, bridging it would invent continuity". That is true of a RAW scan and false of a
+re-binned one, and the distinction had been missed.
+
+| | before | after |
+|---|---|---|
+| precision | 0.168 | **0.218** |
+| recall | 0.875 | **0.900** |
+| false positives over 40 frames | 692 | **517** |
+| person at 1.28 m | 55% | **60%** |
+| person at 2.20 m | 95% | **100%** |
+
+**60 percent is still poor, and no further classifier work fixes it**, which brings us to the part
+that matters.
+
+### The protective stop must not depend on classification, and does not
+
+A protective field trips on **any** return inside it. It does not ask what the return is, and it is
+not allowed to: that is what makes it a protective device rather than a perception system, and it is
+how ISO 3691-4 and EN ISO 13849 protective fields work.
+
+So the right question is not "can the detector name that pedestrian" but "are the returns there at
+all". Measured, same scenario, same 40 frames:
+
+| | rate |
+|---|---|
+| frames with any return on the person at 1.28 m | **40 / 40, 100%** |
+| frames where the detector classified them as a person | 24 / 40, 60% |
+
+**The returns are present in every single frame.** What fails is naming them, not seeing them.
+
+That relocates the 60 percent from a safety problem to a behaviour problem. A field-based protective
+stop would trip every time. What imperfect classification costs is the *smooth* behaviour built on
+top: yielding early, predicting where someone will walk, choosing which side to pass. Those degrade;
+the stop does not.
+
+**Consequence, carried into the safety phase.** The protective stop will be built on the merged scan
+directly, through `nav2_collision_monitor`, and will not consume `people_detections` or
+`people_tracks` at all. Wiring classification into a protective function would make safety depend on
+a component measured at 0.218 precision, which would be the wrong architecture no matter how good
+the classifier later becomes.
 
 ---
 

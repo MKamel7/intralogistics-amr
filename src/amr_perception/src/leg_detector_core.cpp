@@ -75,13 +75,24 @@ std::vector<Cluster> segmentScan(
       run.clear();
     };
 
+  std::size_t empty_run = 0;
+  std::size_t last_filled = 0;
+
   for (std::size_t i = 0; i < ranges.size(); ++i) {
     const double r = static_cast<double>(ranges[i]);
     if (!std::isfinite(r)) {
-      // A hole in the data ends the run. Bridging it would invent continuity
-      // that was never measured.
-      if (have_prev) {flush(i > 0 ? i - 1 : 0);}
-      have_prev = false;
+      // Hold the run open across a short hole. Whether it survives is decided
+      // below, by whether the point on the far side actually continues the
+      // surface; see max_bridge_bins for why an empty bin here is usually a
+      // re-binning artifact rather than an absence of measurement.
+      if (have_prev) {
+        ++empty_run;
+        if (empty_run > p.max_bridge_bins) {
+          flush(last_filled);
+          have_prev = false;
+          empty_run = 0;
+        }
+      }
       continue;
     }
 
@@ -90,16 +101,22 @@ std::vector<Cluster> segmentScan(
     if (have_prev) {
       // Adaptive threshold: point spacing grows with range because the sampling
       // is angular. A fixed threshold would shatter distant objects and glue
-      // near ones together.
+      // near ones together. Bridging a hole widens the allowance in proportion
+      // to how many bins were skipped, so a wide hole demands closer agreement
+      // relative to the distance covered rather than less.
       const double allowed =
-        p.cluster_jump_base + p.cluster_jump_slope * std::min(r, prev_range) * angle_increment;
+        (p.cluster_jump_base
+        + p.cluster_jump_slope * std::min(r, prev_range) * angle_increment)
+        * static_cast<double>(empty_run + 1);
       if (std::hypot(pt.x - prev.x, pt.y - prev.y) > allowed) {
-        flush(i - 1);
+        flush(last_filled);
         run_start = i;
       }
     } else {
       run_start = i;
     }
+    empty_run = 0;
+    last_filled = i;
 
     run.push_back(pt);
     prev = pt;
@@ -107,7 +124,7 @@ std::vector<Cluster> segmentScan(
     have_prev = true;
   }
 
-  if (have_prev) {flush(ranges.empty() ? 0 : ranges.size() - 1);}
+  if (have_prev) {flush(last_filled);}
   return clusters;
 }
 
@@ -118,6 +135,19 @@ bool looksLikeLeg(const Cluster & c, const DetectorParams & p)
   // Roundness. A leg bows away from its chord; a wall segment of the same
   // width is flat. Expressed as a ratio so the test does not depend on how
   // wide the cluster happens to be.
+  if (c.width > 1e-6 && (c.depth / c.width) < p.leg_min_depth_ratio) {return false;}
+  return true;
+}
+
+bool looksLikePersonBlob(const Cluster & c, const DetectorParams & p)
+{
+  if (c.points < p.min_points) {return false;}
+  // Only close in. Further out a cluster this wide is a pallet, a bin or a wall
+  // section, and the legs would have resolved separately anyway.
+  if (c.range > p.blob_max_range) {return false;}
+  if (c.width < p.blob_width_min || c.width > p.blob_width_max) {return false;}
+  // Still has to bow away from its chord. A flat run of stance width is a
+  // pallet face, not a person.
   if (c.width > 1e-6 && (c.depth / c.width) < p.leg_min_depth_ratio) {return false;}
   return true;
 }
@@ -166,6 +196,38 @@ std::vector<PersonDetection> pairLegs(
       person.confidence = 0.4;
       people.push_back(person);
     }
+  }
+
+  return people;
+}
+
+std::vector<PersonDetection> detectPeople(
+  const std::vector<Cluster> & clusters, const DetectorParams & p)
+{
+  std::vector<Cluster> legs;
+  std::vector<Cluster> rest;
+  for (const auto & c : clusters) {
+    if (looksLikeLeg(c, p)) {
+      legs.push_back(c);
+    } else {
+      rest.push_back(c);
+    }
+  }
+
+  auto people = pairLegs(legs, p);
+
+  // Whatever failed the leg test may still be a whole pedestrian seen close up.
+  for (const auto & c : rest) {
+    if (!looksLikePersonBlob(c, p)) {continue;}
+    PersonDetection person;
+    person.x = c.cx;
+    person.y = c.cy;
+    person.paired = false;
+    // Between a paired detection and a lone distant leg. The evidence is real
+    // but weaker: a stance-width round cluster close to the robot.
+    person.confidence = 0.6;
+    person.separation = c.width;
+    people.push_back(person);
   }
 
   return people;

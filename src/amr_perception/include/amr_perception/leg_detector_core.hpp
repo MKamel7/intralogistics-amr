@@ -57,6 +57,25 @@ struct DetectorParams
   double cluster_jump_slope{3.0};
   std::size_t min_points{3};
 
+  /// How many consecutive empty bins may be bridged inside one cluster.
+  ///
+  /// In a RAW sensor scan an empty bin means nothing was measured there and
+  /// bridging it would invent continuity. In this MERGED scan it usually means
+  /// something else: the returns of two scanners mounted 0.5 m off the robot
+  /// centre are re-binned about that centre, and the mapping is non-uniform, so
+  /// bins are simply skipped. Close in it is severe.
+  ///
+  /// Measured on the running system: a pedestrian at 1.28 m arrived as runs of
+  /// 1, 2, 3, 4, 8, 14 and 16 points separated by two and three bin holes,
+  /// every fragment too short or too narrow to classify. That, not the legs
+  /// merging, is why near-field detection was 55 percent.
+  ///
+  /// A hole is only bridged when the measured points either side agree in
+  /// space, by the same adaptive threshold used for adjacency. When they
+  /// disagree the run still breaks, so a genuine occlusion boundary is
+  /// preserved.
+  std::size_t max_bridge_bins{3};
+
   double leg_width_min{0.040};
   double leg_width_max{0.250};
   /// A leg is round, so its run bows away from its own chord. A flat run of the
@@ -69,6 +88,18 @@ struct DetectorParams
   /// range a leg is only a handful of points and the false positive rate from
   /// clutter climbs quickly.
   double single_leg_max_range{4.0};
+
+  /// Close-range whole-body detection.
+  ///
+  /// Near the robot a pedestrian subtends a large angle and the two calves plus
+  /// the gap between them arrive as ONE contiguous run, too wide to pass the
+  /// leg width test. Measured: detection fell to 55 percent at 1.28 m, which is
+  /// the worst possible place to lose someone. Below `blob_max_range` a single
+  /// cluster the width of a STANCE rather than a calf is reported as a person
+  /// in its own right, without needing to resolve the legs separately.
+  double blob_max_range{2.20};
+  double blob_width_min{0.16};
+  double blob_width_max{0.75};
 };
 
 /// Break a scan into clusters using an adaptive distance threshold.
@@ -86,6 +117,14 @@ bool looksLikeLeg(const Cluster & c, const DetectorParams & p);
 /// Pair up leg-like clusters into people.
 std::vector<PersonDetection> pairLegs(
   const std::vector<Cluster> & legs, const DetectorParams & p);
+
+/// Is this a whole pedestrian arriving as one close-range blob?
+bool looksLikePersonBlob(const Cluster & c, const DetectorParams & p);
+
+/// Full pipeline over every cluster: pair what resolves into legs, and pick up
+/// close-range whole-body returns that the leg test alone would discard.
+std::vector<PersonDetection> detectPeople(
+  const std::vector<Cluster> & clusters, const DetectorParams & p);
 
 }  // namespace amr_perception
 

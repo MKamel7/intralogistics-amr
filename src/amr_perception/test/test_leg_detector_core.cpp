@@ -16,6 +16,7 @@ using amr_perception::Cluster;
 using amr_perception::DetectorParams;
 using amr_perception::looksLikeLeg;
 using amr_perception::pairLegs;
+using amr_perception::detectPeople;
 using amr_perception::segmentScan;
 
 namespace
@@ -77,21 +78,47 @@ TEST(SegmentScan, EmptyScanYieldsNoClusters)
   EXPECT_TRUE(segmentScan(emptyScan(), kAngleMin, kInc, p).empty());
 }
 
-TEST(SegmentScan, GapsInTheDataBreakARun)
+TEST(SegmentScan, ALongHoleBreaksARun)
 {
-  // A hole is absence of measurement, not evidence that the surface continues.
+  // A wide gap is a real discontinuity and must split the cluster.
   DetectorParams p;
   auto scan = emptyScan();
   paintCircle(scan, 2.0, 0.0, 0.055);
   const auto before = segmentScan(scan, kAngleMin, kInc, p).size();
   ASSERT_EQ(before, 1u);
 
-  // Punch a hole through the middle of that cluster.
   for (std::size_t i = 0; i < scan.size(); ++i) {
     const double a = kAngleMin + static_cast<double>(i) * kInc;
-    if (std::abs(a) < 0.004) {scan[i] = std::numeric_limits<float>::infinity();}
+    if (std::abs(a) < 0.020) {scan[i] = std::numeric_limits<float>::infinity();}
   }
   EXPECT_GT(segmentScan(scan, kAngleMin, kInc, p).size(), before);
+}
+
+TEST(SegmentScan, AShortHoleWithAgreeingSidesIsBridged)
+{
+  // The measured near-field failure. Re-binning two offset scanners about the
+  // robot centre skips bins, and a pedestrian at 1.28 m arrived as seven
+  // fragments none of which could be classified. A two-bin hole whose
+  // neighbours sit on the same surface is a binning artifact, not a gap.
+  DetectorParams p;
+  auto scan = emptyScan();
+  paintCircle(scan, 1.3, 0.0, 0.055);
+  const auto whole = segmentScan(scan, kAngleMin, kInc, p);
+  ASSERT_EQ(whole.size(), 1u);
+
+  // Punch isolated single-bin holes right through it.
+  std::size_t punched = 0;
+  for (std::size_t i = 0; i < scan.size(); ++i) {
+    const double a = kAngleMin + static_cast<double>(i) * kInc;
+    if (std::abs(a) < 0.030 && (i % 3 == 0)) {
+      scan[i] = std::numeric_limits<float>::infinity();
+      ++punched;
+    }
+  }
+  ASSERT_GT(punched, 3u);
+  const auto after = segmentScan(scan, kAngleMin, kInc, p);
+  EXPECT_EQ(after.size(), 1u)
+    << "a perforated cluster fragmented into " << after.size() << " pieces";
 }
 
 TEST(SegmentScan, TwoSeparatedObjectsBecomeTwoClusters)
@@ -265,6 +292,88 @@ TEST(PairLegs, APersonInFrontOfAWallIsStillFound)
   ASSERT_EQ(people.size(), 1u);
   EXPECT_TRUE(people[0].paired);
   EXPECT_NEAR(people[0].x, 2.5 - 0.055, 0.10);
+}
+
+// ---- close range whole-body detection -------------------------------------
+//
+// The measured hole: at 1.28 m detection fell to 55 percent because the two
+// calves and the gap between them arrive as one run too wide for the leg test.
+// That is the worst possible range at which to lose a pedestrian.
+
+TEST(DetectPeople, FindsACloseRangePersonWhoseLegsHaveMerged)
+{
+  DetectorParams p;
+  auto scan = emptyScan();
+  // A pedestrian at 1.2 m. At this range the angular gap between the calves is
+  // small enough that the returns form a single cluster.
+  paintCircle(scan, 1.2, -0.10, 0.055);
+  paintCircle(scan, 1.2, 0.10, 0.055);
+
+  const auto clusters = segmentScan(scan, kAngleMin, kInc, p);
+  const auto people = detectPeople(clusters, p);
+  ASSERT_FALSE(people.empty()) << clusters.size() << " clusters yielded nobody at 1.2 m";
+  EXPECT_NEAR(people[0].x, 1.2 - 0.055, 0.15);
+  EXPECT_NEAR(people[0].y, 0.0, 0.15);
+}
+
+TEST(DetectPeople, StillPairsLegsWhenTheyResolveSeparately)
+{
+  // The close-range path must not cannibalise the normal one.
+  DetectorParams p;
+  auto scan = emptyScan();
+  paintCircle(scan, 2.5, -0.10, 0.055);
+  paintCircle(scan, 2.5, 0.10, 0.055);
+
+  const auto people = detectPeople(segmentScan(scan, kAngleMin, kInc, p), p);
+  ASSERT_EQ(people.size(), 1u);
+  EXPECT_TRUE(people[0].paired) << "a resolvable pair was reported as a blob";
+}
+
+TEST(DetectPeople, DoesNotAcceptAWideBlobFurtherAway)
+{
+  // Beyond close range a stance-width cluster is a pallet or a bin, and the
+  // legs of a real person would have resolved separately anyway.
+  DetectorParams p;
+  auto scan = emptyScan();
+  paintCircle(scan, 5.0, 0.0, 0.30);
+
+  for (const auto & q : detectPeople(segmentScan(scan, kAngleMin, kInc, p), p)) {
+    EXPECT_TRUE(q.paired) << "a wide distant blob was reported as a person";
+  }
+}
+
+TEST(DetectPeople, DoesNotAcceptAFlatCloseSurface)
+{
+  // A pallet face 1.5 m away is stance width and close, so only the roundness
+  // test stands between it and a false pedestrian.
+  DetectorParams p;
+  auto scan = emptyScan();
+  paintWall(scan, 1.5, 0.30);
+
+  EXPECT_TRUE(detectPeople(segmentScan(scan, kAngleMin, kInc, p), p).empty());
+}
+
+TEST(DetectPeople, ABlobIsLessConfidentThanAResolvedPair)
+{
+  // An earlier version of this test assumed a pedestrian at 1.2 m arrives as
+  // one merged blob. Measured on the running system, that is not what happens:
+  // the legs still resolve and pair. The blob path exists for legs that are
+  // genuinely together, so the test exercises that directly rather than
+  // assuming a range at which it triggers.
+  DetectorParams p;
+  auto blob = emptyScan();
+  paintCircle(blob, 1.5, 0.0, 0.16);          // legs together, one wide body
+  auto pair = emptyScan();
+  paintCircle(pair, 2.5, -0.10, 0.055);
+  paintCircle(pair, 2.5, 0.10, 0.055);
+
+  const auto a = detectPeople(segmentScan(blob, kAngleMin, kInc, p), p);
+  const auto b = detectPeople(segmentScan(pair, kAngleMin, kInc, p), p);
+  ASSERT_FALSE(a.empty());
+  ASSERT_FALSE(b.empty());
+  EXPECT_FALSE(a[0].paired);
+  EXPECT_TRUE(b[0].paired);
+  EXPECT_LT(a[0].confidence, b[0].confidence);
 }
 
 int main(int argc, char ** argv)
