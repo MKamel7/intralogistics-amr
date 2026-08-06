@@ -25,6 +25,7 @@ from launch.event_handlers import OnProcessExit
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import (Command, LaunchConfiguration,
                                   PathJoinSubstitution)
+import yaml
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
@@ -47,6 +48,12 @@ def generate_launch_description():
         DeclareLaunchArgument('y', default_value='-1.0'),
         DeclareLaunchArgument('yaw', default_value='0.0'),
         DeclareLaunchArgument('world', default_value='warehouse'),
+        DeclareLaunchArgument('payload', default_value='0.0',
+                              description='kg on the load deck, for the energy model'),
+        DeclareLaunchArgument(
+            'battery_time_scale', default_value='1.0',
+            description='simulated hours per hour; anything but 1.0 is flagged '
+                        'in the log because the curve is then not real'),
     ]
 
     robot_description = ParameterValue(
@@ -120,6 +127,38 @@ def generate_launch_description():
                                  '--controller-manager', '/controller_manager'],
                       output='screen')
 
+    def make_battery(context, *_, **__):
+        """Battery parameters come from the platform spec, not from defaults.
+
+        The node carries defaults so it can run standalone, but the launch reads
+        the same spec the robot description reads, so there is one source for
+        the pack and the runtimes it is fitted to.
+        """
+        platform = LaunchConfiguration('platform').perform(context)
+        spec_path = PathJoinSubstitution(
+            [desc_share, 'config', 'platforms', f'{platform}.yaml']
+        ).perform(context)
+        spec = yaml.safe_load(open(spec_path))
+        v, tg = spec['values'], spec['validation_targets']
+        return [Node(
+            package='amr_sim', executable='battery_model', output='screen',
+            parameters=[{
+                'use_sim_time': True,
+                'capacity_wh': v['battery_capacity_kwh'] * 1000.0,
+                'nominal_voltage': v['battery_nominal_voltage'],
+                'max_speed': v['max_linear_speed'],
+                'max_payload_kg': v['max_payload'],
+                'runtime_standby_h': tg['runtime_standby_h'],
+                'runtime_unloaded_h': tg['runtime_unloaded_h'],
+                'runtime_loaded_h': tg['runtime_loaded_h'],
+                'reference_speed': 1.0,
+                'payload_kg': float(LaunchConfiguration('payload').perform(context)),
+                'time_scale': float(LaunchConfiguration('battery_time_scale')
+                                    .perform(context)),
+            }])]
+
+    battery = OpaqueFunction(function=make_battery)
+
     rviz = Node(
         package='rviz2', executable='rviz2', output='screen',
         condition=IfCondition(LaunchConfiguration('rviz')),
@@ -128,7 +167,7 @@ def generate_launch_description():
         parameters=[{'use_sim_time': True}])
 
     return LaunchDescription(args + [
-        gz, rsp, bridge, spawn, rviz,
+        gz, rsp, bridge, spawn, rviz, battery,
         # Chain on spawn exiting rather than on a timer. `create` exits once the
         # model is in the world, which is exactly the precondition the
         # controller_manager needs.

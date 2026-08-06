@@ -71,10 +71,33 @@ on the strength of the two sheets agreeing, rather than to make a result come ou
 
 ## V-04. Runtime and state of charge
 
-**Status: not yet measured.** Targets recorded, battery model not built.
+**Status: CALIBRATED, not validated.** This distinction is the whole point of the entry.
 
-13 h at maximum payload, 17.4 h unloaded, 22 h standby, from a 1.63 kWh pack. These constrain the
-energy model tightly enough to be a real check on it.
+The sheet publishes three runtimes from a 1.63 kWh pack: 22 h standby, 17.4 h active unloaded, 13 h
+active at maximum payload. The power model has three terms, so fitting it to those three figures
+reproduces all of them exactly, by construction:
+
+| term | fitted value |
+|---|---|
+| standby | 74.09 W |
+| driving, at the reference speed | +39.17 W |
+| full payload, at the reference speed | +63.41 W |
+
+**This is a fit, not evidence.** Three equations, three unknowns. It cannot be cited as validation
+of the energy behaviour, and `test_battery_model.py` says so in its own docstring. What it buys is
+that state of charge falls at a rate anchored to a real pack, so an energy-per-task figure derived
+later is traceable to a published source rather than invented.
+
+**An undefined quantity in the source, made explicit rather than guessed silently.** The sheet never
+says what duty cycle "active operation time" assumes. It cannot be continuous driving at top speed:
+13 h at 2.0 m/s is 93.6 km on 1.63 kWh, about 17 Wh/km, which is implausibly efficient for a machine
+of this class. The model therefore names a **reference speed** at which the published active figures
+are taken to hold, defaulting to half of top speed, and a test asserts that the published runtimes
+are still reproduced whatever reference speed is chosen. The assumption changes the coefficients; it
+must not change the answer.
+
+**Not modelled, because the sheet gives nothing to model them from:** voltage sag, temperature
+dependence, and capacity fade over the rated 3000 cycles. Discharge is linear in energy.
 
 ---
 

@@ -70,6 +70,13 @@ acceleration figure and therefore accelerates more aggressively than the real ma
 any future throughput number optimistic. Recorded in [docs/validation.md](docs/validation.md)
 rather than tuned away.
 
+**Battery and state of charge.** A power model fitted to the three runtimes the platform sheet
+publishes, exposed as `sensor_msgs/BatteryState`. Deliberately labelled as calibration rather than
+validation in [docs/validation.md](docs/validation.md): three published figures and three model
+terms means reproducing them is arithmetic, not evidence. The sheet's undefined duty cycle for
+"active operation" is made an explicit reference-speed parameter, and a test asserts the published
+runtimes survive any choice of it.
+
 **Platform specification with an enforced provenance gate.** Every physical constant of the robot
 lives in `src/amr_description/config/platforms/mir250_class.yaml`, tagged `datasheet`, `derived`,
 `estimated` or `tuned`, with its source. Currently 54 constants: 29 from a data sheet, 5 derived from data sheet values, 20 estimated with the reasoning recorded.
@@ -167,8 +174,7 @@ way the error points.
 
 In order, each independently demonstrable:
 
-1. Battery and state-of-charge model, RViz configuration
-2. Perception: scan conditioning, human detection, tracking, prediction
+1. Perception: scan conditioning, human detection, tracking, prediction
 3. Mapping and localisation, including the aisle degeneracy benchmark
 4. KLT load transfer and precision docking
 5. Navigation: footprint-aware planning, MPPI, human-aware costs
