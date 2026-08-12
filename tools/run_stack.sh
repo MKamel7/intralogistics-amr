@@ -84,7 +84,12 @@ while [ $# -gt 0 ]; do
     --track)   TRACK=true; shift ;;
     --tf)      TFTRACK=true; shift ;;
     --no-gate) GATE=false; shift ;;
-    *) echo "unknown option: $1"; exit 2 ;;
+    -h|--help)
+      # The usage block is the comment header of this file, so there is one
+      # copy of it and it cannot drift from the flags below.
+      sed -n '/^# Usage:/,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \?//'
+      exit 0 ;;
+    *) echo "unknown option: $1"; echo "try --help"; exit 2 ;;
   esac
 done
 

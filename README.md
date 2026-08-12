@@ -273,6 +273,20 @@ requirements/         requirements with IDs, traced to tests
 Packages appear as they are built. An empty directory here means the package is planned, not
 missing.
 
+## Try it
+
+```
+./demo.sh
+```
+
+Builds if needed, brings the stack up, runs two transport cycles on the MiR250
+with the cameras off, and prints the result table the transport task produces.
+About four minutes on a laptop. Nothing needs clicking.
+
+`tools/run_stack.sh --help` is the real instrument behind it: platform
+selection, the two worlds, survey and mission tasks, and the preflight gate that
+refuses to measure an unhealthy stack.
+
 ## Build
 
 ```bash
