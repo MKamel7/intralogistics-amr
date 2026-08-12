@@ -264,6 +264,7 @@ src/amr_description   platform specs, xacro description, meshes
     amr_sim           world, scenery models, importer, scenarios
     amr_bringup       launch
     amr_evaluation    KPI harness and analysis
+docs/findings.md      four faults worth reading about, the short version
 docs/adr              architecture decision records
 docs/architecture     arc42 architecture documentation
 docs/datasheets       archived source documents for every physical constant
