@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>amr_mission</name>
+  <version>0.1.0</version>
+  <description>
+    The transport task: fetch a load from one station and deliver it to another,
+    through a warehouse with people in it. This is the layer that decides WHAT
+    the vehicle should do. Navigation decides how to get there, and the safety
+    layer decides whether it is allowed to.
+  </description>
+  <maintainer email="mkamel860@gmail.com">Mohamed Kamel</maintainer>
+  <license>Apache-2.0</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>nav2_msgs</exec_depend>
+  <exec_depend>rcl_interfaces</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <test_depend>ament_cmake_pytest</test_depend>
+  <export><build_type>ament_cmake</build_type></export>
+</package>

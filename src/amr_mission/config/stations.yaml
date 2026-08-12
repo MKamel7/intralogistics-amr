@@ -1,0 +1,43 @@
+# Transport stations, in the SURVEYED MAP frame.
+#
+# Commissioning data, the same status as the keepout mask in ADR 0007: an
+# operator decides where loads are picked up and dropped off, and writes it
+# down. It is not sensed and it is not ground truth.
+#
+# The poses were not guessed, and the first attempt at choosing them was wrong
+# in an instructive way.
+#
+# That attempt maximised DISTANCE subject to a 0.90 m clearance floor, on the
+# reasoning that a long journey is a better test. It put both stations in
+# building corners, where 0.90 m is the best on offer and the approach is
+# hemmed in by racking. The vehicle reached one of them, could not complete the
+# final turn in the space available, drifted into a cell the costmap calls
+# occupied, and Nav2 will not plan from an occupied start. No cycle completed.
+#
+# These maximise the WORST CLEARANCE of the pair subject to being at least 8 m
+# apart, which is how a real site places a loading station: somewhere a vehicle
+# can comfortably get in, turn, and get out again. 8.1 m apart with 1.60 m of
+# clearance each, against an inscribed radius of 0.501 m.
+#
+# `approach_yaw` is the heading the vehicle should hold on arrival. A real
+# station has a fixed side you load from, so arriving backwards is wrong even
+# when the position is right.
+
+stations:
+  - name: goods_in
+    description: Inbound station on the southern main aisle
+    x: -1.58
+    y: -5.45
+    approach_yaw: 1.5708      # facing north, up the aisle
+    clearance: 1.60
+
+  - name: dispatch
+    description: Outbound station on the northern main aisle
+    x: -0.83
+    y: 2.65
+    approach_yaw: -1.5708     # facing south, back down the aisle
+    clearance: 1.63
+
+# The cycle, as station names. Written as a list rather than hardcoded as a
+# pair so a three-stop or a loop route needs no code change.
+route: [goods_in, dispatch]
