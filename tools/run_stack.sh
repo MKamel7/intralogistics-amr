@@ -30,6 +30,7 @@
 #   tools/run_stack.sh --run mission          bring up, then transport task
 #   tools/run_stack.sh --run survey_mission   survey first, then transport
 #   tools/run_stack.sh --run mission --classify   also attribute safety stops
+#   tools/run_stack.sh --run mission --latency    also measure control_latency
 #   tools/run_stack.sh --no-gate              measure anyway if preflight fails
 #   tools/run_stack.sh --platform mp400_class the second platform
 #   tools/run_stack.sh --test-track            the datasheet-sized test track
@@ -68,6 +69,7 @@ TASK=none
 CLASSIFY=false
 TRACK=false
 TFTRACK=false
+LATENCY=false
 GATE=true
 CYCLES=2
 
@@ -83,6 +85,7 @@ while [ $# -gt 0 ]; do
     --classify) CLASSIFY=true; shift ;;
     --track)   TRACK=true; shift ;;
     --tf)      TFTRACK=true; shift ;;
+    --latency) LATENCY=true; shift ;;
     --no-gate) GATE=false; shift ;;
     -h|--help)
       # The usage block is the comment header of this file, so there is one
@@ -242,6 +245,15 @@ if [ "$CLASSIFY" = true ]; then
   CLS=$!
 fi
 
+# THE NUMBER A SAFETY ASSESSOR ASKS ABOUT FIRST. control_latency feeds every
+# protective field in the stack and is still an estimate on both platforms.
+# This measures it passively from whatever the run does anyway.
+if [ "$LATENCY" = true ]; then
+  python3 -u tools/measure_control_latency.py --ros-args -p duration_s:=600.0 \
+          > "$RUN/latency.log" 2>&1 &
+  LAT=$!
+fi
+
 case "$TASK" in
   survey)
     ros2 run amr_navigation survey_runner --ros-args -p use_sim_time:=true \
@@ -281,6 +293,11 @@ esac
 if [ "$CLASSIFY" = true ]; then
   wait ${CLS:-} 2>/dev/null
   say "classifier done"
+fi
+if [ "$LATENCY" = true ]; then
+  kill -INT ${LAT:-} 2>/dev/null
+  wait ${LAT:-} 2>/dev/null
+  say "latency probe done; see $RUN/latency.log"
 fi
 if [ "$TRACK" = true ]; then
   wait ${TRK:-} 2>/dev/null
