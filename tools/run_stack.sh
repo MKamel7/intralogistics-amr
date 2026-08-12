@@ -59,6 +59,8 @@ WORLD=warehouse
 TRACK_WORLD=false
 KEEPOUT=keepout_mask
 STATIONS=
+SCENARIO=walking_people
+TRUTH_MAP=warehouse_truth
 SPAWN_X=2.0
 SPAWN_Y=-1.0
 TASK=none
@@ -130,6 +132,8 @@ if [ "$TRACK_WORLD" = true ]; then
   SPAWN_Y=6.0
   KEEPOUT=keepout_mask_test_track
   STATIONS="$REPO/src/amr_mission/config/stations.test_track.$PLATFORM.yaml"
+  SCENARIO=track_people
+  TRUTH_MAP=test_track_truth
 fi
 
 # FAIL BEFORE LAUNCHING, not thirty seconds in. A platform whose generated
@@ -185,7 +189,8 @@ say "keepout filter active"
 wait_active /bt_navigator 200 && say "nav2 active" || { say "NAV2 FAILED"; exit 1; }
 
 sleep 10
-ros2 launch amr_sim people.launch.py scenario:=walking_people > "$RUN/people.log" 2>&1 &
+ros2 launch amr_sim people.launch.py scenario:=$SCENARIO \
+    world:=$WORLD truth_map:=$TRUTH_MAP > "$RUN/people.log" 2>&1 &
 sleep 15
 say "people spawned"
 

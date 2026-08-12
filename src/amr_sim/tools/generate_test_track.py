@@ -48,6 +48,7 @@ other, which is a stronger result than a demo tuned so it always succeeds.
 """
 
 import argparse
+import math
 import sys
 from pathlib import Path
 
@@ -199,7 +200,19 @@ def build_world(spec, platform):
         'dispatch': (INTERIOR_X - 2.5, (door_lo + door_hi) / 2.0, 0.0),
     }
 
+    # Every solid rectangle, in world coordinates, for the ground truth map and
+    # the pedestrian scenario. Collected here rather than re-parsed from the SDF
+    # so the map cannot disagree with the world it describes.
+    solids = [
+        (RACK_X0, RACK_X1, lay[n][0], lay[n][1])
+        for n in ('rack_a', 'rack_b', 'rack_c', 'rack_d')
+    ] + [
+        (blk_x0, blk_x1, door_hi, INTERIOR_Y),
+        (blk_x0, blk_x1, 0.0, door_lo),
+    ]
+
     derived = {
+        'solids': solids,
         'aisle_1_y': lay['aisle_1'],
         'aisle_2_y': lay['aisle_2'],
         'pinch_y': lay['pinch'],
@@ -278,6 +291,87 @@ def build_world(spec, platform):
 {body}  </world>
 </sdf>
 """, derived
+
+
+def build_truth_map(derived):
+    """Rasterise the track into a ground truth occupancy map.
+
+    NOT reconstructed from the SDF. `build_ground_truth_map.py` exists for the
+    AWS world and rasterises collision meshes, which is the only option when the
+    layout came from an asset pack. Here the layout is generated, so the map is
+    emitted from the SAME zone table that emitted the world and cannot disagree
+    with it.
+
+    The ground truth map is measurement only. It scores results and must never
+    reach the control path, which is why it lives in amr_sim rather than in
+    amr_navigation.
+    """
+    res = MASK_RES
+    w = int(round(INTERIOR_X / res))
+    h = int(round(INTERIOR_Y / res))
+    grid = bytearray([254]) * (w * h)        # 254 = free in the map_server sense
+
+    for x0, x1, y0, y1 in derived['solids']:
+        i0, i1 = max(0, int(x0 / res)), min(w, int(math.ceil(x1 / res)))
+        j0, j1 = max(0, int(y0 / res)), min(h, int(math.ceil(y1 / res)))
+        for j in range(j0, j1):
+            row = (h - 1 - j) * w            # PGM rows run top down
+            for i in range(i0, i1):
+                grid[row + i] = 0            # 0 = occupied
+
+    pgm = b'P5\n' + f'{w} {h}\n255\n'.encode() + bytes(grid)
+    meta = {
+        'image': 'test_track_truth.pgm',
+        'resolution': res,
+        'origin': [0.0, 0.0, 0.0],
+        'negate': 0,
+        'occupied_thresh': 0.65,
+        'free_thresh': 0.196,
+    }
+    return pgm, meta, (w, h)
+
+
+def build_scenario(derived):
+    """Pedestrians placed where the geometry decides the outcome.
+
+    The two zones exist so the SAME behaviour produces different results:
+
+        P1, open bay      wide enough for the vehicle to route around a person
+        P2, scored aisle  not wide enough, so the correct outcome is to wait
+
+    A scenario whose people are all in the open bay would only ever demonstrate
+    re-routing, which is the flattering half of the story. One of each is what
+    makes the pair a measurement instead of a demo.
+    """
+    a2_lo, a2_hi = derived['aisle_2_y']
+    a2_mid = (a2_lo + a2_hi) / 2.0
+    a1_lo, a1_hi = derived['aisle_1_y']
+
+    return {
+        'name': 'track_people',
+        'description': ('Pedestrians on the generated test track: one in the '
+                        'open bay where a re-route is possible, one in the '
+                        'scored aisle where it is not'),
+        'people': [
+            # P1. In the open bay, on the vehicle's line out of goods_in, with
+            # room either side for it to pass once this person stops.
+            {'name': 'walker_bay', 'x': 4.6, 'y': a2_mid, 'yaw': 3.14159,
+             'wander': {'speed': 0.9, 'range': 3.0}},
+            # P2. Inside the 1.000 m aisle. There is no gap here for a vehicle
+            # of this size, so a vehicle that tries to squeeze past is wrong and
+            # one that waits is right.
+            {'name': 'walker_aisle', 'x': 12.0, 'y': a2_mid, 'yaw': 0.0,
+             'wander': {'speed': 0.7, 'range': 2.5}},
+            # A third on the wide aisle, so the run is not two set pieces with
+            # nothing else moving.
+            {'name': 'walker_wide', 'x': 10.0, 'y': (a1_lo + a1_hi) / 2.0,
+             'yaw': 3.14159, 'wander': {'speed': 1.1, 'range': 4.0}},
+            # Stationary, for the same reason the AWS scenario has one: a person
+            # who does not move is the case the motion test cannot tell from
+            # structure, and leaving it out flatters the tracker.
+            {'name': 'worker_standing', 'x': 3.0, 'y': 9.5, 'yaw': 3.14159},
+        ],
+    }
 
 
 MASK_RES = 0.05            # m/cell, matches the SLAM map
@@ -400,6 +494,24 @@ def main():
         '# recorded in V-25.\n'
         + yaml.safe_dump(meta, sort_keys=False))
     print(f'wrote {maps / "keepout_mask_test_track.yaml"}  ({mw} x {mh} cells, all free)')
+
+    tpgm, tmeta, (tw, th) = build_truth_map(derived)
+    (PKG / 'maps' / 'test_track_truth.pgm').write_bytes(tpgm)
+    (PKG / 'maps' / 'test_track_truth.yaml').write_text(
+        '# GENERATED by amr_sim/tools/generate_test_track.py from the same zone\n'
+        '# table as the world, so it cannot disagree with the geometry it\n'
+        '# describes. MEASUREMENT ONLY: the ground truth map scores results and\n'
+        '# must never reach the control path.\n'
+        + yaml.safe_dump(tmeta, sort_keys=False))
+    print(f'wrote {PKG / "maps" / "test_track_truth.yaml"}  ({tw} x {th} cells)')
+
+    scen = PKG / 'scenarios' / 'track_people.yaml'
+    scen.write_text(
+        '# GENERATED by amr_sim/tools/generate_test_track.py alongside the\n'
+        '# world. Spawn points are placed against the zones, so P1 lands where a\n'
+        '# re-route is possible and P2 where it is not. Do not hand-edit.\n'
+        + yaml.safe_dump(build_scenario(derived), sort_keys=False))
+    print(f'wrote {scen}')
 
     for name, w, origin in zones(spec):
         print(f'  {name:<10} {w:.3f} m   {origin}')

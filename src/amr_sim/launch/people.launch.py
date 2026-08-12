@@ -14,7 +14,8 @@ import yaml
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, OpaqueFunction
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import (LaunchConfiguration, PathJoinSubstitution,
+                                  TextSubstitution)
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
@@ -37,9 +38,19 @@ def spawn_people(context, *_, **__):
         parameters=[{'use_sim_time': True, 'world': world}]))
     # The true floorplan, latched for display and for scoring the SLAM map.
     # Same namespace and same rule as the pose oracle: evaluation only.
+    # THE TRUTH MAP BELONGS TO THE WORLD. Both this publisher and the
+    # pedestrian driver default to the AWS building, and the driver plans its
+    # walkers' routes against whatever map it is given, so on a different world
+    # the people navigate a coordinate space that does not overlap the one they
+    # are standing in. Observed on the test track: routes checked against
+    # x[-7.5,7.5] y[-11.0,11.0] while the track is x[0,24] y[0,12].
+    truth_map = PathJoinSubstitution(
+        [share, 'maps',
+         [LaunchConfiguration('truth_map'), TextSubstitution(text='.yaml')]]
+    ).perform(context)
     nodes.append(Node(
         package='amr_sim', executable='truth_map_publisher', output='screen',
-        parameters=[{'use_sim_time': True}]))
+        parameters=[{'use_sim_time': True, 'map_file': truth_map}]))
 
     # Anyone who moves needs a cmd_vel bridge and a driver. The key used to be
     # `path`, from the fixed-lane era, and after the switch to `wander` this
@@ -59,7 +70,8 @@ def spawn_people(context, *_, **__):
             parameters=[{'use_sim_time': True}]))
         nodes.append(Node(
             package='amr_sim', executable='pedestrian_driver', output='screen',
-            parameters=[{'use_sim_time': True, 'scenario_path': path}]))
+            parameters=[{'use_sim_time': True, 'scenario_path': path,
+                         'map_file': truth_map}]))
 
     for person in spec.get('people', []):
         nodes.append(Node(
@@ -85,5 +97,8 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'world', default_value='warehouse',
             description='world name, used to find the ground truth pose feed'),
+        DeclareLaunchArgument(
+            'truth_map', default_value='warehouse_truth',
+            description='ground truth map for this world, under amr_sim/maps'),
         OpaqueFunction(function=spawn_people),
     ])
