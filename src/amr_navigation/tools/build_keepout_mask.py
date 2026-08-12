@@ -48,7 +48,6 @@ Usage:
 
 import argparse
 import importlib.util
-import math
 import sys
 from pathlib import Path
 

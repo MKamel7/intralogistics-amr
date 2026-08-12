@@ -2,7 +2,6 @@ name: CI
 
 on:
   push:
-    branches: [main]
   pull_request:
 
 jobs:
@@ -20,8 +19,19 @@ jobs:
         run: pip install pytest pyyaml ruff
       - name: Lint
         run: ruff check src
-      - name: Platform provenance gate
-        run: python3 -m pytest src/amr_description/test -q
+      # EVERY GENERATOR GATE, not just the provenance one. These four files
+      # need no ROS and run in seconds, and between them they assert that the
+      # platform specs keep their sources, that the protective fields match
+      # their generator, that the Nav2 configuration matches its generator and
+      # template, and that the mission cannot widen the envelope the generator
+      # derived. Three of the four exist because a real fault got through.
+      - name: Generator and provenance gates
+        run: |
+          python3 -m pytest -q \
+            src/amr_description/test/test_platform_spec.py \
+            src/amr_safety/test/test_fields.py \
+            src/amr_navigation/test/test_nav2_config.py \
+            src/amr_mission/test/test_transport_limits.py
 
   build:
     name: colcon build and test
