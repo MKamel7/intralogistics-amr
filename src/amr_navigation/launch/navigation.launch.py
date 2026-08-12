@@ -132,8 +132,16 @@ def generate_launch_description():
     # file carries only a filename so it stays readable. Resolved here against
     # the installed maps directory.
     maps = PathJoinSubstitution([share, 'maps'])
+    # THE MASK BELONGS TO THE WORLD, not to the package. It is authored against
+    # a specific surveyed building, so running a different world with the wrong
+    # mask would impose forbidden areas in places that do not exist. Selected by
+    # name, and the file has to be there: a filter that declares a mask it never
+    # receives runs the vehicle with no keepout zones at all and says so only in
+    # a WARN. See V-25.
     extra = {'filter_mask_server': [{
-        'yaml_filename': PathJoinSubstitution([maps, 'keepout_mask.yaml'])}]}
+        'yaml_filename': PathJoinSubstitution(
+            [maps, [LaunchConfiguration('keepout_mask'),
+                    TextSubstitution(text='.yaml')]])}]}
 
     def make(entries):
         return [
@@ -202,5 +210,7 @@ def generate_launch_description():
         # Must match the platform robot.launch.py was given. run_stack.sh
         # passes the same value to both.
         DeclareLaunchArgument('platform', default_value='mir250_class'),
+        # Must match the world. run_stack.sh pairs them.
+        DeclareLaunchArgument('keepout_mask', default_value='keepout_mask'),
         *nodes,
     ])

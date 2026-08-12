@@ -31,6 +31,16 @@
 #   tools/run_stack.sh --run mission --classify   also attribute safety stops
 #   tools/run_stack.sh --no-gate              measure anyway if preflight fails
 #   tools/run_stack.sh --platform mp400_class the second platform
+#   tools/run_stack.sh --test-track            the datasheet-sized test track
+#   tools/run_stack.sh --world <name>          any world in amr_sim/worlds
+#
+# TWO WORLDS, DIFFERENT JOBS. The default is the AWS RoboMaker warehouse: a
+# found building nobody sized for this vehicle, which is the honest robustness
+# case. `--track` selects the generated test track whose aisle widths ARE the
+# corridor figures the platform datasheet publishes, so a cycle measures the
+# vehicle against its own manufacturer's claims instead of against whatever
+# geometry happened to be in the asset pack. Both get run; neither replaces the
+# other.
 #
 # THE PLATFORM IS PASSED TO EVERY LAUNCH THAT NEEDS IT, and that is the point of
 # having it here. The robot description, the protective fields and the whole
@@ -45,6 +55,11 @@ cd "$REPO"
 CAMERAS=true
 RVIZ=true
 PLATFORM=mir250_class
+WORLD=warehouse
+TRACK_WORLD=false
+KEEPOUT=keepout_mask
+SPAWN_X=2.0
+SPAWN_Y=-1.0
 TASK=none
 CLASSIFY=false
 TRACK=false
@@ -56,6 +71,8 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --cameras) [ "${2:-}" = off ] && CAMERAS=false; shift 2 ;;
     --platform) PLATFORM="${2:?--platform needs a name}"; shift 2 ;;
+    --world)   WORLD="${2:?--world needs a name}"; TRACK_WORLD=false; shift 2 ;;
+    --test-track) TRACK_WORLD=true; shift ;;
     --rviz)    [ "${2:-}" = off ] && RVIZ=false; shift 2 ;;
     --run)     TASK="${2:-none}"; shift 2 ;;
     --cycles)  CYCLES="${2:-2}"; shift 2 ;;
@@ -104,18 +121,29 @@ wait_active() {  # node, timeout seconds
   done
 }
 
+if [ "$TRACK_WORLD" = true ]; then
+  WORLD="test_track.$PLATFORM"
+  # The open bay, west of the racking, so the vehicle starts with room and a
+  # slow departure is its own fault rather than the building's.
+  SPAWN_X=2.5
+  SPAWN_Y=6.0
+  KEEPOUT=keepout_mask_test_track
+fi
+
 # FAIL BEFORE LAUNCHING, not thirty seconds in. A platform whose generated
 # configurations are missing brings the stack up far enough to look like it is
 # working and then leaves a lifecycle node stuck in unconfigured, which reports
 # only as "failed to change state".
 for f in "src/amr_navigation/config/nav2.$PLATFORM.yaml" \
          "src/amr_safety/config/collision_monitor.$PLATFORM.yaml" \
-         "src/amr_description/config/platforms/$PLATFORM.yaml"; do
+         "src/amr_description/config/platforms/$PLATFORM.yaml" \
+         "src/amr_sim/worlds/$WORLD.sdf"; do
   [ -f "$f" ] || { echo "no $f; is $PLATFORM a platform, and has it been generated?"; exit 2; }
 done
 
-say "starting: platform=$PLATFORM cameras=$CAMERAS rviz=$RVIZ task=$TASK"
-ros2 launch amr_bringup robot.launch.py platform:=$PLATFORM \
+say "starting: platform=$PLATFORM world=$WORLD cameras=$CAMERAS rviz=$RVIZ task=$TASK"
+ros2 launch amr_bringup robot.launch.py platform:=$PLATFORM world:=$WORLD \
+     x:=$SPAWN_X y:=$SPAWN_Y \
      gui:=true rviz:=$RVIZ cameras:=$CAMERAS > "$RUN/robot.log" 2>&1 &
 
 wait_active /slam_toolbox 200 && say "slam active" || { say "SLAM FAILED"; exit 1; }
@@ -132,7 +160,8 @@ fi
 say "collision_monitor active"
 
 sleep 10
-ros2 launch amr_navigation navigation.launch.py platform:=$PLATFORM > "$RUN/nav.log" 2>&1 &
+ros2 launch amr_navigation navigation.launch.py platform:=$PLATFORM \
+    keepout_mask:=$KEEPOUT > "$RUN/nav.log" 2>&1 &
 
 # THE KEEPOUT FILTER GETS THE SAME EXPLICIT RETRY THE MONITOR GETS, and for the
 # same reason: when it fails it does so silently. filter_mask_server reads a map
