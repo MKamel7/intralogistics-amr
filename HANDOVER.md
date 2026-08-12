@@ -2,6 +2,15 @@
 
 ## Overnight session, 13 August 2026. Read this first
 
+**Start with `docs/findings.md`.** It is the short version of the
+validation record and the thing worth showing anyone.
+
+**The track already produced a result: V-26.** The MiR250 is 2.1 mm too
+large to rotate in the 1.000 m corridor its own datasheet claims, because
+MiR quote that figure with a dynamic footprint and this stack plans with a
+static one. That is a real finding about a published claim, arrived at by
+arithmetic, and it is exactly what the track was built to produce.
+
 **Nothing is broken. 145 tests pass, ruff is clean, the MiR250 deliverable is
 untouched and was measured at 5 of 5 cycles the previous evening.**
 
