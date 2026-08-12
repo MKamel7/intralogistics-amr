@@ -28,6 +28,7 @@
 #   tools/run_stack.sh --cameras off          fleet tier, cheaper
 #   tools/run_stack.sh --run survey           bring up, then survey
 #   tools/run_stack.sh --run mission          bring up, then transport task
+#   tools/run_stack.sh --run survey_mission   survey first, then transport
 #   tools/run_stack.sh --run mission --classify   also attribute safety stops
 #   tools/run_stack.sh --no-gate              measure anyway if preflight fails
 #   tools/run_stack.sh --platform mp400_class the second platform
@@ -241,6 +242,27 @@ case "$TASK" in
     ros2 run amr_navigation survey_runner --ros-args -p use_sim_time:=true \
         > "$RUN/survey.log" 2>&1
     say "survey exited $?" ;;
+  survey_mission)
+    # SURVEY, THEN TRANSPORT, in one bring-up.
+    #
+    # The vehicle plans only on floor it has surveyed, `allow_unknown: false`,
+    # which V-16 argued for at length and which is the right decision. The
+    # consequence is that a transport goal beyond the opening scans is refused
+    # before it is attempted:
+    #
+    #   Goal Coordinates of(17.000000, 2.375000) was outside bounds
+    #
+    # The AWS warehouse tolerates a cold mission because its stations sit inside
+    # what the vehicle can see from its start pose. The test track is 24 m long
+    # and its dispatch station is not. So the track is surveyed first, in the
+    # same run, against the same map, rather than loosening the planner.
+    ros2 run amr_navigation survey_runner --ros-args -p use_sim_time:=true \
+        > "$RUN/survey.log" 2>&1
+    say "survey exited $?"
+    sleep 5
+    ros2 launch amr_mission transport.launch.py cycles:=$CYCLES \
+        platform:=$PLATFORM stations_file:="$STATIONS" > "$RUN/mission.log" 2>&1
+    say "mission exited $?" ;;
   mission)
     ros2 launch amr_mission transport.launch.py cycles:=$CYCLES \
         platform:=$PLATFORM stations_file:="$STATIONS" > "$RUN/mission.log" 2>&1
