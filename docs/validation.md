@@ -1275,43 +1275,72 @@ It also means the existing open item about cycle time variance, 70 to 176 s on
 the MiR250, may be the same phenomenon seen faintly on a platform where it does
 not yet break anything.
 
-### Hypothesis 2, the scan plane height: NOT TESTED, and the best candidate
+### Hypothesis 2, the scan plane height: TESTED AND REFUTED
 
-`scanner_mount_height` is 0.110 m on the MP-400 and 0.150 m on the MiR250. The
-MP-400's figure was taken from its manual's Z position for ITS OWN scanners and
-carried over to the nanoScan3 as an estimate, which V-23 records.
+`scanner_mount_height` is 0.110 m on the MP-400 against the MiR250's 0.150 m,
+and V-23 records that the 0.110 was taken from the manual's Z position for the
+MP-400's OWN scanners. Every run here used `--cameras off`, so the merged 2D
+scan at that height was the ONLY thing marking obstacles, and a plane 40 mm
+lower in a warehouse sees pallet feet and rack footplates that a higher one
+passes over. It was the best available candidate.
 
-Every run above used `--cameras off`, so the merged 2D scan at that height was
-the ONLY thing marking obstacles into the costmap. A scan plane 40 mm lower in a
-warehouse sees a different world: pallet feet, rack footplates and floor clutter
-that a 150 mm plane passes over. More marked cells means longer routes, more
-protective stops and more positions from which the planner refuses, which is the
-whole observed signature including the instability.
+The spec was set to 0.150 m, everything regenerated from it, and five cycles
+run.
 
-It is testable exactly as hypothesis 1 was, by putting 0.150 into the MP-400
-spec and re-running, and it is worth running several cycles given the variance.
-It has not been done. Do not record it as the cause until it has.
+    1 of 5 cycles, distances 68.0, 41.6, 39.8, 51.6, 15.6 m
+
+Identical to the baseline's 1 of 5, and the distances did not fall towards the
+MiR250's 19.1 m. Refuted. The spec is back at 0.110 m, which at least has a
+real anchor behind it.
+
+### Where it actually fails: the DISPATCH leg
+
+Four hypotheses are now dead, and the useful result came from reading what was
+already in the logs rather than from another run. Across all three MP-400 runs,
+thirteen cycles:
+
+| leg | failures | leg time when it does arrive |
+|---|---|---|
+| goods_in | 3, and 2 of those after the vehicle was already stuck | 25 to 56 s |
+| dispatch | 6 | 45 to 158 s |
+
+    MiR250 control, same two legs: goods_in 24 to 32 s, dispatch 24 to 48 s,
+    ten legs, no failures
+
+This is not a vehicle that is globally slower or globally lost. It reaches
+`goods_in` at (-1.58, -5.45) reliably and at a time comparable to the MiR250,
+and it fails approaching `dispatch` at (-0.83, 2.65). That also places the very
+first "Start occupied" refusal, at (-0.67, 3.33), just 0.70 m from the dispatch
+station.
+
+It explains why the two parameter experiments changed nothing: inflation radius
+and scan plane height are global, and the fault is local to one approach.
+
+**The leading candidate is now the station approach poses**, which were authored
+against the MiR250 and carry an approach heading the goal checker enforces to
+0.25 rad. A vehicle with a different footprint, a different circumscribed
+radius and a smaller inflation radius has to reach the same pose in the same
+pocket of floor. That has not been tested. `tools/track_goal.py` on a failing
+dispatch leg against the MiR250's successful one is the measurement, and it is
+what the existing open item on cycle time variance already recommends.
 
 ### What has NOT been tested
 
-None of these has been measured. They are recorded so the next person does not
-mistake them for conclusions.
+Recorded so the next person does not mistake them for conclusions.
 
-    the scan plane height above, which is the leading candidate.
+    the dispatch approach pose itself, which is the leading candidate above.
     the local costmap window, 5 m against 6 m, and the footprint itself.
     whether the costmap is contaminated, and by what. "Start occupied" in 1.2 m
       of clear floor means something marked that cell. The candidates are the
       camera voxel layer, the keepout filter, and a localisation jump putting
       the reported pose somewhere the vehicle is not.
-    whether the 32 and 39 protective stops in cycles 2 and 3 are cause or
-      consequence. The monitor state accounting printed "clear 134%" for cycle
-      2, which is impossible and is its own small bug.
-    whether the station approach poses, authored for the MiR250, suit a vehicle
-      with a different footprint and a smaller inflation radius.
+    whether the protective stops are cause or consequence. The monitor state
+      accounting printed "clear 134%" for one cycle, which is impossible and is
+      its own small bug.
 
-The method that has worked on every hard fault in this project is to measure the
-discriminating quantity before building anything. Nothing here has been
-measured yet.
+Four hypotheses have been tested and refuted here and none of them was the
+armchair favourite at the time it was tested. That is the method working, and it
+is worth saying plainly that the cause is still unknown.
 
 ---
 

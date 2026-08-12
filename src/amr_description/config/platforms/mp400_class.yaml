@@ -73,11 +73,13 @@
 # provenance so the next reader can see they were considered and why they were
 # not taken.
 #
-# NOT YET DRIVEN. config/nav2.yaml still carries MiR250 derived literals for the
-# footprint, speed limits and inflation radius. Until that file is generated
-# from the platform spec the way collision_monitor.yaml already is, running this
-# platform would give it a correct body and a navigation stack tuned for a
-# vehicle 200 mm wider. See the note at the end of this file.
+# DRIVEN, BUT NOT VALIDATED. The navigation stack is now generated from this
+# file, as the protective fields already were, so the vehicle no longer gets a
+# correct body and another machine's tuning. It brings up, passes preflight and
+# drives, and it completes 1 of 5 transport cycles against a same-day MiR250
+# control of 5 of 5, driving two to four times the distance between the same two
+# stations. The cause is open. See V-25 in docs/validation.md, and do not
+# describe this platform as working.
 
 platform: mp400_class
 

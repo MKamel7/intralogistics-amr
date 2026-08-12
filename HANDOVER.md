@@ -86,12 +86,20 @@ cover the racking, so the cameras are not load-bearing for that case.
    same two stations and is wildly variable, 36 to 72 m per cycle against the
    MiR250's 15 to 21 m.
 
-   V-25 has the evidence. Two hypotheses are already refuted, including the
-   obvious one that it wedges in gaps too small for it, which the clearance
-   measurement kills. The leading untested candidate is the SCAN PLANE HEIGHT:
-   0.110 m against the MiR250's 0.150 m, and with `--cameras off` that scan is
-   the only thing marking obstacles. Test it by putting 0.150 into the spec and
-   re-running several cycles. Do not write it up as the cause until you have.
+   V-25 has the evidence. FOUR hypotheses are tested and refuted: that it wedges
+   in gaps too small for it, the self filter, the inflation radius and the scan
+   plane height. The cause is still unknown.
+
+   What is localised is WHERE it fails. Across thirteen cycles it reaches
+   `goods_in` reliably in a time comparable to the MiR250 and fails approaching
+   `dispatch`, six times against three. The first "Start occupied" refusal was
+   0.70 m from the dispatch station. Both parameter experiments changed global
+   settings, which is probably why neither moved anything.
+
+   Start with `tools/track_goal.py` on a failing dispatch leg against the
+   MiR250's successful one, and look at the approach pose in stations.yaml,
+   which was authored for the MiR250 and is enforced to 0.25 rad by the goal
+   checker.
 
    Two smaller things from the same work:
 
