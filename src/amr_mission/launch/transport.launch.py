@@ -5,12 +5,69 @@ Expects the vehicle, navigation and the safety layer to be up already. It is a
 CLIENT of navigation, not a replacement for it, so starting it against a stack
 that is not running simply times out waiting for the action server rather than
 doing anything surprising.
+
+THE ACCELERATION LIMITS COME FROM THE PLATFORM SPEC, and they did not used to.
+`transport_task.py` declared them with the MiR250's 0.3 and 1.0 m/s2 as
+parameter defaults, under a comment saying both came from the platform spec.
+Nothing passed them, so the default was the value, and the MP-400 drove its
+first five cycles at a fifth of its own rating with every log line reporting
+the MiR250's figure. It was not unsafe, it was slower than the vehicle can go
+and it made the cycle times meaningless as a comparison.
+
+This is the same fault as the one that made the whole Nav2 configuration
+platform-specific, in a place nothing had looked: a number that is a property
+of the vehicle, written where only one vehicle existed.
 """
 
+from pathlib import Path
+
+import yaml
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+
+
+def accel_limits(platform, spec_dir=None):
+    """The laden and unladen acceleration limits for a platform, in m/s2.
+
+    A plain function taking a plain name, so it can be tested without a launch
+    context. That matters more than it looks: the fault this replaces was a
+    default value nothing overrode, which is exactly the kind of thing that is
+    invisible until something asserts on it.
+    """
+    root = Path(spec_dir) if spec_dir else (
+        Path(get_package_share_directory('amr_description'))
+        / 'config' / 'platforms')
+    spec_file = root / f'{platform}.yaml'
+    if not spec_file.is_file():
+        raise RuntimeError(
+            f'no platform spec at {spec_file}. The transport task takes its '
+            f'acceleration limits from the spec and there is deliberately no '
+            f'fallback: driving one platform on another\'s limits is what the '
+            f'platform argument exists to prevent.')
+    values = yaml.safe_load(spec_file.read_text())['values']
+    return float(values['max_linear_accel']), float(values['max_linear_accel_unladen'])
+
+
+def make_node(context):
+    laden, unladen = accel_limits(LaunchConfiguration('platform').perform(context))
+
+    return [Node(
+        package='amr_mission', executable='transport_task',
+        name='transport_task', output='screen',
+        parameters=[{
+            'use_sim_time': LaunchConfiguration('use_sim_time'),
+            'cycles': LaunchConfiguration('cycles'),
+            'handling_time_s': LaunchConfiguration('handling_time_s'),
+            # WITH MAXIMUM PAYLOAD and unladen respectively. On a platform
+            # whose manual publishes a single acceleration rating, as the
+            # MP-400's does, these are equal and the switching is a no-op,
+            # which is the correct behaviour rather than a special case.
+            'accel_laden': laden,
+            'accel_unladen': unladen,
+        }])]
 
 
 def generate_launch_description():
@@ -18,12 +75,8 @@ def generate_launch_description():
         DeclareLaunchArgument('cycles', default_value='3'),
         DeclareLaunchArgument('handling_time_s', default_value='5.0'),
         DeclareLaunchArgument('use_sim_time', default_value='true'),
-        Node(
-            package='amr_mission', executable='transport_task',
-            name='transport_task', output='screen',
-            parameters=[{
-                'use_sim_time': LaunchConfiguration('use_sim_time'),
-                'cycles': LaunchConfiguration('cycles'),
-                'handling_time_s': LaunchConfiguration('handling_time_s'),
-            }]),
+        # Must match the platform the stack was brought up with. run_stack.sh
+        # passes the same value to every launch that needs it.
+        DeclareLaunchArgument('platform', default_value='mir250_class'),
+        OpaqueFunction(function=make_node),
     ])

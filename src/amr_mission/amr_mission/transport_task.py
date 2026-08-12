@@ -15,13 +15,21 @@ no path to the wheels of its own.
 
 WHAT A LOAD ACTUALLY CHANGES
 
-Carrying 250 kg is not a flag on a state machine, it changes the vehicle's
-dynamics, and the platform spec already carries both figures. The sheet gives
-0.3 m/s2 as the acceleration limit WITH MAXIMUM PAYLOAD, which is a
-load-retention number: it exists so the load does not slide. Unladen the vehicle
-is allowed 1.0 m/s2. So this node switches the acceleration limit when it picks
-up and puts down, which is the honest model of what a payload means to a
-vehicle.
+Carrying a payload is not a flag on a state machine, it changes the vehicle's
+dynamics, and the platform spec carries both figures. On the MiR250 the sheet
+gives 0.3 m/s2 as the acceleration limit WITH MAXIMUM PAYLOAD, which is a
+load-retention number: it exists so the load does not slide, and unladen that
+vehicle is allowed 1.0 m/s2. So this node switches the acceleration limit when
+it picks up and puts down, which is the honest model of what a payload means to
+a vehicle.
+
+THOSE TWO FIGURES ARE PASSED IN, and the parameter defaults below are NOT the
+source. They used to be read as though they were: the defaults carried the
+MiR250 numbers under a comment saying they came from the spec, nothing passed
+them, and the MP-400 ran five cycles at 0.3 and 1.0 m/s2 against its own
+published rating of 2.4. transport.launch.py now reads them from the spec for
+the platform the stack was brought up with. The defaults here are what the node
+uses if it is run bare, and they are the MiR250's.
 
 The limit is applied to the VELOCITY SMOOTHER, not to the controller. See
 set_payload: applying it to MPPI's trajectory sampler instead destroyed the
@@ -104,7 +112,10 @@ class TransportTask(Node):
         self.cycles_wanted = self.declare_parameter('cycles', 3).value
         self.dwell = self.declare_parameter('handling_time_s', 5.0).value
         self.leg_timeout = self.declare_parameter('leg_timeout_s', 240.0).value
-        # Both from the platform spec. See the note at the top of this file.
+        # PASSED IN from the platform spec by transport.launch.py. These
+        # defaults are the MiR250's and apply only when this node is run bare;
+        # see the note at the top of this file about what happened when they
+        # were treated as the source.
         self.accel_laden = self.declare_parameter('accel_laden', 0.3).value
         self.accel_unladen = self.declare_parameter('accel_unladen', 1.0).value
 

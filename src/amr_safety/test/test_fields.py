@@ -15,10 +15,12 @@ import yaml
 
 PKG = Path(__file__).resolve().parents[1]
 GEN = PKG / 'tools' / 'generate_fields.py'
-CFG = PKG / 'config' / 'collision_monitor.yaml'
-SPEC = (Path(__file__).resolve().parents[2]
-        / 'amr_description' / 'config' / 'platforms' / 'mir250_class.yaml')
-SPEC_ALL = yaml.safe_load(SPEC.read_text())
+SPEC_DIR = (Path(__file__).resolve().parents[2]
+            / 'amr_description' / 'config' / 'platforms')
+
+
+def cfg_path(name):
+    return PKG / 'config' / f'collision_monitor.{name}.yaml'
 
 
 def _load_generator():
@@ -31,14 +33,35 @@ def _load_generator():
 gen = _load_generator()
 
 
-@pytest.fixture(scope='module')
-def platform():
-    return yaml.safe_load(SPEC.read_text())['values']
+# EVERY PLATFORM, NOT JUST THE FIRST ONE. These assert properties a protective
+# field must have, and those properties are not properties of the MiR250. When
+# a second platform arrived it got a field set nothing checked, which is the
+# same shape of hole the platform spec tests had before they were parameterised.
+@pytest.fixture(params=sorted(p.stem for p in SPEC_DIR.glob('*.yaml')),
+                scope='module')
+def platform_name(request):
+    return request.param
 
 
 @pytest.fixture(scope='module')
-def cfg():
-    return yaml.safe_load(CFG.read_text())['collision_monitor']['ros__parameters']
+def spec_all(platform_name):
+    return yaml.safe_load((SPEC_DIR / f'{platform_name}.yaml').read_text())
+
+
+@pytest.fixture(scope='module')
+def platform(spec_all):
+    return spec_all['values']
+
+
+@pytest.fixture(scope='module')
+def cfg(platform_name):
+    path = cfg_path(platform_name)
+    assert path.is_file(), (
+        f'no generated field set for platform {platform_name}. Every platform '
+        f'spec must have one: run tools/generate_fields.py --platform '
+        f'{platform_name}. A platform without its own fields would be launched '
+        f'with another vehicle\'s.')
+    return yaml.safe_load(path.read_text())['collision_monitor']['ros__parameters']
 
 
 def _polys(cfg, group):
@@ -231,7 +254,7 @@ def test_linear_bands_cover_the_full_angular_range(platform, cfg):
             assert poly['theta_max'] >= w_max - 1e-9, name
 
 
-def test_creep_field_fits_the_dynamic_corridor(platform, cfg):
+def test_creep_field_fits_the_dynamic_corridor(platform, cfg, spec_all):
     """THE DEADLOCK REGRESSION TEST.
 
     A single all-round field covering every rotation rate reached 0.766 m to
@@ -246,7 +269,7 @@ def test_creep_field_fits_the_dynamic_corridor(platform, cfg):
     So the field that applies while creeping MUST fit the corridor, or the
     vehicle cannot start.
     """
-    corridor_half = SPEC_ALL['validation_targets']['corridor_width_dynamic'] / 2.0
+    corridor_half = spec_all['validation_targets']['corridor_width_dynamic'] / 2.0
     # The band that applies while creeping essentially straight, which is the
     # state every journey has to pass through on its way out of rest.
     poly = next(p for p in _rotation_bands(cfg, 'protective').values()
@@ -327,22 +350,24 @@ def test_the_source_is_the_merged_scan_and_not_the_classifier(cfg):
             f'classifier output; safety must not depend on it')
 
 
-def test_generated_file_is_current(platform, tmp_path):
+def test_generated_file_is_current(platform_name, tmp_path):
     """The config is generated. If someone edits it by hand, say so."""
     out = tmp_path / 'regenerated.yaml'
     import subprocess
     import sys
     subprocess.run(
-        [sys.executable, str(GEN), '--out', str(out)],
+        [sys.executable, str(GEN), '--platform', platform_name,
+         '--out', str(out)],
         check=True, capture_output=True)
     fresh = yaml.safe_load(out.read_text())
-    current = yaml.safe_load(CFG.read_text())
+    current = yaml.safe_load(cfg_path(platform_name).read_text())
     assert fresh == current, (
-        'config/collision_monitor.yaml differs from what the generator '
-        'produces; it was hand-edited, or the spec changed without regenerating')
+        f'config/collision_monitor.{platform_name}.yaml differs from what the '
+        'generator produces; it was hand-edited, or the spec changed without '
+        'regenerating')
 
 
-def test_starting_from_rest_is_not_self_blocking(platform, cfg):
+def test_starting_from_rest_is_not_self_blocking(platform, cfg, spec_all):
     """THE DEADLOCK CLASS, asserted directly rather than by proxy.
 
     Both deadlocks so far had the same shape. The vehicle starts from rest. The
@@ -375,7 +400,7 @@ def test_starting_from_rest_is_not_self_blocking(platform, cfg):
     # cruising, by exactly the distance the corners sweep, and demanding
     # otherwise would forbid a physically correct allowance. What matters is
     # that the field still fits the aisle the vehicle claims to work in.
-    corridor_half = SPEC_ALL['validation_targets']['corridor_width_dynamic'] / 2.0
+    corridor_half = spec_all['validation_targets']['corridor_width_dynamic'] / 2.0
     rest_side = max(abs(y) for _, y in rest_pts)
     assert rest_side <= corridor_half + 1e-9, (
         f'crawling out of rest gives a field {rest_side:.3f} m to each side in '

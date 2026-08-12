@@ -937,6 +937,384 @@ could simply be widened, which forced the number to be looked at.
 
 ---
 
+## V-23. The MP-400 spec cited a source that describes a different sensor
+
+The second platform arrived with five failing tests and a handover note saying
+they were mechanical errors in estimated values. Three of the five were
+something else, and the difference matters more than the fix.
+
+**The scanner mounting positions were taken from the wrong sensor.** The spec
+carried `scanner_mount_x` 0.230 m and `scanner_mount_y` 0.000 m, labelled
+`datasheet` against MP-400 manual section 1.3.3, which locates a front scanner
+at X 230 mm and a rear one at X -354 mm, both on the centre line. Those figures
+are real and correctly transcribed. They are also the positions of **the
+MP-400's own laser scanners**, the unrated ones the same file says at length
+this project deliberately does not fit, on the grounds that the whole safety
+concept rests on a rated device with a published response time.
+
+So the strongest looking provenance in the sensor block, a figure given to the
+millimetre in an operating manual, was describing a sensor that is not on the
+vehicle. It survived because the label said `datasheet` and the citation
+checked out; nobody asked whether the cited row was about the same part.
+
+It was not cosmetic. A centre-line pair and a corner pair are different safety
+concepts, and `urdf/sensors.xacro`, the self filter and `generate_fields.py`
+are all built for the corner pair, mirroring one mount through four sign
+combinations. With `scanner_mount_y` at zero the description places both
+scanners on top of each other on the centre line at plus and minus 230 mm,
+facing 45 degrees off axis, which is not a machine. The pair is now mounted as
+it is on the MiR250 build, optics 5 mm proud of the chamfered corner, and both
+values are labelled `estimated`, which is what they are. The manual's LS1 and
+LS2 rows are kept in the provenance so the next reader can see they were
+considered and why they were not taken.
+
+**Three more values in the same block contradicted the archived SICK sheet**
+while labelled `datasheet`: response time 0.05 s against a published 70 ms,
+angular resolution 0.10 deg against 0.17 deg, and warning field range 40 m
+against 10 m. Only the first of those failed a test, because
+`test_scanner_update_rate_matches_response_time` compares it against the update
+rate. The other two were internally consistent and would have passed
+indefinitely: `scanner_samples` was 2750, which is exactly 275 / 0.10, so the
+consistency check confirmed a value derived from a wrong input. The sensor
+block is a copy of the MiR250 one, and it was corrupted in the copying.
+
+**The corridor targets were not published at all.** `corridor_width_90_turn`
+was 0.850 m against a body diagonal of 0.813 m, which is what
+`test_robot_fits_the_corridor_it_claims` caught. The MP-400 manual quotes no
+corridor or doorway widths; it is an operating manual and gives dimensions,
+ratings and sensor positions, not application envelopes. All four figures were
+invented and sat in a block whose header calls it published figures.
+
+They are now derived, and the derivation is stated in the spec: the two
+platforms carry the same scanners, the same protective field supplement and the
+same safety configuration, so the clearance that configuration demands around
+the body is taken as the same and only the body changes.
+
+| target | MiR250, published | clearance implied | MP-400, derived |
+|---|---|---|---|
+| corridor, default footprint | 1.350 m | +0.770 m on width | 1.329 m |
+| corridor, dynamic footprint | 1.000 m | +0.420 m on width | 0.979 m |
+| doorway, default footprint | 1.300 m | +0.720 m on width | 1.279 m |
+| corridor, 90 degree turn | 0.950 m | -0.038 m on diagonal | 0.775 m |
+
+**Status: these four are estimates of a target, which is weaker than anything
+else in this file, and they must not be quoted as manufacturer figures.**
+`corridor_width_dynamic` is read by `generate_fields.py` to size a protective
+field, so it is load bearing; the generator derives a 1.003 rad/s rotation
+threshold from it on this platform. Both it and `self_filter_margin`, carried
+across from the MiR250 measurement, need their own measurement on this vehicle
+before the MP-400 is run in anger.
+
+The two remaining failures were what the handover described: a provenance line
+reading only "not published", and a false positive from the reasoning-marker
+heuristic in `test_platform_spec.py`, whose own comment says to widen the marker
+list rather than reword the prose. It was widened.
+
+The pattern is the same one as V-22. A number was carried because its source
+looked authoritative, and the check that would have caught it, asking what the
+cited row is actually about, was never made.
+
+---
+
+## V-24. Generating the Nav2 configuration, and a diagnostic that lied about the safety layer
+
+The second platform could not be run until the navigation configuration was
+generated from the platform spec rather than hand-written against the MiR250.
+The reason is worth stating precisely, because it is not "the numbers were
+wrong". Every number in `nav2.yaml` was right, for a vehicle 200 mm wider than
+the one it would have been driving.
+
+`config/nav2.yaml` is now `config/nav2.yaml.in`, a template that keeps every
+comment, plus `tools/generate_nav2.py`, which substitutes what depends on the
+vehicle and writes `nav2.<platform>.yaml`. A test asserts the committed files
+match the generator, comparing TEXT rather than parsed YAML: most of that file
+is reasoning, and a parsed comparison would let someone rewrite the reasoning
+while the numbers still matched.
+
+### What is derived, and what deliberately is not
+
+A number is derived only if it is a function of the vehicle. Critic weights,
+server timeouts, plugin choices and the ranges of sensors both platforms share
+are not, and deriving them from the chassis would be numerology wearing
+provenance as a disguise. Three commissioning constants are stated once in the
+generator instead of being spread through the file: the commissioned speed
+fraction, the ordinary-braking cap, and the inflation clearance band.
+
+| parameter | MiR250 | MP-400 | derivation |
+|---|---|---|---|
+| footprint | 810 x 590 mm | 600 x 569 mm | scanner optical centres |
+| inflation radius | 0.5510 m | 0.4634 m | circumscribed radius + 0.05 m |
+| vx_max | 1.00 m/s | 0.75 m/s | half the rated top speed |
+| ax_min | -1.00 m/s2 | -1.00 m/s2 | min(unladen rating, 2/3 emergency) |
+| local costmap | 6 m | 5 m | 2 x speed x MPPI horizon, rounded up |
+| voxel layer | 12 x 0.10 m | 10 x 0.10 m | vehicle envelope height |
+
+**The braking cap is not decoration.** The MP-400's unladen acceleration rating
+is 2.4 m/s2 and its emergency deceleration is 1.5 m/s2. Carried across
+literally, as every other limit in that file was, the controller would brake
+harder in ordinary driving than the protective fields assume it can in an
+emergency, and every stopping distance behind those fields would be computed
+from a rate the vehicle routinely beats. Nothing in the stack would report it.
+There is now a test for it by name.
+
+**Regenerating the MiR250 changed two things and nothing else.** The footprint
+is identical to four decimal places, and the inflation radius moves from 0.55 m
+to 0.5510 m, because the committed 0.55 was a round number with a post-hoc
+justification attached: its comment said "the 0.295 m inscribed radius plus a
+body's width of margin", and 0.55 minus 0.295 is not a body's width or half of
+one. Rather than reverse-engineer a formula to land on the legacy value, the
+radius is now the circumscribed radius plus a stated 0.05 m band. One
+millimetre, and the deliverable's behaviour is unchanged.
+
+### The collision monitor was never platform-selected either
+
+`robot.launch.py` loaded one `collision_monitor.yaml` whatever platform it was
+given. That was safe with one vehicle and is not safe with two, and it is the
+one configuration that must never be almost right. Both it and the Nav2
+configuration are now selected by name with no fallback file, so an unknown
+platform fails the launch loudly instead of quietly driving on another
+machine's protective fields. `test_fields.py` now runs over every platform
+spec; the MP-400's field set passes all 19 protective-field properties
+unchanged.
+
+### The diagnostic that lied
+
+The first MP-400 bringup reported `collision_monitor active` and then failed
+preflight sixty seconds later with the monitor inactive, having never been
+anything else.
+
+`run_stack.sh` tested for readiness with `ros2 lifecycle get | grep -q active`.
+`ros2 lifecycle get` prints `active [3]` or `inactive [2]`, and **`grep active`
+matches `inactive`**, so the check passed on the first poll no matter what
+state the node was in.
+
+It failed on the node it could least afford to lie about. The retry block
+directly below it exists to catch exactly this, an inactive collision monitor,
+and it could never fire, because the condition guarding it was satisfied by the
+word it was searching for. The script then went on to launch navigation against
+a lifecycle service that was still busy, and the manager's configure request
+timed out six milliseconds after it was made.
+
+The grep is now anchored. This is the third entry in this file in the same
+family as the stale log reads: a check that reported success without ever
+testing the thing it claimed to test. It is the most expensive kind, because it
+does not merely fail to find a fault, it actively asserts there is none.
+
+### A third place the MiR250 was hardcoded, found only by running it
+
+With the fields and Nav2 both generated, the MP-400 drove a full five-cycle
+transport task. Cycle one completed in 79 s over 29.1 m with no protective
+stops. The mission log said this:
+
+    unloaded: acceleration limit set to 1.0 m/s2
+    loaded: acceleration limit set to 0.3 m/s2
+
+Those are the MiR250's figures. The MP-400's manual publishes a single
+acceleration rating of 2.4 m/s2. `transport_task.py` declared both limits as
+ROS parameters with the MiR250 numbers as DEFAULTS, under a comment reading
+"Both from the platform spec", and nothing ever passed them, so the default was
+the value. The comment described an intention rather than the code.
+
+Nothing failed, and that is the point. The vehicle was driven at a fifth of its
+own rating, every cycle completed, and every log line reported a figure that
+looked like provenance. The only symptom available was a slower number that
+looked like a result, which is what makes it worth a regression test rather
+than a fix.
+
+`transport.launch.py` now reads both from the spec for the platform the stack
+was brought up with, `run_stack.sh` passes the platform through to it, and
+`test_transport_limits.py` asserts the values match the spec for every
+platform, that laden is never the more permissive of the two, and that an
+unknown platform raises rather than defaults.
+
+**Where the ceiling actually is.** On the MP-400 the two limits are equal,
+because its manual publishes one rating, so the laden and unladen switching is
+a no-op on that platform. The cycle times below are therefore not limited by
+acceleration at all but by the commissioned speed of 0.75 m/s, which is half
+the platform rating by the same commissioning rule the MiR250 gets. That is a
+decision, not a measurement, and it is the first thing to revisit if this
+platform's cycle time matters.
+
+---
+
+## V-25. The MP-400 completes 1 of 5 cycles, and the obvious explanation is refuted
+
+**Status: OPEN. No cause established. Do not describe this platform as
+working.**
+
+With the footprint, protective fields, speed limits and acceleration limits all
+generated from its own spec, the MP-400 was given the standard five-cycle
+transport run, `--cameras off --rviz off --cycles 5`, the same invocation the
+MiR250's recorded 4 of 5 comes from.
+
+    1 of 5 cycles completed
+
+| cycle | outcome | time | driven | protective stops |
+|---|---|---|---|---|
+| 1 | complete | 117 s | 36.1 m | 1 |
+| 2 | failed to reach dispatch | 154 s | 68.3 m | 32 |
+| 3 | failed to reach dispatch | 176 s | 71.8 m | 39 |
+| 4 | failed to reach goods_in | 28 s | 0.0 m | 0 |
+| 5 | failed to reach goods_in | 28 s | 0.0 m | 0 |
+
+Cycles 4 and 5 never moved at all. The signature is the planner refusing:
+
+    GridBased plugin failed to plan from (-0.67, 3.33) to (-0.83, 2.65):
+      "Start occupied"
+    GridBased plugin failed to plan from (1.08, 2.32) to (-1.58, -5.45):
+      "no valid path found"                                        x28
+
+and every recovery aborting on top of it, `backup failed` and `spin failed`,
+both reporting "Collision Ahead". So the vehicle believed itself to be inside an
+obstacle and believed every escape from it was also inside one.
+
+### What has been refuted
+
+**It is not that the smaller vehicle drove into a gap it could not get out of.**
+That was the obvious reading, it matches a failure this project has had before,
+and it is wrong. Measured on the surveyed map, which is the one in the same
+frame as the pose the planner reported:
+
+| position | clearance | note |
+|---|---|---|
+| (-0.67, 3.33), "Start occupied" | 1.200 m | wide open floor |
+| (1.08, 2.32), 28 planning failures | 0.400 m | tight, but see below |
+| both station goals | 1.65 to 1.75 m | wide open |
+
+A start declared OCCUPIED in 1.200 m of clear floor is not a geometry problem.
+The MP-400's inscribed radius is 0.2845 m. Whatever marked that cell, it was not
+the width of the aisle.
+
+**It is not the self filter.** That was the second hypothesis, and V-23 had
+already flagged `self_filter_margin` as carried over from the MiR250 without
+being re-measured, so it was the natural suspect: leaked returns from the
+vehicle's own pods would mark its own cell and produce exactly this. The
+arithmetic does not support it. The filter is a rectangle of
+`half_length + margin` by `half_width + margin`, which on this platform is
+0.355 by 0.3395 m, and the pods reach 0.3237 by 0.3082 m. They are inside it,
+with 31 mm to spare on the binding axis.
+
+### A measurement error worth recording, because it nearly became a finding
+
+The first pass at the clearance figures above used `warehouse_truth_robot.yaml`
+and reported that BOTH station goals sat inside obstacles, one of them with zero
+clearance. That would have been a dramatic result and it was nonsense: the
+ground truth map and the SLAM map do not share an origin, so mission
+coordinates cannot be looked up in the truth map without aligning the frames
+first. The truth map is for scoring, and scoring means comparing like with like.
+
+This is the third time in this project that the ground truth map has produced a
+confident wrong answer when reached for casually.
+
+### The control run: it is MP-400 specific, and the lead is DISTANCE
+
+A MiR250 control was run on the same machine, minutes later, with the identical
+invocation, because the recorded 4 of 5 comes from a different session and no
+regression can be attributed without a same-day baseline.
+
+    MiR250 control:  5 of 5 cycles, mean 74 s, mean 19.1 m
+    MP-400:          1 of 5 cycles
+
+So the rig is healthy, and it is better than healthy: the control beat the
+project's own recorded 4 of 5. The failure belongs to the platform.
+
+The discriminating quantity is not time and it is not the protective stops. It
+is DISTANCE DRIVEN between two fixed stations:
+
+| | MiR250 | MP-400 |
+|---|---|---|
+| cycles completed | 5 of 5 | 1 of 5 |
+| distance, completed cycles | 15.2 to 20.5 m, mean 19.1 | 36.1 m |
+| distance, failed cycles | none | 68.3 and 71.8 m |
+
+The MP-400 drives roughly twice the distance on a cycle it completes and
+roughly 3.6 times on the ones it fails, between the same two station poses on
+the same map. Its one completed cycle took 31 s longer than the MiR250's, and
+21 m of extra distance at its commissioned 0.75 m/s accounts for 28 s of that.
+So it is not creeping, hesitating or being held up by people. It is driving a
+much longer route at speed, which means the route it is given is much longer.
+
+That points at path selection rather than at the vehicle being stuck, and the
+"Start occupied" refusals are then more likely a consequence of wherever the
+long route puts it than the original fault. The three parameters that differ
+and could plausibly change route choice are the inflation radius, 0.4634 m
+against 0.5510 m, the local costmap window, 5 m against 6 m, and the footprint
+itself. NONE of these has been tested by changing one and re-running, which is
+the obvious next step and is cheap: one run per variant, about eight minutes
+each.
+
+### Hypothesis 1, the inflation radius: TESTED AND REFUTED
+
+The MP-400 was given the MiR250's inflation radius of 0.5510 m in place of its
+own 0.4634 m, one variable changed, everything else including the footprint
+left alone, and re-run. Confirmed live on the running system before measuring:
+footprint 0.3000 by 0.2845, inflation 0.551.
+
+    2 of 3 cycles, distances 73.2, 51.7 and 119.5 m, mean 85.6 m
+
+Distance did not fall towards the MiR250's 19.1 m. It ROSE, against a baseline
+of 36.1, 68.3 and 71.8 m. The inflation radius is not the explanation, and the
+derivation in generate_nav2.py does not need revisiting on this evidence.
+
+**But note how weak a single run is here, because the variance is the story.**
+
+| | spread of distance per cycle |
+|---|---|
+| MiR250, 5 cycles | 15.2 to 20.5 m |
+| MP-400, 5 cycles | 36.1 to 71.8 m |
+| MP-400 with MiR250 inflation, 3 cycles | 51.7 to 119.5 m |
+
+The MiR250 varies by 5.3 m across five cycles of the same journey. The MP-400
+varies by 35 m, and one cycle took 390 s with 65 protective stops and 109 s held
+up. This is not a platform that is uniformly slower, it is a platform that is
+unstable, and n=3 against that spread cannot cleanly eliminate anything. Read
+the refutation above as "inflation is not a fix", not as "inflation is
+irrelevant".
+
+It also means the existing open item about cycle time variance, 70 to 176 s on
+the MiR250, may be the same phenomenon seen faintly on a platform where it does
+not yet break anything.
+
+### Hypothesis 2, the scan plane height: NOT TESTED, and the best candidate
+
+`scanner_mount_height` is 0.110 m on the MP-400 and 0.150 m on the MiR250. The
+MP-400's figure was taken from its manual's Z position for ITS OWN scanners and
+carried over to the nanoScan3 as an estimate, which V-23 records.
+
+Every run above used `--cameras off`, so the merged 2D scan at that height was
+the ONLY thing marking obstacles into the costmap. A scan plane 40 mm lower in a
+warehouse sees a different world: pallet feet, rack footplates and floor clutter
+that a 150 mm plane passes over. More marked cells means longer routes, more
+protective stops and more positions from which the planner refuses, which is the
+whole observed signature including the instability.
+
+It is testable exactly as hypothesis 1 was, by putting 0.150 into the MP-400
+spec and re-running, and it is worth running several cycles given the variance.
+It has not been done. Do not record it as the cause until it has.
+
+### What has NOT been tested
+
+None of these has been measured. They are recorded so the next person does not
+mistake them for conclusions.
+
+    the scan plane height above, which is the leading candidate.
+    the local costmap window, 5 m against 6 m, and the footprint itself.
+    whether the costmap is contaminated, and by what. "Start occupied" in 1.2 m
+      of clear floor means something marked that cell. The candidates are the
+      camera voxel layer, the keepout filter, and a localisation jump putting
+      the reported pose somewhere the vehicle is not.
+    whether the 32 and 39 protective stops in cycles 2 and 3 are cause or
+      consequence. The monitor state accounting printed "clear 134%" for cycle
+      2, which is impossible and is its own small bug.
+    whether the station approach poses, authored for the MiR250, suit a vehicle
+      with a different footprint and a smaller inflation radius.
+
+The method that has worked on every hard fault in this project is to measure the
+discriminating quantity before building anything. Nothing here has been
+measured yet.
+
+---
+
 ## Known limitations of the model
 
 Recorded here rather than discovered later. None of these are bugs; they are places where the model

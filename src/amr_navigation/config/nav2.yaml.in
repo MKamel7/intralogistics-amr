@@ -1,4 +1,4 @@
-# Navigation for the intralogistics AMR.
+# Navigation for the intralogistics AMR, ${platform}.
 #
 # WHERE THIS SITS. SLAM builds the map, this plans and follows a path on it, and
 # the collision monitor sits AFTER everything here and before the wheels. That
@@ -8,9 +8,20 @@
 # not consult a plan. Navigation is allowed to be clever. It is not allowed to
 # be trusted.
 #
-# EVERY LIMIT HERE TRACES TO config/platforms/mir250_class.yaml. Where a number
-# is lower than the platform allows, the reason is stated. Nothing is a round
-# number chosen because it looked reasonable.
+# EVERY LIMIT THAT DEPENDS ON THE VEHICLE TRACES TO
+# config/platforms/${platform}.yaml, through the generator. Where a number is
+# lower than the platform allows, the reason is stated.
+#
+# Limits that do NOT depend on the vehicle are literals here, and that is
+# deliberate. Critic weights, server timeouts, plugin choices and the ranges of
+# sensors both platforms share are not functions of the chassis, and deriving
+# them from it would be numerology dressed as provenance.
+#
+# MEASUREMENTS QUOTED BELOW WERE TAKEN ON THE MiR250 BUILD unless they say
+# otherwise, and are labelled where they appear. They are kept because the
+# failure each one describes is a property of the software, not of that
+# chassis. The arithmetic that IS chassis-specific is generated, so it is
+# correct for whichever platform this file was produced for.
 
 amcl:
   ros__parameters:
@@ -126,35 +137,45 @@ controller_server:
       # The cost is CPU, and that is a real cost. It is affordable here because
       # a warehouse AMR carries a compute module, not a microcontroller.
       plugin: "nav2_mppi_controller::MPPIController"
-      time_steps: 56
-      model_dt: 0.05                 # matches the 20 Hz controller period
+      time_steps: ${mppi_time_steps}
+      model_dt: ${mppi_model_dt}                 # matches the 20 Hz controller period
       batch_size: 2000
       vx_std: 0.2
       vy_std: 0.2
       wz_std: 0.4
-      # 1.0 m/s, NOT the platform's 2.0 m/s.
+      #> ${vx_max} m/s, NOT the platform's rated ${rated_speed} m/s.
       #
-      # The datasheet maximum is a straight-line specification for clear aisles.
-      # The protective field sized for 2.0 m/s reaches far enough that the
-      # vehicle would stop for a pedestrian two aisles away and never finish a
-      # job. Speed is limited here and the field sized to match, which is the
-      # same trade a real installation makes when it commissions a site.
-      vx_max: 1.0
-      vx_min: -0.30                  # reversing out of a dead end only
+      # The rated maximum is a straight-line specification for clear aisles.
+      # The protective field sized for the rated speed reaches far enough that
+      # the vehicle would stop for a pedestrian two aisles away and never
+      # finish a job. Speed is limited here and the field sized to match, which
+      # is the same trade a real installation makes when it commissions a site.
+      #> The commissioned fraction is ${speed_fraction} of rated and is applied identically on both platforms; see generate_nav2.py.
+      vx_max: ${vx_max}
+      vx_min: ${vx_min}                  # reversing out of a dead end only
       vy_max: 0.0                    # differential drive
-      wz_max: 1.5                    # platform maximum angular speed
-      # UNLADEN acceleration, not the sheet's 0.3 m/s2 laden figure. That
-      # figure is a load-retention limit, and using it here does not merely
-      # make the vehicle gentle, it stops MPPI working: every sampled
-      # trajectory lands within 0.015 m/s of the last command, the candidate
-      # set has no diversity to choose between, and the optimiser returns
-      # essentially its prior. Measured with a valid 167-pose plan in hand:
-      # 0.014 m/s commanded, 0.32 m travelled in three minutes.
+      wz_max: ${wz_max}                   # platform maximum angular speed
+      # UNLADEN acceleration. On the MiR250 build this is 1.0 m/s2 rather than
+      # that sheet's 0.3 m/s2 laden figure, which is a load-retention limit;
+      # using the laden figure did not merely make the vehicle gentle, it
+      # stopped MPPI working. Every sampled trajectory landed within 0.015 m/s
+      # of the last command, the candidate set had no diversity to choose
+      # between, and the optimiser returned essentially its prior. Measured on
+      # that build with a valid 167-pose plan in hand: 0.014 m/s commanded,
+      # 0.32 m travelled in three minutes.
       # See max_linear_accel_unladen in the platform spec.
-      ax_max: 1.0
-      ax_min: -1.0                   # ordinary braking, well inside the
-                                     # 1.5 m/s2 emergency rate
-      az_max: 2.0
+      ax_max: ${ax_max}
+      #> BRAKING IS CAPPED BELOW THE EMERGENCY RATE, and on this platform that is min(${unladen_accel} unladen rating, two thirds of ${emergency_decel} emergency) = ${ordinary_decel} m/s2.
+      #
+      # The cap is not decoration. The MP-400's unladen acceleration rating is
+      # HIGHER than its emergency deceleration, so taken literally the
+      # controller would brake harder in normal driving than the protective
+      # fields assume it can in an emergency, and every stopping distance
+      # behind those fields would be computed from a rate the vehicle beats.
+      ax_min: ${ax_min}
+      az_max: ${az_max}                   # no angular acceleration is published
+                                     # in either platform spec, so this is a
+                                     # literal rather than a false derivation
       iteration_count: 1
       prune_distance: 1.7
       # Matched to the costmaps' 0.5 s. A controller that tolerates less than
@@ -202,11 +223,8 @@ controller_server:
         cost_power: 1
         cost_weight: 3.81
         critical_cost: 300.0
-        consider_footprint: true     # the vehicle is 800 by 580 mm and NOT
-                                     # round; a circular approximation either
-                                     # forbids legal gaps or permits corner
-                                     # clips, and this warehouse has 950 mm
-                                     # corners in the requirements
+        #> The vehicle is ${chassis_l_mm} by ${chassis_w_mm} mm and NOT round. A circular approximation either forbids legal gaps or permits corner clips, and the 90 degree corner this platform claims is ${corridor_90_mm} mm.
+        consider_footprint: true
         collision_cost: 1000000.0
         near_goal_distance: 1.0
       PathAlignCritic:
@@ -214,10 +232,11 @@ controller_server:
         #
         # These two critics pull against each other. PathAlign penalises being
         # off the path; PathFollow rewards advancing along it. In open space the
-        # stock balance is right. In a 1.35 m aisle, where the vehicle is
-        # 0.59 m wide and every manoeuvre displaces it from the line, a strong
-        # align term makes it fight to stay exactly on the path instead of
-        # getting on with the journey. Measured symptom: the delivery leg took
+        #> stock balance is right. In an aisle at this building's measured median corridor width of 1.34 m, where the vehicle is ${footprint_w_mm} mm wide and every manoeuvre displaces it from the line, a strong align term makes it fight to stay exactly on the path instead of getting on with the journey. The 1.34 m is MEASURED, see V-22; an earlier version
+        # of this note said 1.35 m, which was the MiR250 datasheet's corridor
+        # figure repeated as though it described this warehouse.
+        #
+        # Measured on the MiR250 build: the delivery leg took
         # 127 s for 8.1 m with two "Failed to make progress" timeouts and the
         # recoveries they trigger, while the controller loop was healthy, the
         # safety layer cost 1 second, and nothing was in the way. The vehicle
@@ -349,10 +368,12 @@ velocity_smoother:
     smoothing_frequency: 20.0
     scale_velocities: false
     feedback: "OPEN_LOOP"
-    max_velocity: [1.0, 0.0, 1.5]
-    min_velocity: [-0.30, 0.0, -1.5]
-    max_accel: [1.0, 0.0, 2.0]   # unladen; see ax_max above
-    max_decel: [-1.0, 0.0, -2.0]
+    # The same limits MPPI is given, so the smoother cannot quietly permit
+    # something the controller was forbidden or clip something it was allowed.
+    max_velocity: ${smoother_max_velocity}
+    min_velocity: ${smoother_min_velocity}
+    max_accel: ${smoother_max_accel}   # unladen; see ax_max above
+    max_decel: ${smoother_max_decel}   # capped below the emergency rate
     odom_topic: /diff_drive_controller/odom
     odom_duration: 0.1
     deadband_velocity: [0.0, 0.0, 0.0]
@@ -402,56 +423,42 @@ global_costmap:
       track_unknown_space: true
       # THE REAL FOOTPRINT, not a radius.
       #
-      # 810 by 590 mm: the 800 by 580 mm chassis from the sheet plus the scanner
-      # pods, which stand 28.7 mm proud at diagonally opposite corners. A
-      # circular robot of radius 0.5 m would refuse the 950 mm corner the
-      # requirements call for; one of radius 0.29 m would cut it.
-      footprint: "[[0.405, 0.295], [0.405, -0.295], [-0.405, -0.295], [-0.405, 0.295]]"
-      # PADDING IS MARGIN, AND 0.02 m WAS NOT ENOUGH MARGIN.
+      #> ${footprint_l_mm} by ${footprint_w_mm} mm: the ${chassis_l_mm} by ${chassis_w_mm} mm chassis plus the scanner pods, whose optical centres stand ${proud_mm} mm proud at diagonally opposite corners.
+      #
+      #> A circular robot of the circumscribed radius ${r_circ} m would refuse the ${corridor_90_mm} mm corner this platform claims; one of the inscribed radius ${r_inscribed} m would cut it.
+      footprint: ${footprint}
+      # ZERO PADDING, and the argument for it is the argument that was first
+      # made against raising it.
       #
       # Nav2 treats a cell as blocked once it is within the INSCRIBED radius of
-      # an obstacle, which for this 810 by 590 mm vehicle is 0.501 m. With 20 mm
-      # of padding the planner will happily thread a gap that clears the
-      # vehicle by 9 mm, and 9 mm survives neither map noise nor localisation
-      # drift. Measured: the vehicle followed such a path into a pocket with
-      # 0.450 m of true clearance, below its own inscribed radius, where every
-      # candidate trajectory is in collision and it cannot move in any
-      # direction.
+      #> an obstacle, which for this footprint is ${r_inscribed} m. Padding adds to that radius, so it is a HARD CONSTRAINT, and the following was measured on the MiR250 build by moving it in both directions.
       #
-      # 0.08 m was then tried and was too much the other way. It takes the
-      # effective inscribed radius to 0.613 m, and this warehouse has real,
-      # drivable positions with 0.550 m of clearance. The vehicle drove to one
-      # of them perfectly well and the planner then declared its own position
-      # blocked, which is a worse failure than the one it was meant to cure.
+      # Too little: with 0.02 m the planner threaded a gap that cleared the
+      # vehicle by 9 mm, which survives neither map noise nor localisation
+      # drift. It followed that path into a pocket with 0.450 m of true
+      # clearance, below its own inscribed radius, where every candidate
+      # trajectory is in collision and it cannot move in any direction.
       #
-      # PADDING IS THE WRONG TOOL FOR THIS. Too little and the planner threads
-      # gaps with no margin; too much and it forbids space the vehicle fits in.
-      # It cannot express "prefer roomy routes" because it is a hard constraint.
+      # Too much: 0.08 m took the effective inscribed radius to 0.613 m, and
+      # this warehouse has real, drivable positions with 0.550 m of clearance.
+      # The vehicle drove to one of them perfectly well and the planner then
+      # declared its own position blocked, which is a worse failure than the one
+      # the padding was meant to cure.
       #
-      # So padding stays modest, at an effective inscribed radius of 0.543 m,
-      # and the MISSION layer carries the preference instead: the survey only
-      # ever targets floor with 0.70 m of clearance and only routes itself
-      # through such floor. That leaves the planner 0.157 m of margin on
-      # anything it is asked to do, without ever telling it that legitimate
-      # floor is illegal.
-      # ZERO, and the reasoning above now points here rather than to 0.03.
+      # So padding cannot express "prefer roomy routes", and the MISSION layer
+      # carries that preference instead: the survey only ever targets floor with
+      # 0.70 m of clearance and only routes itself through such floor. If the
+      # mission layer carries the margin, the planner should carry none.
       #
-      # This ADR argued that padding is the wrong place for margin because it is
-      # a hard constraint. That argument was made to stop padding being raised.
-      # It applies just as strongly in the other direction: if the mission layer
-      # carries the margin, the planner should carry none.
+      # The measurement that forced it to zero rather than to 0.03: with 0.03 m
+      # of padding, and after the camera voxel layer and the keepout zones were
+      # added, 30 percent of the cells within 0.55 m of the vehicle were lethal
+      # or inscribed, and 47 percent within 0.80 m. MPPI considers the real
+      # footprint, so nearly every sampled trajectory put it in a blocked cell,
+      # it commanded nothing, and the progress checker failed the goal with no
+      # safety stop involved.
       #
-      # The measurement that forced it: with 0.03 m of padding, and after the
-      # camera voxel layer and the keepout zones were added, 30 percent of the
-      # cells within 0.55 m of the vehicle were lethal or inscribed, and 47
-      # percent within 0.80 m. MPPI considers the real footprint, so nearly
-      # every sampled trajectory put it in a blocked cell, it commanded nothing,
-      # and the progress checker failed the goal with no safety stop involved.
-      #
-      # The arithmetic is tight and worth stating. These aisles are about
-      # 1.35 m. The vehicle's circumscribed diameter is 1.002 m. An effective
-      # inscribed radius of 0.543 m leaves 1.35 - 2 * 0.543 = 0.26 m of free
-      # band. At 0.501 m it leaves 0.348 m. A third more room, from one line.
+      #> The arithmetic for THIS platform, against the building's measured median corridor of 1.34 m rather than the datasheet figure that was asserted for most of this project's life, see V-22: circumscribed diameter ${circ_diameter} m, so an inscribed radius of ${r_inscribed} m leaves 1.34 - 2 x ${r_inscribed} m of free band in a median aisle.
       footprint_padding: 0.0
       plugins: ["static_layer", "obstacle_layer", "voxel_layer", "inflation_layer"]
       # KEEPOUT ZONES, the permanent no-go areas over the racking.
@@ -503,13 +510,11 @@ global_costmap:
       voxel_layer:
         # THE CAMERAS, AND WHY NAVIGATION NEEDS THEM.
         #
-        # A 2D scanner at 150 mm sees warehouse racking as a row of thin legs
-        # with drivable gaps between them, because that is exactly what racking
-        # looks like at 150 mm. The planner believed those gaps and the vehicle
-        # drove under the shelving and wedged: 0.400 m of clearance against a
-        # 0.501 m inscribed radius, every candidate trajectory in collision,
-        # stationary for four consecutive survey rounds while the planner
-        # produced a fresh valid path every second.
+        #> A 2D scanner at ${scan_plane_mm} mm sees warehouse racking as a row of thin legs with drivable gaps between them, because that is exactly what racking looks like at ${scan_plane_mm} mm. The planner believed those gaps and the vehicle drove under the shelving and wedged.
+        # Measured on the MiR250 build: 0.400 m of clearance against a 0.501 m
+        # inscribed radius, every candidate trajectory in collision, stationary
+        # for four consecutive survey rounds while the planner produced a fresh
+        # valid path every second.
         #
         # Measured on this world, obstacles in the band a PERSON occupies cover
         # 108.7 m2 and obstacles in the band the SCANNER sees cover 16.4 m2.
@@ -527,8 +532,9 @@ global_costmap:
         publish_voxel_map: true       # visible in RViz; this layer is the whole
                                       # reason the vehicle stays out of the racking
         origin_z: 0.0
-        z_resolution: 0.10
-        z_voxels: 12                  # 12 x 0.10 m = 1.20 m, the envelope below
+        z_resolution: ${z_resolution}
+        #> ${z_voxels} x ${z_resolution} m = ${envelope_height} m, the vehicle envelope height from the platform spec: the deck plus the load it carries.
+        z_voxels: ${z_voxels}
         unknown_threshold: 15
         mark_threshold: 0
         combination_method: 1
@@ -536,12 +542,9 @@ global_costmap:
         camera_left:
           topic: /camera_left/points
           data_type: "PointCloud2"
-          # 0.10 m up, so the floor itself is not an obstacle. Up to the
-          # vehicle envelope height from the platform spec: the vehicle carries
-          # a top module, so what has to clear is the deck plus its load, not
-          # the 300 mm chassis. Anything lower than this blocks.
+          #> 0.10 m up, so the floor itself is not an obstacle. Up to the vehicle envelope height from the platform spec: the vehicle carries a top module, so what has to clear is the deck plus its load, not the ${chassis_h_mm} mm chassis. Anything lower than this blocks.
           min_obstacle_height: 0.10
-          max_obstacle_height: 1.20
+          max_obstacle_height: ${envelope_height}
           marking: true
           clearing: true
           obstacle_max_range: 4.0     # D435i is trustworthy well past this, but
@@ -554,7 +557,7 @@ global_costmap:
           topic: /camera_right/points
           data_type: "PointCloud2"
           min_obstacle_height: 0.10
-          max_obstacle_height: 1.20
+          max_obstacle_height: ${envelope_height}
           marking: true
           clearing: true
           obstacle_max_range: 4.0
@@ -563,10 +566,8 @@ global_costmap:
           raytrace_min_range: 0.15
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        # 0.55 m from the 0.295 m inscribed radius plus a body's width of
-        # margin, so a planned path leaves room for a person to pass rather
-        # than technically fitting.
-        inflation_radius: 0.55
+        #> ${inflation_radius} m: the circumscribed radius ${r_circ} m plus a 0.05 m clearance band, so a planned path leaves room for a person to pass rather than technically fitting. The radius is a platform property; the band is a commissioning decision, stated once in generate_nav2.py and applied to both platforms.
+        inflation_radius: ${inflation_radius}
         cost_scaling_factor: 3.0
 
 local_costmap:
@@ -596,58 +597,48 @@ local_costmap:
       update_frequency: 5.0
       publish_frequency: 2.0
       rolling_window: true
-      # 6 m square. At 1.0 m/s with the MPPI horizon at 56 steps of 0.05 s, the
-      # vehicle looks 2.8 s ahead, so it needs about 3 m of costmap in front of
-      # it plus room for a pedestrian approaching from the side.
-      width: 6
-      height: 6
+      #> ${local_size} m square. At ${vx_max} m/s with the MPPI horizon at ${mppi_time_steps} steps of ${mppi_model_dt} s, the vehicle looks ${horizon_s} s and so ${lookahead} m ahead, and the window has to hold that in front of it and the same behind, plus room for a pedestrian approaching from the side.
+      #
+      #> Rounded UP to a whole metre, never down: a window shorter than the horizon lets the controller score trajectories against cells it has no data for.
+      width: ${local_size}
+      height: ${local_size}
       resolution: 0.05
-      footprint: "[[0.405, 0.295], [0.405, -0.295], [-0.405, -0.295], [-0.405, 0.295]]"
-      # PADDING IS MARGIN, AND 0.02 m WAS NOT ENOUGH MARGIN.
+      # The same footprint the global costmap uses; see the note there. The two
+      # must agree, and a test asserts it: a vehicle that is one size globally
+      # and another locally plans paths it then cannot follow.
+      footprint: ${footprint}
+      # ZERO PADDING, and the argument for it is the argument that was first
+      # made against raising it.
       #
       # Nav2 treats a cell as blocked once it is within the INSCRIBED radius of
-      # an obstacle, which for this 810 by 590 mm vehicle is 0.501 m. With 20 mm
-      # of padding the planner will happily thread a gap that clears the
-      # vehicle by 9 mm, and 9 mm survives neither map noise nor localisation
-      # drift. Measured: the vehicle followed such a path into a pocket with
-      # 0.450 m of true clearance, below its own inscribed radius, where every
-      # candidate trajectory is in collision and it cannot move in any
-      # direction.
+      #> an obstacle, which for this footprint is ${r_inscribed} m. Padding adds to that radius, so it is a HARD CONSTRAINT, and the following was measured on the MiR250 build by moving it in both directions.
       #
-      # 0.08 m was then tried and was too much the other way. It takes the
-      # effective inscribed radius to 0.613 m, and this warehouse has real,
-      # drivable positions with 0.550 m of clearance. The vehicle drove to one
-      # of them perfectly well and the planner then declared its own position
-      # blocked, which is a worse failure than the one it was meant to cure.
+      # Too little: with 0.02 m the planner threaded a gap that cleared the
+      # vehicle by 9 mm, which survives neither map noise nor localisation
+      # drift. It followed that path into a pocket with 0.450 m of true
+      # clearance, below its own inscribed radius, where every candidate
+      # trajectory is in collision and it cannot move in any direction.
       #
-      # PADDING IS THE WRONG TOOL FOR THIS. Too little and the planner threads
-      # gaps with no margin; too much and it forbids space the vehicle fits in.
-      # It cannot express "prefer roomy routes" because it is a hard constraint.
+      # Too much: 0.08 m took the effective inscribed radius to 0.613 m, and
+      # this warehouse has real, drivable positions with 0.550 m of clearance.
+      # The vehicle drove to one of them perfectly well and the planner then
+      # declared its own position blocked, which is a worse failure than the one
+      # the padding was meant to cure.
       #
-      # So padding stays modest, at an effective inscribed radius of 0.543 m,
-      # and the MISSION layer carries the preference instead: the survey only
-      # ever targets floor with 0.70 m of clearance and only routes itself
-      # through such floor. That leaves the planner 0.157 m of margin on
-      # anything it is asked to do, without ever telling it that legitimate
-      # floor is illegal.
-      # ZERO, and the reasoning above now points here rather than to 0.03.
+      # So padding cannot express "prefer roomy routes", and the MISSION layer
+      # carries that preference instead: the survey only ever targets floor with
+      # 0.70 m of clearance and only routes itself through such floor. If the
+      # mission layer carries the margin, the planner should carry none.
       #
-      # This ADR argued that padding is the wrong place for margin because it is
-      # a hard constraint. That argument was made to stop padding being raised.
-      # It applies just as strongly in the other direction: if the mission layer
-      # carries the margin, the planner should carry none.
+      # The measurement that forced it to zero rather than to 0.03: with 0.03 m
+      # of padding, and after the camera voxel layer and the keepout zones were
+      # added, 30 percent of the cells within 0.55 m of the vehicle were lethal
+      # or inscribed, and 47 percent within 0.80 m. MPPI considers the real
+      # footprint, so nearly every sampled trajectory put it in a blocked cell,
+      # it commanded nothing, and the progress checker failed the goal with no
+      # safety stop involved.
       #
-      # The measurement that forced it: with 0.03 m of padding, and after the
-      # camera voxel layer and the keepout zones were added, 30 percent of the
-      # cells within 0.55 m of the vehicle were lethal or inscribed, and 47
-      # percent within 0.80 m. MPPI considers the real footprint, so nearly
-      # every sampled trajectory put it in a blocked cell, it commanded nothing,
-      # and the progress checker failed the goal with no safety stop involved.
-      #
-      # The arithmetic is tight and worth stating. These aisles are about
-      # 1.35 m. The vehicle's circumscribed diameter is 1.002 m. An effective
-      # inscribed radius of 0.543 m leaves 1.35 - 2 * 0.543 = 0.26 m of free
-      # band. At 0.501 m it leaves 0.348 m. A third more room, from one line.
+      #> The arithmetic for THIS platform, against the building's measured median corridor of 1.34 m rather than the datasheet figure that was asserted for most of this project's life, see V-22: circumscribed diameter ${circ_diameter} m, so an inscribed radius of ${r_inscribed} m leaves 1.34 - 2 x ${r_inscribed} m of free band in a median aisle.
       footprint_padding: 0.0
       plugins: ["obstacle_layer", "voxel_layer", "inflation_layer"]
       # KEEPOUT ZONES, the permanent no-go areas over the racking.
@@ -692,13 +683,11 @@ local_costmap:
       voxel_layer:
         # THE CAMERAS, AND WHY NAVIGATION NEEDS THEM.
         #
-        # A 2D scanner at 150 mm sees warehouse racking as a row of thin legs
-        # with drivable gaps between them, because that is exactly what racking
-        # looks like at 150 mm. The planner believed those gaps and the vehicle
-        # drove under the shelving and wedged: 0.400 m of clearance against a
-        # 0.501 m inscribed radius, every candidate trajectory in collision,
-        # stationary for four consecutive survey rounds while the planner
-        # produced a fresh valid path every second.
+        #> A 2D scanner at ${scan_plane_mm} mm sees warehouse racking as a row of thin legs with drivable gaps between them, because that is exactly what racking looks like at ${scan_plane_mm} mm. The planner believed those gaps and the vehicle drove under the shelving and wedged.
+        # Measured on the MiR250 build: 0.400 m of clearance against a 0.501 m
+        # inscribed radius, every candidate trajectory in collision, stationary
+        # for four consecutive survey rounds while the planner produced a fresh
+        # valid path every second.
         #
         # Measured on this world, obstacles in the band a PERSON occupies cover
         # 108.7 m2 and obstacles in the band the SCANNER sees cover 16.4 m2.
@@ -716,8 +705,9 @@ local_costmap:
         publish_voxel_map: true       # visible in RViz; this layer is the whole
                                       # reason the vehicle stays out of the racking
         origin_z: 0.0
-        z_resolution: 0.10
-        z_voxels: 12                  # 12 x 0.10 m = 1.20 m, the envelope below
+        z_resolution: ${z_resolution}
+        #> ${z_voxels} x ${z_resolution} m = ${envelope_height} m, the vehicle envelope height from the platform spec: the deck plus the load it carries.
+        z_voxels: ${z_voxels}
         unknown_threshold: 15
         mark_threshold: 0
         combination_method: 1
@@ -725,12 +715,9 @@ local_costmap:
         camera_left:
           topic: /camera_left/points
           data_type: "PointCloud2"
-          # 0.10 m up, so the floor itself is not an obstacle. Up to the
-          # vehicle envelope height from the platform spec: the vehicle carries
-          # a top module, so what has to clear is the deck plus its load, not
-          # the 300 mm chassis. Anything lower than this blocks.
+          #> 0.10 m up, so the floor itself is not an obstacle. Up to the vehicle envelope height from the platform spec: the vehicle carries a top module, so what has to clear is the deck plus its load, not the ${chassis_h_mm} mm chassis. Anything lower than this blocks.
           min_obstacle_height: 0.10
-          max_obstacle_height: 1.20
+          max_obstacle_height: ${envelope_height}
           marking: true
           clearing: true
           obstacle_max_range: 4.0     # D435i is trustworthy well past this, but
@@ -743,7 +730,7 @@ local_costmap:
           topic: /camera_right/points
           data_type: "PointCloud2"
           min_obstacle_height: 0.10
-          max_obstacle_height: 1.20
+          max_obstacle_height: ${envelope_height}
           marking: true
           clearing: true
           obstacle_max_range: 4.0
@@ -752,7 +739,8 @@ local_costmap:
           raytrace_min_range: 0.15
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        inflation_radius: 0.55
+        # See the global costmap's inflation layer for the derivation.
+        inflation_radius: ${inflation_radius}
         cost_scaling_factor: 3.0
 
 # ---- Costmap filters ------------------------------------------------------

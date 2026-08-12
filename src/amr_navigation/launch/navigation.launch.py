@@ -23,7 +23,8 @@ only as a vehicle that will not move.
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import (LaunchConfiguration, PathJoinSubstitution,
+                                  TextSubstitution)
 from launch_ros.actions import Node
 
 # The costmap filter servers come FIRST in the lifecycle order, because a
@@ -62,7 +63,16 @@ NAV_NODES = [
 
 def generate_launch_description():
     share = get_package_share_directory('amr_navigation')
-    params = PathJoinSubstitution([share, 'config', 'nav2.yaml'])
+    # ONE CONFIGURATION PER PLATFORM, selected by name and generated from that
+    # platform's spec by tools/generate_nav2.py. There is deliberately no
+    # fallback file: a missing platform must fail the launch loudly rather than
+    # quietly hand the vehicle another machine's footprint, speed limits and
+    # inflation radius, which is what a single nav2.yaml did.
+    params = PathJoinSubstitution([
+        share, 'config',
+        [TextSubstitution(text='nav2.'),
+         LaunchConfiguration('platform'),
+         TextSubstitution(text='.yaml')]])
     use_sim_time = LaunchConfiguration('use_sim_time')
 
     # Topic wiring is done by REMAPPING, not by editing the safety package. The
@@ -140,5 +150,8 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='true'),
+        # Must match the platform robot.launch.py was given. run_stack.sh
+        # passes the same value to both.
+        DeclareLaunchArgument('platform', default_value='mir250_class'),
         *nodes,
     ])

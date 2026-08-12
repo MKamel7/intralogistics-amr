@@ -26,7 +26,7 @@ from launch.conditions import IfCondition
 from launch.event_handlers import OnProcessExit
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import (Command, LaunchConfiguration,
-                                  PathJoinSubstitution)
+                                  PathJoinSubstitution, TextSubstitution)
 import yaml
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
@@ -262,12 +262,22 @@ def generate_launch_description():
 
     # Protective and warning fields. Placed between the velocity command and the
     # controller, so nothing can reach the wheels without passing through it.
+    #
+    # THE FIELD SET IS SELECTED BY PLATFORM. It used to be a single
+    # collision_monitor.yaml loaded whatever platform had been requested, which
+    # was harmless with one vehicle and is not harmless with two: the fields are
+    # sized from a specific chassis, stopping distance and corridor target, and
+    # giving a vehicle another machine's fields is a safety fault that nothing
+    # would report. There is no fallback file on purpose.
     collision_monitor = Node(
         package='nav2_collision_monitor', executable='collision_monitor',
         output='screen',
         condition=IfCondition(LaunchConfiguration('safety')),
         parameters=[PathJoinSubstitution(
-            [FindPackageShare('amr_safety'), 'config', 'collision_monitor.yaml']),
+            [FindPackageShare('amr_safety'), 'config',
+             [TextSubstitution(text='collision_monitor.'),
+              LaunchConfiguration('platform'),
+              TextSubstitution(text='.yaml')]]),
             {'use_sim_time': True}])
 
     safety_lifecycle = Node(

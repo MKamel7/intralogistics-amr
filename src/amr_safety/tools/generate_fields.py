@@ -31,6 +31,7 @@ from pathlib import Path
 
 import yaml
 
+PKG = Path(__file__).resolve().parents[1]
 SPEC_DIR = (Path(__file__).resolve().parents[2]
             / 'amr_description' / 'config' / 'platforms')
 
@@ -427,11 +428,15 @@ def main():
             + '\n'.join(f'#{line}' for line in lines) + '\n\n'
             + yaml.safe_dump(cfg, sort_keys=False, default_flow_style=False))
 
-    if args.out:
-        args.out.write_text(text)
-        print(f'wrote {args.out}')
-    else:
-        print(text)
+    # ONE FILE PER PLATFORM, named for it. A single collision_monitor.yaml was
+    # safe while there was one vehicle and is not safe with two: the bringup
+    # launch loaded that one file whatever platform it had been given, so a
+    # second platform would have driven with the first one's protective fields.
+    # The fields are the last thing between a command and the wheels, so this
+    # is the one configuration that must never be almost right.
+    out = args.out or (PKG / 'config' / f'collision_monitor.{args.platform}.yaml')
+    out.write_text(text)
+    print(f'wrote {out}')
     for line in lines:
         print(line)
     return 0

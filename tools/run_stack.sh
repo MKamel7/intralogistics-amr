@@ -30,6 +30,13 @@
 #   tools/run_stack.sh --run mission          bring up, then transport task
 #   tools/run_stack.sh --run mission --classify   also attribute safety stops
 #   tools/run_stack.sh --no-gate              measure anyway if preflight fails
+#   tools/run_stack.sh --platform mp400_class the second platform
+#
+# THE PLATFORM IS PASSED TO EVERY LAUNCH THAT NEEDS IT, and that is the point of
+# having it here. The robot description, the protective fields and the whole
+# Nav2 configuration are each generated per platform, so all three have to be
+# told the same name. Passing it to one of them and not the others is exactly
+# the failure this argument exists to prevent.
 set -uo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
@@ -37,6 +44,7 @@ cd "$REPO"
 
 CAMERAS=true
 RVIZ=true
+PLATFORM=mir250_class
 TASK=none
 CLASSIFY=false
 TRACK=false
@@ -47,6 +55,7 @@ CYCLES=2
 while [ $# -gt 0 ]; do
   case "$1" in
     --cameras) [ "${2:-}" = off ] && CAMERAS=false; shift 2 ;;
+    --platform) PLATFORM="${2:?--platform needs a name}"; shift 2 ;;
     --rviz)    [ "${2:-}" = off ] && RVIZ=false; shift 2 ;;
     --run)     TASK="${2:-none}"; shift 2 ;;
     --cycles)  CYCLES="${2:-2}"; shift 2 ;;
@@ -77,15 +86,36 @@ source install/setup.bash
 set -u
 
 wait_active() {  # node, timeout seconds
+  # ANCHORED, and this was a diagnostic that lied. `ros2 lifecycle get` prints
+  # "active [3]" or "inactive [2]", and the test here used to be `grep -q
+  # active`, which matches INACTIVE. So a node that failed to activate was
+  # reported as active, immediately, on the first poll.
+  #
+  # It mattered most on the node it could least afford to lie about. The
+  # collision monitor's retry block below exists precisely to catch an inactive
+  # monitor, and it could never fire: the check that guards it was satisfied by
+  # the word it was looking for. Measured on an MP-400 bringup: the script said
+  # "collision_monitor active" at 18:41:25 and preflight found it inactive
+  # sixty seconds later, having never been anything else.
   local end=$((SECONDS + ${2:-180}))
-  until timeout 8 ros2 lifecycle get "$1" 2>/dev/null | grep -q active; do
+  until timeout 8 ros2 lifecycle get "$1" 2>/dev/null | grep -qE '^active'; do
     [ $SECONDS -gt $end ] && return 1
     sleep 3
   done
 }
 
-say "starting: cameras=$CAMERAS rviz=$RVIZ task=$TASK"
-ros2 launch amr_bringup robot.launch.py \
+# FAIL BEFORE LAUNCHING, not thirty seconds in. A platform whose generated
+# configurations are missing brings the stack up far enough to look like it is
+# working and then leaves a lifecycle node stuck in unconfigured, which reports
+# only as "failed to change state".
+for f in "src/amr_navigation/config/nav2.$PLATFORM.yaml" \
+         "src/amr_safety/config/collision_monitor.$PLATFORM.yaml" \
+         "src/amr_description/config/platforms/$PLATFORM.yaml"; do
+  [ -f "$f" ] || { echo "no $f; is $PLATFORM a platform, and has it been generated?"; exit 2; }
+done
+
+say "starting: platform=$PLATFORM cameras=$CAMERAS rviz=$RVIZ task=$TASK"
+ros2 launch amr_bringup robot.launch.py platform:=$PLATFORM \
      gui:=true rviz:=$RVIZ cameras:=$CAMERAS > "$RUN/robot.log" 2>&1 &
 
 wait_active /slam_toolbox 200 && say "slam active" || { say "SLAM FAILED"; exit 1; }
@@ -102,7 +132,7 @@ fi
 say "collision_monitor active"
 
 sleep 10
-ros2 launch amr_navigation navigation.launch.py > "$RUN/nav.log" 2>&1 &
+ros2 launch amr_navigation navigation.launch.py platform:=$PLATFORM > "$RUN/nav.log" 2>&1 &
 wait_active /bt_navigator 200 && say "nav2 active" || { say "NAV2 FAILED"; exit 1; }
 
 sleep 10
@@ -151,7 +181,7 @@ case "$TASK" in
     say "survey exited $?" ;;
   mission)
     ros2 launch amr_mission transport.launch.py cycles:=$CYCLES \
-        > "$RUN/mission.log" 2>&1
+        platform:=$PLATFORM > "$RUN/mission.log" 2>&1
     say "mission exited $?" ;;
   none)
     say "stack up, holding. Ctrl-C to stop, or tools/stop_all.sh"

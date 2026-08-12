@@ -9,6 +9,12 @@ install(PROGRAMS ${PROJECT_NAME}/survey_runner.py
         DESTINATION lib/${PROJECT_NAME}
         RENAME survey_runner)
 
-install(DIRECTORY config launch maps tools DESTINATION share/${PROJECT_NAME})
+install(DIRECTORY config launch maps tools DESTINATION share/${PROJECT_NAME}
+        PATTERN "__pycache__" EXCLUDE)
+
+if(BUILD_TESTING)
+  find_package(ament_cmake_pytest REQUIRED)
+  ament_add_pytest_test(test_nav2_config test/test_nav2_config.py)
+endif()
 
 ament_package()
