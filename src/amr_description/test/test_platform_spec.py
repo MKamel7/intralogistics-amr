@@ -83,10 +83,19 @@ def test_provenance_entries_are_well_formed(spec):
 # It also cannot catch the failure that actually matters most: a source that
 # cites a document nobody read. Two of those have occurred in this project and
 # both were found by reading the document, not by this test.
+#
+# WIDENED for a second false positive, mp400_class camera_update_rate. That
+# source line names the constraint, says it is a CPU budget rather than a
+# sensor limit, and quotes the control-loop rate it was measured against, which
+# is more reasoning than most entries here carry. It simply happened to use
+# none of these words. 'decision' and 'limit' are the forms it does use, and
+# both attribute a value to something outside the number itself, which is what
+# this list is for.
 _REASONING_MARKERS = (
     'not published', 'not yet measured', 'because', 'chosen', 'taken',
     'typical', 'matches', 'halved', 'midpoint', 'proportionate', 'estimate of',
     'therefore', 'so that', 'so a', 'so the', '=',
+    'decision', 'limit',
 )
 
 

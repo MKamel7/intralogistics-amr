@@ -28,13 +28,8 @@
 # The reasons to have this platform that survive the correction: it proves the
 # platform abstraction is real rather than asserted, it is German and ROS
 # native, and its documentation is an OPERATING MANUAL rather than a sales
-# brochure. The MiR250 sheet gave no scanner mounting positions, so those had to
-# be estimated; this manual gives them to the millimetre.
-#
-# It is also German, ROS native, and its documentation is an OPERATING MANUAL
-# rather than a sales brochure, which matters here. The MiR250 sheet gave no
-# scanner mounting positions, so those had to be estimated and labelled as such.
-# This manual gives them to the millimetre.
+# brochure, which gives the chassis, the drive and the castors to the
+# millimetre where the MiR250 sheet gives a silhouette.
 #
 # SOURCE
 #
@@ -55,6 +50,28 @@
 # Changing one variable at a time is the point: this file changes the VEHICLE,
 # not the sensing. Sensor entries below therefore carry the same provenance they
 # carry in mir250_class.yaml, because they describe the same parts.
+#
+# THE MANUAL'S LS1 AND LS2 POSITIONS ARE NOT USED, AND THAT IS THE POINT
+#
+# Section 1.3.3 locates a front scanner at x = 230 mm and a rear scanner at
+# x = -354 mm, both on the centre line, to the millimetre. Those are the
+# positions of THE MP-400'S OWN laser scanners, the unrated ones the paragraph
+# above explains this project does not fit. Reading them across to a nanoScan3
+# mount is a category error: it takes the geometry of one sensor as the
+# geometry of a different sensor that is not there.
+#
+# It is not a harmless one. A centre-line pair and a corner pair are different
+# safety concepts. The corner mount is what lets two 275 degree apertures cover
+# a full turn with the optics grazing both adjacent faces; a pair on the centre
+# line is occluded fore and aft by the vehicle's own body, and nothing in the
+# description, the self filter or the field generator is built for it.
+#
+# So the nanoScan3 pair is mounted here the way it is mounted on the MiR250
+# build, at diagonally opposite corners with the optics 5 mm proud of the
+# chamfer, and scanner_mount_x and scanner_mount_y are ESTIMATED, exactly as
+# they are on that platform. The manual's figures are recorded in the
+# provenance so the next reader can see they were considered and why they were
+# not taken.
 #
 # NOT YET DRIVEN. config/nav2.yaml still carries MiR250 derived literals for the
 # footprint, speed limits and inflation radius. Until that file is generated
@@ -109,23 +126,27 @@ values:
   battery_cycles: 3000
   battery_mass: 18.0             # kg
 
-  # ---- Safety scanners: SICK nanoScan3, mounted per section 1.3.3 ------
-  scanner_mount_x: 0.230         # m, LS1 front, 230 mm
-  scanner_mount_y: 0.000         # m, LS1 and LS2 both on the centre line
-  scanner_mount_height: 0.110    # m, LS1 and LS2 Z position
+  # ---- Safety scanners: SICK nanoScan3, diagonally opposite corners ----
+  # NOT the manual's LS1 and LS2 positions; see the header. Optical centre
+  # flush at the envelope corner and 5 mm proud of it, as on the MiR250 build,
+  # because a scanner recessed inboard cannot see tangentially along the
+  # vehicle's own sides.
+  scanner_mount_x: 0.300         # m, from robot centre
+  scanner_mount_y: 0.2845        # m
+  scanner_mount_height: 0.110    # m above ground, scan plane
   scanner_body_x: 0.107          # m
   scanner_body_y: 0.080          # m
   scanner_body_z: 0.080          # m
-  scanner_housing_inset: 0.060   # m
+  scanner_housing_inset: 0.060   # m, housing drawn inboard of the optics
   scanner_mass: 0.7              # kg
   scanner_scan_angle: 275.0      # deg
-  scanner_angular_resolution: 0.10   # deg
-  scanner_samples: 2750
-  scanner_update_rate: 14.28     # Hz
-  scanner_response_time: 0.05    # s
+  scanner_angular_resolution: 0.17   # deg
+  scanner_samples: 1618          # rays across the aperture
+  scanner_update_rate: 14.28     # Hz, rounded DOWN from 1/70 ms; see provenance
+  scanner_response_time: 0.070   # s
   scanner_measuring_range: 40.0  # m
   scanner_protective_range: 3.0  # m
-  scanner_warning_range: 40.0    # m
+  scanner_warning_range: 10.0    # m
   scanner_protective_supplement: 0.065   # m
   scanner_detection_resolution: 0.070    # m
   self_filter_margin: 0.060      # m
@@ -152,11 +173,37 @@ values:
   beacon_mass: 0.15              # kg
 
 # Published figures the model is validated AGAINST rather than tuned to.
+#
+# EXCEPT THE FOUR CORRIDOR AND DOORWAY FIGURES, WHICH ARE NOT PUBLISHED.
+#
+# The MiR250 sheet quotes operational corridor and doorway widths. The MP-400
+# manual quotes none: it is an operating manual and gives dimensions, ratings
+# and sensor positions, not application envelopes. The figures previously here
+# (1.100, 0.900, 0.850, 0.900) appear in no source and are the reason
+# test_robot_fits_the_corridor_it_claims failed, since a 0.850 m target sits
+# OUTSIDE a body diagonal of 0.813 m and so could never have been a claim about
+# this vehicle.
+#
+# They are now DERIVED, and the derivation is the one thing the two platforms
+# share: the same scanners, the same protective field supplement and the same
+# safety configuration, so the clearance the safety configuration demands
+# around the body is the same and only the body changes. Taking that clearance
+# from the MiR250's published figures and applying it to this chassis:
+#
+#   default   1.350 - 0.580 = 0.770 over the width -> 0.559 + 0.770 = 1.329
+#   dynamic   1.000 - 0.580 = 0.420 over the width -> 0.559 + 0.420 = 0.979
+#   doorway   1.300 - 0.580 = 0.720 over the width -> 0.559 + 0.720 = 1.279
+#   90 turn   0.950 - 0.988 = -0.038 on the diagonal -> 0.813 - 0.038 = 0.775
+#
+# These are ESTIMATES OF A TARGET, which is a weaker thing than the MiR250 row
+# of this block holds, and they must not be quoted as manufacturer figures.
+# corridor_width_dynamic in particular is read by generate_fields.py to size a
+# protective field, so it is load bearing and is flagged in docs/validation.md.
 validation_targets:
-  corridor_width_default: 1.100      # m
-  corridor_width_dynamic: 0.900      # m
-  corridor_width_90_turn: 0.850      # m
-  doorway_width_default: 0.900       # m
+  corridor_width_default: 1.329      # m, derived; not published
+  corridor_width_dynamic: 0.979      # m, derived; not published
+  corridor_width_90_turn: 0.775      # m, derived; not published
+  doorway_width_default: 1.279       # m, derived; not published
   distance_to_max_speed: 0.47        # m, v^2 / 2a at 1.5 m/s and 2.4 m/s2
   runtime_unloaded_h: 9.0            # h
   runtime_loaded_h: 5.0              # h
@@ -176,7 +223,10 @@ safety_reference:
     0.5 degree resolution over plus or minus 135 degrees with no safety rating,
     no response time and no protective field capability, so they are a
     navigation sensor and not a safety one. Changing the vehicle must not
-    silently change what the safety argument rests on.
+    silently change what the safety argument rests on. Their MOUNTING
+    POSITIONS in manual section 1.3.3 are not used either, for the same
+    reason: they describe where that other sensor sits, not where this one
+    does. See the header of this file.
 
 provenance:
   # ---- From the MP-400 Operating Instructions, section 1.3.1 ----------
@@ -202,10 +252,10 @@ provenance:
   battery_nominal_voltage: {kind: datasheet, src: "MP-400 manual 1.3.4.1, Rated battery voltage 24 V"}
   battery_capacity_kwh: {kind: derived,   src: "50 Ah at 24 V nominal = 1.20 kWh"}
 
-  # ---- Section 1.3.3 Positions of Sensors -----------------------------
-  scanner_mount_x:     {kind: datasheet, src: "MP-400 manual 1.3.3, front laser scanner LS1 X-pos 230 mm. The rear scanner LS2 is at -354 mm with a b-angle of 180 degrees, so the two are NOT symmetric about the centre and the description places them independently"}
-  scanner_mount_y:     {kind: datasheet, src: "MP-400 manual 1.3.3, LS1 and LS2 both Y-pos 0, on the centre line. This differs from the MiR250 build, where the scanners sit at diagonally opposite corners; a centre-line pair has no blind sector from the vehicle's own corners but does have one from its own body fore and aft"}
-  scanner_mount_height: {kind: datasheet, src: "MP-400 manual 1.3.3, LS1 and LS2 both Z-pos 110 mm"}
+  # ---- Scanner mounting: NOT from section 1.3.3; see the header --------
+  scanner_mount_x:     {kind: estimated, src: "not published FOR THIS SENSOR. The manual's 1.3.3 gives LS1 at X 230 mm and LS2 at X -354 mm, but those locate the MP-400's own unrated scanners, which this build does not fit, so they are not a source for where a nanoScan3 goes. Taken instead at the corner, 0.295 m of half length plus the 5 mm proud the MiR250 build mounts at, = 0.300 m, because a scanner inboard of the corner cannot see tangentially along the vehicle's own sides"}
+  scanner_mount_y:     {kind: estimated, src: "not published FOR THIS SENSOR. The manual's 1.3.3 puts LS1 and LS2 on the centre line at Y 0, which is the arrangement for the MP-400's own scanners and not for this pair; a centre-line pair is occluded fore and aft by the vehicle's own body and the description, the self filter and the field generator are all built for a corner pair. Taken at 0.2795 m of half width plus 5 mm proud, = 0.2845 m, matching the mounting practice on the MiR250 build"}
+  scanner_mount_height: {kind: estimated, src: "not published FOR THIS SENSOR. 110 mm is taken from the manual's 1.3.3 Z-pos for the MP-400's own scanners, which is a real measurement of where a scan plane fits on this chassis even though the sensor there is a different one. It clears the 44 mm ground clearance, keeps the 80 mm tall nanoScan3 body well under the 411 mm deck, and puts the plane low enough to see a foot"}
 
   # ---- Estimated platform figures, not published -----------------------
   vehicle_envelope_height: {kind: estimated, src: "NOT published. The manual gives the platform height as 411 mm to the mounting profiles but says nothing about what is carried on them. 1.000 m is a smaller allowance than the MiR250's 1.200 m because this is a 100 kg class platform carrying correspondingly smaller loads. It sets the camera obstacle layer's marking band"}
@@ -216,7 +266,7 @@ provenance:
   caster_swivel_offset: {kind: estimated, src: "not published; a typical trail for a castor of this size"}
   drive_wheel_mass:    {kind: estimated, src: "not published; a 150 by 30 mm driven wheel with its hub"}
   caster_wheel_mass:   {kind: estimated, src: "not published; a 50 mm swivel castor wheel with its bearing, taken at the heavier end so the rotational inertia of the undriven wheels is not flattered"}
-  caster_swivel_mass:  {kind: estimated, src: "not published"}
+  caster_swivel_mass:  {kind: estimated, src: "not published; the swivel fork and its bearing for the castor above, taken at the heavier end for the same reason as the wheel, so the yaw inertia of the undriven corners is not flattered"}
   battery_mass:        {kind: estimated, src: "not published; a 24 V 50 Ah lead acid or LiFePO4 pack, taken at the heavier end so the inertia is not flattered"}
   battery_cycles:      {kind: estimated, src: "not published in this manual; carried at the same figure as the MiR250 build so runtime and ageing models stay comparable between platforms"}
   max_incline:         {kind: estimated, src: "NOT published in this manual. 5 degrees is conservative for an indoor platform with 44 mm of ground clearance, which is low and is the binding constraint rather than traction"}
@@ -232,19 +282,19 @@ provenance:
   scanner_body_x:      {kind: datasheet, src: "SICK nanoScan3 sheet, Dimensions W x H x D"}
   scanner_body_y:      {kind: datasheet, src: "SICK nanoScan3 sheet, Dimensions W x H x D, height 80 mm"}
   scanner_body_z:      {kind: datasheet, src: "SICK nanoScan3 sheet, Dimensions W x H x D"}
-  scanner_housing_inset: {kind: estimated, src: "not published; the inset that keeps the optics clear of the vehicle envelope"}
-  scanner_mass:        {kind: datasheet, src: "SICK nanoScan3 sheet, weight"}
-  scanner_scan_angle:  {kind: datasheet, src: "SICK nanoScan3 sheet, scanning angle 275 deg"}
-  scanner_angular_resolution: {kind: datasheet, src: "SICK nanoScan3 sheet, angular resolution"}
-  scanner_samples:     {kind: derived,   src: "computed as 275 deg of scanning angle divided by 0.1 deg of angular resolution, both from the SICK nanoScan3 sheet, giving 2750 beams per scan"}
-  scanner_update_rate: {kind: datasheet, src: "SICK nanoScan3 sheet, scan cycle time 70 ms"}
-  scanner_response_time: {kind: datasheet, src: "SICK nanoScan3 sheet, response time"}
-  scanner_measuring_range: {kind: datasheet, src: "SICK nanoScan3 sheet, measuring range"}
-  scanner_protective_range: {kind: datasheet, src: "SICK nanoScan3 sheet, protective field range 3.0 m"}
-  scanner_warning_range: {kind: datasheet, src: "SICK nanoScan3 sheet, warning field range"}
-  scanner_protective_supplement: {kind: datasheet, src: "SICK nanoScan3 sheet, protective field supplement 65 mm"}
-  scanner_detection_resolution: {kind: datasheet, src: "SICK nanoScan3 sheet, detection capability 70 mm"}
-  self_filter_margin:  {kind: measured,  src: "MEASURED on the MiR250 build at 40 mm of self observation beyond the chassis half length, and carried here at 0.060 m pending its own measurement on this platform. The scanners sit on the CENTRE LINE here rather than at the corners, so the geometry that produced that figure does not apply and it must be re-measured before it is trusted. Flagged in docs/validation.md"}
+  scanner_housing_inset: {kind: estimated, src: "not published; the housing is drawn inboard of the optical centre so the body sits in the corner recess while the optics stay flush, which is how a corner-mounted safety scanner is packaged. The 60 mm chamfer of this chassis, corner_cut_x and corner_cut_y, is what the housing sits in"}
+  scanner_mass:        {kind: datasheet, src: "SICK nanoScan3 sheet, Weight 0.67 kg, carried at 0.7 kg as on the MiR250 build"}
+  scanner_scan_angle:  {kind: datasheet, src: "SICK nanoScan3 sheet, Scanning angle 275 deg"}
+  scanner_angular_resolution: {kind: datasheet, src: "SICK nanoScan3 sheet, Angular resolution 0.17 deg"}
+  scanner_samples:     {kind: derived,   src: "275 deg / 0.17 deg = 1617.6, rounded up to 1618"}
+  scanner_update_rate: {kind: derived,   src: "1 / 70 ms response time = 14.2857 Hz, rounded DOWN to 14.28. Rounding a protective device UP claims it reports faster than it responds, which flatters every stopping distance computed from it, so the direction of the rounding is deliberate"}
+  scanner_response_time: {kind: datasheet, src: "SICK nanoScan3 sheet, Response time 70 ms"}
+  scanner_measuring_range: {kind: datasheet, src: "SICK nanoScan3 sheet, Distance measuring range 40 m"}
+  scanner_protective_range: {kind: datasheet, src: "SICK nanoScan3 sheet, Protective field range 3 m"}
+  scanner_warning_range: {kind: datasheet, src: "SICK nanoScan3 sheet, Warning field range 10 m"}
+  scanner_protective_supplement: {kind: datasheet, src: "SICK nanoScan3 sheet, Protective field supplement 65 mm"}
+  scanner_detection_resolution: {kind: datasheet, src: "SICK nanoScan3 sheet, Resolution can be configured, 70 mm setting chosen rather than the 20 mm used on the MiR250 build. This is the one sensor SETTING that differs between the platforms and it is a deliberate coarsening: min_object_at_1m below is the target it sets"}
+  self_filter_margin:  {kind: measured,  src: "MEASURED on the MiR250 build at 40 mm of self observation beyond the chassis half length, and carried here at 0.060 m pending its own measurement on this platform. The pods are mounted the same way on the same corner geometry, so the derivation transfers, but the chassis is smaller and the figure has not been observed on this vehicle. Flagged in docs/validation.md"}
   camera_mount_height: {kind: estimated, src: "not published for this platform; below the 411 mm profile height"}
   camera_mount_y:      {kind: estimated, src: "not published; a forward facing pair splayed about the centre line"}
   camera_splay:        {kind: estimated, src: "not published; chosen so the two 87 deg fields overlap slightly"}
