@@ -31,6 +31,7 @@ install(DIRECTORY models worlds tools scenarios launch maps
 if(BUILD_TESTING)
   find_package(ament_cmake_pytest REQUIRED)
   ament_add_pytest_test(test_battery_model test/test_battery_model.py)
+  ament_add_pytest_test(test_test_track test/test_test_track.py)
 endif()
 
 ament_environment_hooks("${CMAKE_CURRENT_SOURCE_DIR}/hooks/${PROJECT_NAME}.dsv.in")
