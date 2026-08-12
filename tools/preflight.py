@@ -52,6 +52,12 @@ LIFECYCLE = [
     '/bt_navigator',
     '/behavior_server',
     '/velocity_smoother',
+    # The costmap filter servers, which were missing from this list and are the
+    # reason a run completed with no keepout zones while every check passed.
+    # They sit on their own lifecycle manager precisely because they are the
+    # ones that time out under load, so they are the ones most worth asserting.
+    '/filter_mask_server',
+    '/costmap_filter_info_server',
 ]
 
 SENSORS = ['/scan', '/diff_drive_controller/odom', '/map']
@@ -128,6 +134,27 @@ class Preflight(Node):
         for node in LIFECYCLE:
             state = self.lifecycle_state(node)
             self.check(f'{node} active', state == 'active', state)
+
+        print()
+        # THE KEEPOUT MASK, which nothing checked until it was found missing
+        # for an entire five cycle run that this file had passed as healthy.
+        #
+        # The mask is the permanent no-go areas over the racking. When
+        # filter_mask_server configures but does not activate, and that has
+        # happened repeatedly under load, the mask is never published and both
+        # costmaps fall back to having NO keepout zones. The vehicle then plans
+        # straight through floor that was declared forbidden before it was
+        # switched on.
+        #
+        # The only signal is `KeepoutFilter: Filter mask was not received`, at
+        # WARN, from each costmap. Measured on one run: 441 of them, and this
+        # script reported 17 of 17 checks passed while they were being printed.
+        # A missing safety-relevant layer that announces itself only in a log
+        # nobody greps is exactly what a preflight is for.
+        n = self.publishers('/keepout_filter_mask')
+        self.check('keepout mask is published', n >= 1, f'{n} publisher(s)')
+        n = self.publishers('/costmap_filter_info')
+        self.check('costmap filter info is published', n >= 1, f'{n} publisher(s)')
 
         print()
         ok, detail = self.tf_ok()

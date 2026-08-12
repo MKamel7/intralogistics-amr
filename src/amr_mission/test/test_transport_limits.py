@@ -21,6 +21,7 @@ import yaml
 LAUNCH = Path(__file__).resolve().parents[1] / 'launch' / 'transport.launch.py'
 SPEC_DIR = (Path(__file__).resolve().parents[2]
             / 'amr_description' / 'config' / 'platforms')
+NAV2_DIR = Path(__file__).resolve().parents[2] / 'amr_navigation' / 'config'
 
 
 def _load_launch():
@@ -39,11 +40,32 @@ def platform_name(request):
 
 
 def test_acceleration_limits_come_from_the_platform_spec(platform_name):
+    """The spec is the source, clamped by the navigation envelope."""
     values = yaml.safe_load(
         (SPEC_DIR / f'{platform_name}.yaml').read_text())['values']
-    laden, unladen = launch_mod.accel_limits(platform_name, spec_dir=SPEC_DIR)
-    assert laden == pytest.approx(values['max_linear_accel'])
-    assert unladen == pytest.approx(values['max_linear_accel_unladen'])
+    cap = launch_mod.envelope_cap(platform_name, nav2_dir=NAV2_DIR)
+    laden, unladen = launch_mod.accel_limits(
+        platform_name, spec_dir=SPEC_DIR, nav2_dir=NAV2_DIR)
+    assert laden == pytest.approx(min(values['max_linear_accel'], cap))
+    assert unladen == pytest.approx(min(values['max_linear_accel_unladen'], cap))
+
+
+def test_the_mission_cannot_widen_the_navigation_envelope(platform_name):
+    """set_payload writes max_accel onto the smoother at RUNTIME.
+
+    It does not touch max_decel, so a figure larger than the envelope replaces
+    the symmetric limits the generator derived with asymmetric ones, on the
+    last rate limiter before the wheels. Measured on the MP-400: the generated
+    configuration held 1.00 against -1.00 and the mission set 2.40 the moment
+    it reported "unloaded". Both directions of the switch are checked, because
+    the laden figure is written by the same call.
+    """
+    cap = launch_mod.envelope_cap(platform_name, nav2_dir=NAV2_DIR)
+    for value in launch_mod.accel_limits(
+            platform_name, spec_dir=SPEC_DIR, nav2_dir=NAV2_DIR):
+        assert value <= cap + 1e-9, (
+            f'the mission would set the smoother to {value} m/s2 against a '
+            f'navigation envelope of {cap} m/s2')
 
 
 def test_laden_is_never_the_more_permissive_of_the_two(platform_name):
@@ -54,7 +76,7 @@ def test_laden_is_never_the_more_permissive_of_the_two(platform_name):
     a special case, so this allows equality and forbids only the direction that
     would mean the load-retention limit had been read backwards.
     """
-    laden, unladen = launch_mod.accel_limits(platform_name, spec_dir=SPEC_DIR)
+    laden, unladen = launch_mod.accel_limits(platform_name, spec_dir=SPEC_DIR, nav2_dir=NAV2_DIR)
     assert laden <= unladen
 
 
@@ -64,7 +86,8 @@ def test_an_unknown_platform_fails_loudly(tmp_path):
     Defaulting is what produced the fault this file exists for.
     """
     with pytest.raises(RuntimeError, match='no platform spec'):
-        launch_mod.accel_limits('no_such_platform', spec_dir=SPEC_DIR)
+        launch_mod.accel_limits('no_such_platform', spec_dir=SPEC_DIR,
+                                nav2_dir=NAV2_DIR)
 
 
 def test_the_defaults_in_the_node_are_not_silently_authoritative():

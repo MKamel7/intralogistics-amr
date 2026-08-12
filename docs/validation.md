@@ -1397,11 +1397,84 @@ The discriminating measurement is the free width actually available along the
 route against the half width of the field selected at each moment. Do that
 before changing anything.
 
+### THE SAME FAULT AGAIN, reaching the wheels by another route
+
+Fixing the envelope in the generator was not enough, and the reason was only
+found by watching a live run rather than reading logs. The mission log said:
+
+    unloaded: acceleration limit set to 2.4 m/s2
+
+while the generated configuration held 1.00. `set_payload` writes `max_accel`
+onto the velocity smoother at RUNTIME and does not touch `max_decel`, so the
+last rate limiter before the collision monitor was running 2.40 against -1.00.
+The generator's fix had only ever reached MPPI's sampler.
+
+The path was introduced earlier in the same session, by the change that made
+transport.launch.py read the acceleration limits from the platform spec. That
+change fixed a real provenance fault, and it introduced a real behaviour fault,
+and the test written alongside it passed: it asserted the mission's value
+matched the spec, which it did. It never asked whether the spec value was
+PERMITTED. A test can confirm a wrong thing precisely.
+
+`accel_limits` now clamps both figures to the envelope, read from the generated
+Nav2 configuration rather than recomputed, so the rule stays in one place.
+MiR250 is unchanged at 0.3 and 1.0; the MP-400 goes from 2.4 to 1.0.
+
+**Measured with both halves in place:**
+
+| | baseline | envelope only | both |
+|---|---|---|---|
+| cycles completed | 1 of 5 | 1 of 5 | 2 of 5 |
+| protective stops per cycle | up to 39 | 71 on cycle 1 | 0.5 |
+| held up by safety | 6 to 16 s | 400 s of 484 | 0 s, 0 percent |
+| distance per completed cycle | 36.1 m | 19.9 m | 19.7 and 25.5 m |
+
+The MiR250 control on the same day is 5 of 5, mean 74 s, 19.1 m. The MP-400's
+completed cycles are now 76 s over 19.7 m and 107 s over 25.5 m, which is the
+same machine doing the same job.
+
+**The deadlock hypothesis is withdrawn.** The protective stops were a symptom of
+a vehicle crawling and recovering, not an independent cause, and the corridor
+targets were one measurement away from being "fixed" for no reason.
+
+### What still fails, and a defect found while looking at it
+
+Cycles 4 and 5 failed in THREE SECONDS with 0.0 m driven, both from the
+identical pose, both `"Start occupied"`. The vehicle ends cycle 3 somewhere it
+cannot plan out of and never moves again. That terminal wedge survives both
+fixes and is unexplained.
+
+While reading that log, something else:
+
+    KeepoutFilter: Filter mask was not received        x441
+
+`filter_mask_server` configured and never activated, so the keepout mask was
+never published and BOTH costmaps ran the whole mission with no keepout zones
+at all. The vehicle was planning through floor that was declared permanently
+forbidden before it was switched on.
+
+**`tools/preflight.py` reported 17 of 17 checks passed while that was
+happening.** It did not check the mask, and its lifecycle list did not include
+either filter server, which are precisely the two nodes documented in
+navigation.launch.py as the ones that time out under load. Both are now checked
+and both servers are in the lifecycle list.
+
+This is the third diagnostic-that-lied in this file, after the stale log reads
+and the `grep active` that matched `inactive`. The pattern is identical: a
+check that reports success without testing the thing it claims to test.
+
+It also gives the terminal wedge a candidate worth testing before anything else.
+With no keepout zones the planner will route the vehicle into rack bays that are
+normally forbidden; once inside, the scan marks the rack legs all round it and
+its own cell becomes occupied, which is exactly the observed signature. NOT
+TESTED. Get the filter servers up, confirm the mask is published, and re-run
+before assuming anything about the corridor targets or the approach poses.
+
 ### What has NOT been tested
 
 Recorded so the next person does not mistake them for conclusions.
 
-    the deadlock hypothesis immediately above, which is now the leading one.
+    the keepout mask hypothesis immediately above, which is now the leading one.
     the dispatch approach pose, which the leg analysis pointed at and which the
       acceleration fix may or may not have already addressed.
     the local costmap window, 5 m against 6 m, and the footprint itself.

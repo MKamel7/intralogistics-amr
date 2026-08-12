@@ -29,13 +29,38 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
-def accel_limits(platform, spec_dir=None):
+def envelope_cap(platform, nav2_dir=None):
+    """The largest acceleration the navigation envelope permits, in m/s2.
+
+    Read from the GENERATED Nav2 configuration rather than recomputed, because
+    the rule that derives it lives in generate_nav2.py and a second copy of a
+    rule is a second thing to get out of step.
+    """
+    root = Path(nav2_dir) if nav2_dir else (
+        Path(get_package_share_directory('amr_navigation')) / 'config')
+    cfg_file = root / f'nav2.{platform}.yaml'
+    if not cfg_file.is_file():
+        raise RuntimeError(f'no generated Nav2 configuration at {cfg_file}')
+    cfg = yaml.safe_load(cfg_file.read_text())
+    return float(cfg['velocity_smoother']['ros__parameters']['max_accel'][0])
+
+
+def accel_limits(platform, spec_dir=None, nav2_dir=None):
     """The laden and unladen acceleration limits for a platform, in m/s2.
 
     A plain function taking a plain name, so it can be tested without a launch
     context. That matters more than it looks: the fault this replaces was a
     default value nothing overrode, which is exactly the kind of thing that is
     invisible until something asserts on it.
+
+    BOTH ARE CLAMPED TO THE NAVIGATION ENVELOPE, and that is not belt and
+    braces. `set_payload` writes `max_accel` onto the velocity smoother at
+    RUNTIME and does not touch `max_decel`, so an uncapped figure here silently
+    replaces the symmetric envelope the generator derived with an asymmetric
+    one, on the last rate limiter before the wheels. Measured on the MP-400:
+    the generated configuration held 1.00 against -1.00, the mission set the
+    smoother to 2.40 the moment it reported "unloaded", and the vehicle went
+    back to overshooting its goals. See V-25.
     """
     root = Path(spec_dir) if spec_dir else (
         Path(get_package_share_directory('amr_description'))
@@ -48,7 +73,9 @@ def accel_limits(platform, spec_dir=None):
             f'fallback: driving one platform on another\'s limits is what the '
             f'platform argument exists to prevent.')
     values = yaml.safe_load(spec_file.read_text())['values']
-    return float(values['max_linear_accel']), float(values['max_linear_accel_unladen'])
+    cap = envelope_cap(platform, nav2_dir)
+    return (min(float(values['max_linear_accel']), cap),
+            min(float(values['max_linear_accel_unladen']), cap))
 
 
 def make_node(context):
