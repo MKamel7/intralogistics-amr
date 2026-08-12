@@ -30,6 +30,7 @@ values:
   chassis_length: 0.800          # m
   chassis_width: 0.580           # m
   chassis_height: 0.300          # m
+  vehicle_envelope_height: 1.200 # m, vehicle plus the load it carries
   ground_clearance: 0.026        # m
   # Corner recesses that house the safety scanners. Without them the scanners
   # sit INSIDE a solid chassis box and the vehicle stops occluding its own
@@ -72,7 +73,9 @@ values:
 
   # ---- motion limits -------------------------------------------------
   max_linear_speed: 2.0          # m/s
+  max_reverse_speed: 0.30        # m/s
   max_linear_accel: 0.3          # m/s^2, at maximum payload
+  max_linear_accel_unladen: 1.0  # m/s^2, no payload
   max_angular_speed: 1.5         # rad/s
   max_incline: 0.05              # fraction, at 0.5 m/s
 
@@ -114,7 +117,7 @@ values:
   # degrees. At the previous 20 mm margin those pod returns survived the filter,
   # landed inside the protective field, and the vehicle STOPPED FOR ITSELF and
   # never moved. Derived, with 6 mm over the requirement.
-  self_filter_margin: 0.035      # m
+  self_filter_margin: 0.060      # m
   scanner_update_rate: 14.28     # Hz, rounded DOWN from 1/70 ms; see provenance
 
   # ---- 3D cameras (2x) -----------------------------------------------
@@ -163,6 +166,7 @@ provenance:
   chassis_length:      {kind: datasheet, src: "MiR250 sheet, Dimensions/Length 800 mm"}
   chassis_width:       {kind: datasheet, src: "MiR250 sheet, Dimensions/Width 580 mm"}
   chassis_height:      {kind: datasheet, src: "MiR250 sheet, Dimensions/Height 300 mm"}
+  vehicle_envelope_height: {kind: estimated, src: "NOT published as a single figure, and it is not the 300 mm chassis height. This platform exists to carry a top module, so the height that must clear an overhead obstruction is the deck plus the load standing on it. 1200 mm covers a typical KLT stack or shelf-lifter module on a 250 kg class AMR. It matters because it is what the camera obstacle layer is configured from: the vehicle drove UNDER warehouse racking, which its 150 mm scan plane reads as a row of thin legs with drivable gaps between them, and wedged at 0.400 m clearance against a 0.501 m inscribed radius. Occupied area at robot height is 16.4 m2 against 108.7 m2 at person height, so the scanner is blind to roughly 85 percent of what should block this vehicle. If a real top module is specified this figure must be taken from it"}
   ground_clearance:    {kind: derived,   src: "MiR250 sheet gives a 25 to 28 mm range; midpoint taken"}
   corner_cut_x:        {kind: estimated, src: "not published; sized so a scanner body fits in the recess and the remaining chassis still occludes the sensor's inward arc"}
   corner_cut_y:        {kind: estimated, src: "not published; sized so a scanner body fits in the recess and the remaining chassis still occludes the sensor's inward arc"}
@@ -194,7 +198,9 @@ provenance:
   camera_mass:         {kind: estimated, src: "not published in EITHER sheet; the Intel sheet gives dimensions but no mass, so this is estimated from the 90 x 25 x 25 mm module. An earlier version of this line claimed it was the published mass, which was wrong before the Intel sheet was archived"}
 
   max_linear_speed:    {kind: datasheet, src: "MiR250 sheet, Maximum speed 2.0 m/s"}
+  max_reverse_speed:   {kind: estimated, src: "NOT published. The MiR sheet quotes one maximum speed and does not distinguish direction. 0.30 m/s is chosen deliberately low because the 3D cameras face forward, so a reversing vehicle detects with the 2D scan plane alone and cannot see an object that starts above 150 mm. It sizes the rear protective field and is the reason reversing is discouraged rather than forbidden"}
   max_linear_accel:    {kind: datasheet, src: "MiR250 sheet, Acceleration limits with maximum payload 0.3 m/s2"}
+  max_linear_accel_unladen: {kind: estimated, src: "NOT published. The sheet quotes 0.3 m/s2 explicitly as the limit WITH MAXIMUM PAYLOAD, which is a load-retention figure: it exists so a 250 kg load does not slide, not because the drive cannot do better. Using it unladen has a concrete cost. MPPI generates its candidate trajectories under this bound, and at 0.3 m/s2 with a 0.05 s step every one of the 2000 samples is within 0.015 m/s of the last command, so the trajectory set has almost no diversity in its first steps and the optimiser has no gradient to work with. Measured: a valid 167-pose plan in hand, commanding 0.014 m/s and going nowhere. 1.0 m/s2 is a conservative unladen rate for a 250 kg class indoor vehicle and stays well inside the 1.5 m/s2 emergency braking rate the protective fields are sized on. The laden figure above remains the one to use when a payload is carried, and choosing between them by load state is an outstanding item in docs/validation.md"}
   max_angular_speed:   {kind: estimated, src: "not published; chosen so a spot turn stays inside the 950 mm 90 degree corridor target"}
   max_incline:         {kind: datasheet, src: "MiR250 sheet, Maximum incline/decline 5 percent at 0.5 m/s"}
 
@@ -218,7 +224,7 @@ provenance:
   scanner_mount_height:          {kind: estimated, src: "not published; 150 mm puts the 80 mm tall scanner body inside the 300 mm chassis with the scan plane low enough to see a foot"}
   scanner_mount_x:               {kind: estimated, src: "not published; diagonally opposite corners, inside the 800 mm length"}
   scanner_mount_y:               {kind: estimated, src: "not published; diagonally opposite corners, inside the 580 mm width"}
-  self_filter_margin:            {kind: derived,   src: "computed = 28.7 mm, because the scanner housing is a 107 x 80 mm box rotated 45 degrees about a mount 5 mm proud of the corner and therefore reaches beyond the envelope in both axes; the filter margin must exceed that or the vehicle sees its own pods and holds a permanent protective stop"}
+  self_filter_margin:            {kind: measured,  src: "was 0.035, derived as 28.7 mm from the scanner housing geometry: a 107 x 80 mm box rotated 45 degrees about a mount 5 mm proud of the corner, which reaches beyond the envelope in both axes. That derivation was not wrong, it was incomplete. MEASURED on the running system, the vehicle returns hits on its own structure at 0.440 m from centre, which is 40 mm beyond the 0.400 m half length and therefore 11 mm outside the derived margin. The evidence is unambiguous: 12 of 12 protective stops in one transport run came from a return at exactly 0.440 m, minimum equal to median equal to maximum, always forward, and absent from BOTH costmaps. A real obstacle gives varying ranges and appears in the costmap; fixed geometry does neither. 0.060 m covers the measured 40 mm with room, and the derived figure is kept in this note because the discrepancy is worth understanding before the margin is trusted on hardware"}
   scanner_housing_inset:         {kind: estimated, src: "not published; the housing is drawn inboard of the optical centre so the body sits in the corner recess while the optics stay flush, which is how a corner-mounted safety scanner is packaged"}
   scanner_update_rate:           {kind: derived,   src: "1 / 70 ms response time = 14.2857 Hz, rounded DOWN to 14.28. Rounding a protective device UP claims it reports faster than it responds, which flatters every stopping distance computed from it, so the direction of the rounding is deliberate"}
 

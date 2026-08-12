@@ -2,10 +2,19 @@
 # platform spec. Do not hand-edit: change the spec and regenerate.
 #
 # Derived field reaches:
-#  0.00 to 0.30 m/s: stop reach 0.161 m, warn reach 0.491 m
-#  0.30 to 0.80 m/s: stop reach 0.454 m, warn reach 0.938 m
-#  0.80 to 1.40 m/s: stop reach 1.026 m, warn reach 1.766 m
-#  1.40 to 2.00 m/s: stop reach 1.838 m, warn reach 2.818 m
+#  forward 0.05 to 0.30 m/s: stop reach 0.161 m, warn reach 0.490 m
+#  forward 0.30 to 0.80 m/s: stop reach 0.454 m, warn reach 0.938 m
+#  forward 0.80 to 1.40 m/s: stop reach 1.026 m, warn reach 1.766 m
+#  forward 1.40 to 2.00 m/s: stop reach 1.838 m, warn reach 2.818 m
+#  reverse -0.30 to 0.00 m/s: stop reach 0.161 m, warn reach 0.491 m
+#  rot_0 -0.10 to +0.10 rad/s at |vx| <= 0.05: tip speed 0.049 m/s at r 0.494 m, stop reach 0.077 m all round, half width 0.367 m
+#  rot_1_ccw +0.10 to +0.25 rad/s at |vx| <= 0.05: tip speed 0.124 m/s at r 0.494 m, stop reach 0.097 m all round, half width 0.387 m
+#  rot_1_cw -0.25 to -0.10 rad/s at |vx| <= 0.05: tip speed 0.124 m/s at r 0.494 m, stop reach 0.097 m all round, half width 0.387 m
+#  rot_2_ccw +0.25 to +0.82 rad/s at |vx| <= 0.05: tip speed 0.408 m/s at r 0.494 m, stop reach 0.210 m all round, half width 0.500 m
+#  rot_2_cw -0.82 to -0.25 rad/s at |vx| <= 0.05: tip speed 0.408 m/s at r 0.494 m, stop reach 0.210 m all round, half width 0.500 m
+#  rot_3_ccw +0.82 to +1.50 rad/s at |vx| <= 0.05: tip speed 0.741 m/s at r 0.494 m, stop reach 0.411 m all round, half width 0.701 m
+#  rot_3_cw -1.50 to -0.82 rad/s at |vx| <= 0.05: tip speed 0.741 m/s at r 0.494 m, stop reach 0.411 m all round, half width 0.701 m
+#  rotation threshold derived as 0.825 rad/s, the fastest turn whose field still fits the 1.00 m dynamic corridor
 
 collision_monitor:
   ros__parameters:
@@ -30,81 +39,210 @@ collision_monitor:
       enabled: true
       polygon_pub_topic: protective_field
       velocity_polygons:
+      - stop_rot_1_ccw
+      - stop_rot_1_cw
+      - stop_rot_0
+      - stop_rot_2_ccw
+      - stop_rot_2_cw
+      - stop_rot_3_ccw
+      - stop_rot_3_cw
+      - stop_reverse
       - stop_030
       - stop_080
       - stop_140
       - stop_200
       holonomic: false
+      stop_rot_1_ccw:
+        points: '[[0.4973, 0.3873], [0.4973, -0.3873], [-0.4973, -0.3873], [-0.4973,
+          0.3873]]'
+        linear_min: -0.05
+        linear_max: 0.05
+        theta_min: 0.1
+        theta_max: 0.25
+      stop_rot_1_cw:
+        points: '[[0.4973, 0.3873], [0.4973, -0.3873], [-0.4973, -0.3873], [-0.4973,
+          0.3873]]'
+        linear_min: -0.05
+        linear_max: 0.05
+        theta_min: -0.25
+        theta_max: -0.1
+      stop_rot_0:
+        points: '[[0.4767, 0.3667], [0.4767, -0.3667], [-0.4767, -0.3667], [-0.4767,
+          0.3667]]'
+        linear_min: -0.05
+        linear_max: 0.05
+        theta_min: -0.1
+        theta_max: 0.1
+      stop_rot_2_ccw:
+        points: '[[0.6101, 0.5001], [0.6101, -0.5001], [-0.6101, -0.5001], [-0.6101,
+          0.5001]]'
+        linear_min: -0.05
+        linear_max: 0.05
+        theta_min: 0.25
+        theta_max: 0.8248
+      stop_rot_2_cw:
+        points: '[[0.6101, 0.5001], [0.6101, -0.5001], [-0.6101, -0.5001], [-0.6101,
+          0.5001]]'
+        linear_min: -0.05
+        linear_max: 0.05
+        theta_min: -0.8248
+        theta_max: -0.25
+      stop_rot_3_ccw:
+        points: '[[0.8112, 0.7012], [0.8112, -0.7012], [-0.8112, -0.7012], [-0.8112,
+          0.7012]]'
+        linear_min: -0.05
+        linear_max: 0.05
+        theta_min: 0.8248
+        theta_max: 1.5
+      stop_rot_3_cw:
+        points: '[[0.8112, 0.7012], [0.8112, -0.7012], [-0.8112, -0.7012], [-0.8112,
+          0.7012]]'
+        linear_min: -0.05
+        linear_max: 0.05
+        theta_min: -1.5
+        theta_max: -0.8248
+      stop_reverse:
+        points: '[[0.4000, 0.3550], [0.4000, -0.3550], [-0.5611, -0.3550], [-0.5611,
+          0.3550]]'
+        linear_min: -0.3
+        linear_max: 0.0
+        theta_min: -1.5
+        theta_max: 1.5
       stop_030:
         points: '[[0.5611, 0.3550], [0.5611, -0.3550], [-0.4000, -0.3550], [-0.4000,
           0.3550]]'
-        linear_min: 0.0
+        linear_min: 0.05
         linear_max: 0.3
-        theta_min: -1.0
-        theta_max: 1.0
+        theta_min: -1.5
+        theta_max: 1.5
       stop_080:
         points: '[[0.8544, 0.3550], [0.8544, -0.3550], [-0.4000, -0.3550], [-0.4000,
           0.3550]]'
         linear_min: 0.3
         linear_max: 0.8
-        theta_min: -1.0
-        theta_max: 1.0
+        theta_min: -1.5
+        theta_max: 1.5
       stop_140:
         points: '[[1.4264, 0.3550], [1.4264, -0.3550], [-0.4000, -0.3550], [-0.4000,
           0.3550]]'
         linear_min: 0.8
         linear_max: 1.4
-        theta_min: -1.0
-        theta_max: 1.0
+        theta_min: -1.5
+        theta_max: 1.5
       stop_200:
         points: '[[2.2384, 0.3550], [2.2384, -0.3550], [-0.4000, -0.3550], [-0.4000,
           0.3550]]'
         linear_min: 1.4
         linear_max: 2.0
-        theta_min: -1.0
-        theta_max: 1.0
+        theta_min: -1.5
+        theta_max: 1.5
     warning:
       type: velocity_polygon
-      action_type: slowdown
-      slowdown_ratio: 0.3
+      action_type: limit
+      linear_limit: 0.3
+      angular_limit: 0.8248
       min_points: 2
       visualize: true
       enabled: true
       polygon_pub_topic: warning_field
       velocity_polygons:
+      - warn_rot_1_ccw
+      - warn_rot_1_cw
+      - warn_rot_0
+      - warn_rot_2_ccw
+      - warn_rot_2_cw
+      - warn_rot_3_ccw
+      - warn_rot_3_cw
+      - warn_reverse
       - warn_030
       - warn_080
       - warn_140
       - warn_200
       holonomic: false
-      warn_030:
-        points: '[[0.8910, 0.3550], [0.8910, -0.3550], [-0.4000, -0.3550], [-0.4000,
+      warn_rot_1_ccw:
+        points: '[[0.6973, 0.5873], [0.6973, -0.5873], [-0.6973, -0.5873], [-0.6973,
+          0.5873]]'
+        linear_min: -0.05
+        linear_max: 0.05
+        theta_min: 0.1
+        theta_max: 0.25
+      warn_rot_1_cw:
+        points: '[[0.6973, 0.5873], [0.6973, -0.5873], [-0.6973, -0.5873], [-0.6973,
+          0.5873]]'
+        linear_min: -0.05
+        linear_max: 0.05
+        theta_min: -0.25
+        theta_max: -0.1
+      warn_rot_0:
+        points: '[[0.6767, 0.5667], [0.6767, -0.5667], [-0.6767, -0.5667], [-0.6767,
+          0.5667]]'
+        linear_min: -0.05
+        linear_max: 0.05
+        theta_min: -0.1
+        theta_max: 0.1
+      warn_rot_2_ccw:
+        points: '[[0.8101, 0.7001], [0.8101, -0.7001], [-0.8101, -0.7001], [-0.8101,
+          0.7001]]'
+        linear_min: -0.05
+        linear_max: 0.05
+        theta_min: 0.25
+        theta_max: 0.8248
+      warn_rot_2_cw:
+        points: '[[0.8101, 0.7001], [0.8101, -0.7001], [-0.8101, -0.7001], [-0.8101,
+          0.7001]]'
+        linear_min: -0.05
+        linear_max: 0.05
+        theta_min: -0.8248
+        theta_max: -0.25
+      warn_rot_3_ccw:
+        points: '[[1.0112, 0.9012], [1.0112, -0.9012], [-1.0112, -0.9012], [-1.0112,
+          0.9012]]'
+        linear_min: -0.05
+        linear_max: 0.05
+        theta_min: 0.8248
+        theta_max: 1.5
+      warn_rot_3_cw:
+        points: '[[1.0112, 0.9012], [1.0112, -0.9012], [-1.0112, -0.9012], [-1.0112,
+          0.9012]]'
+        linear_min: -0.05
+        linear_max: 0.05
+        theta_min: -1.5
+        theta_max: -0.8248
+      warn_reverse:
+        points: '[[0.4000, 0.3550], [0.4000, -0.3550], [-0.8910, -0.3550], [-0.8910,
           0.3550]]'
-        linear_min: 0.0
+        linear_min: -0.3
+        linear_max: 0.0
+        theta_min: -1.5
+        theta_max: 1.5
+      warn_030:
+        points: '[[0.8902, 0.3550], [0.8902, -0.3550], [-0.4000, -0.3550], [-0.4000,
+          0.3550]]'
+        linear_min: 0.05
         linear_max: 0.3
-        theta_min: -1.0
-        theta_max: 1.0
+        theta_min: -1.5
+        theta_max: 1.5
       warn_080:
         points: '[[1.3377, 0.3550], [1.3377, -0.3550], [-0.4000, -0.3550], [-0.4000,
           0.3550]]'
         linear_min: 0.3
         linear_max: 0.8
-        theta_min: -1.0
-        theta_max: 1.0
+        theta_min: -1.5
+        theta_max: 1.5
       warn_140:
         points: '[[2.1664, 0.3550], [2.1664, -0.3550], [-0.4000, -0.3550], [-0.4000,
           0.3550]]'
         linear_min: 0.8
         linear_max: 1.4
-        theta_min: -1.0
-        theta_max: 1.0
+        theta_min: -1.5
+        theta_max: 1.5
       warn_200:
         points: '[[3.2184, 0.3550], [3.2184, -0.3550], [-0.4000, -0.3550], [-0.4000,
           0.3550]]'
         linear_min: 1.4
         linear_max: 2.0
-        theta_min: -1.0
-        theta_max: 1.0
+        theta_min: -1.5
+        theta_max: 1.5
     observation_sources:
     - merged_scan
     merged_scan:
