@@ -78,6 +78,23 @@ def accel_limits(platform, spec_dir=None, nav2_dir=None):
             min(float(values['max_linear_accel_unladen']), cap))
 
 
+def stations_file(context):
+    """The stations file for this run, resolved here rather than in the node.
+
+    An empty launch argument must not reach the node: it would replace the
+    node's own default with an empty string and fail on the first open. So the
+    package default is resolved here, where the fallback is visible.
+    """
+    given = LaunchConfiguration('stations_file').perform(context)
+    if given:
+        path = Path(given)
+        if not path.is_file():
+            raise RuntimeError(f'no stations file at {path}')
+        return str(path)
+    return str(Path(get_package_share_directory('amr_mission'))
+               / 'config' / 'stations.yaml')
+
+
 def make_node(context):
     laden, unladen = accel_limits(LaunchConfiguration('platform').perform(context))
 
@@ -88,6 +105,11 @@ def make_node(context):
             'use_sim_time': LaunchConfiguration('use_sim_time'),
             'cycles': LaunchConfiguration('cycles'),
             'handling_time_s': LaunchConfiguration('handling_time_s'),
+            # STATIONS BELONG TO A WORLD. They are poses in a specific building,
+            # so running one world's stations in another sends the vehicle to
+            # coordinates that are inside a wall or outside the shell entirely.
+            # The test track generates its own alongside the world.
+            'stations_file': stations_file(context),
             # WITH MAXIMUM PAYLOAD and unladen respectively. On a platform
             # whose manual publishes a single acceleration rating, as the
             # MP-400's does, these are equal and the switching is a no-op,
@@ -105,5 +127,8 @@ def generate_launch_description():
         # Must match the platform the stack was brought up with. run_stack.sh
         # passes the same value to every launch that needs it.
         DeclareLaunchArgument('platform', default_value='mir250_class'),
+        DeclareLaunchArgument(
+            'stations_file', default_value='',
+            description='absolute path; empty uses the package default'),
         OpaqueFunction(function=make_node),
     ])

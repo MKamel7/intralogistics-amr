@@ -58,6 +58,7 @@ PLATFORM=mir250_class
 WORLD=warehouse
 TRACK_WORLD=false
 KEEPOUT=keepout_mask
+STATIONS=
 SPAWN_X=2.0
 SPAWN_Y=-1.0
 TASK=none
@@ -128,6 +129,7 @@ if [ "$TRACK_WORLD" = true ]; then
   SPAWN_X=2.5
   SPAWN_Y=6.0
   KEEPOUT=keepout_mask_test_track
+  STATIONS="$REPO/src/amr_mission/config/stations.test_track.$PLATFORM.yaml"
 fi
 
 # FAIL BEFORE LAUNCHING, not thirty seconds in. A platform whose generated
@@ -228,7 +230,7 @@ case "$TASK" in
     say "survey exited $?" ;;
   mission)
     ros2 launch amr_mission transport.launch.py cycles:=$CYCLES \
-        platform:=$PLATFORM > "$RUN/mission.log" 2>&1
+        platform:=$PLATFORM stations_file:="$STATIONS" > "$RUN/mission.log" 2>&1
     say "mission exited $?" ;;
   none)
     say "stack up, holding. Ctrl-C to stop, or tools/stop_all.sh"
