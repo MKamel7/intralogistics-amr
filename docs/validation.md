@@ -1455,7 +1455,43 @@ seconds held up, then 1.6 m in 243 s with 247 seconds held up. It is not
 planning badly, it is being stopped. The MiR250 in the same building with the
 same mask is unaffected.
 
-**The candidate that fits all of it** is that the inflation radius and the
+### Hypothesis 3, inflation against the protective fields: REFUTED BEFORE BUILDING
+
+This was the leading candidate and it was about to be implemented. The reasoning
+was that the inflation radius and the protective fields are derived
+independently, so the planner could route the smaller vehicle into a gap its own
+field cannot fit through. The proposed rule was that the inflation radius must
+be at least the half width of the widest field the vehicle can select.
+
+Checked against both platforms before writing any of it:
+
+| | inflation | forward field | widest rotation field | rule holds |
+|---|---|---|---|---|
+| MiR250 | 0.5510 | 0.3550 | 0.7011 | NO |
+| MP-400 | 0.4634 | 0.3445 | 0.6025 | NO |
+
+**The MiR250 violates the rule by 0.150 m and completes 5 of 5 cycles.** The
+MP-400 violates it by 0.139 m, which is very slightly less. So the ratio is not
+the discriminator, and enforcing the rule would have changed a working
+deliverable's inflation radius from 0.551 to 0.701 m on a premise its own
+success disproves.
+
+The reasoning error was conflating two fields. While FOLLOWING A PLAN the
+vehicle selects a forward band, half width 0.355 m on the MiR250 and 0.345 m on
+the MP-400, both comfortably inside their inflation radii. The wide all-round
+fields apply only at |vx| <= 0.05 m/s, which is creeping and spot turning, not
+travelling. There is no inconsistency to fix.
+
+This is the ADR 0010 pattern again and it is the reason this file exists: the
+fix was designed, the deciding measurement was taken, and the fix was discarded
+without a line of it being written.
+
+### The superseded reasoning, kept because it was persuasive
+
+The paragraph below is what the hypothesis looked like before it was checked.
+It is left here deliberately, because it reads as sound and was wrong.
+
+**The candidate that fitted all of it** was that the inflation radius and the
 protective fields are derived INDEPENDENTLY and are not consistent with each
 other. generate_nav2.py takes inflation from the circumscribed radius plus a
 0.05 m band, giving the MP-400 0.4634 m against the MiR250's 0.5510 m.
