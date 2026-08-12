@@ -179,7 +179,7 @@ matches the wrong string.
 The defences that actually worked were not clever. Recording where each number
 came from. Writing the deciding measurement down before building the fix. And
 refusing to draw a conclusion from a single run against a system with 35 m of
-variance , which is the one this project learned last and most expensively.
+variance, which is the one this project learned last and most expensively.
 
 Two ADRs and one hypothesis in this repository were **rejected after the
 deciding measurement was taken and before a line of their implementation was
