@@ -1420,22 +1420,60 @@ PERMITTED. A test can confirm a wrong thing precisely.
 Nav2 configuration rather than recomputed, so the rule stays in one place.
 MiR250 is unchanged at 0.3 and 1.0; the MP-400 goes from 2.4 to 1.0.
 
-**Measured with both halves in place:**
+**RETRACTED. The measurement that appeared to confirm this was confounded, and
+the confound was a layer that was silently absent.**
 
-| | baseline | envelope only | both |
+The run that produced 2 of 5, with 0.5 protective stops per cycle and no time
+held up, was the ONLY run of the day whose keepout mask never published. That
+was not noticed at the time because the failure announces itself only as a WARN
+per costmap update, and because the same run was the one being watched for the
+acceleration clamp. Two variables moved and the improvement was attributed to
+one of them.
+
+Across every run of the day, checking `Filter mask was not received`:
+
+| run | platform | keepout mask | cycles |
 |---|---|---|---|
-| cycles completed | 1 of 5 | 1 of 5 | 2 of 5 |
-| protective stops per cycle | up to 39 | 71 on cycle 1 | 0.5 |
-| held up by safety | 6 to 16 s | 400 s of 484 | 0 s, 0 percent |
-| distance per completed cycle | 36.1 m | 19.9 m | 19.7 and 25.5 m |
+| 19:17 | MiR250 | present | 5 of 5 |
+| 20:01 | MP-400 | present | 1 of 5 |
+| 20:17 | MP-400 | present | 1 of 5 |
+| 20:42 | MP-400 | ABSENT, 1834 warnings | 2 of 5 |
+| 21:19 | MP-400 | present | 0 of 5 |
 
-The MiR250 control on the same day is 5 of 5, mean 74 s, 19.1 m. The MP-400's
-completed cycles are now 76 s over 19.7 m and 107 s over 25.5 m, which is the
-same machine doing the same job.
+So the MiR250 baseline of 5 of 5 IS valid, and the only good MP-400 result is
+the one taken without the vehicle's no-go zones.
 
-**The deadlock hypothesis is withdrawn.** The protective stops were a symptom of
-a vehicle crawling and recovering, not an independent cause, and the corridor
-targets were one measurement away from being "fixed" for no reason.
+**What is still true.** The mission was setting the smoother to 2.4 m/s2 while
+the generated configuration held 1.00, and it never touched `max_decel`. That is
+a defect on its own terms and the clamp for it is correct. What is NOT
+established is that fixing it improved anything, and the honest reading of the
+table above is that it did not.
+
+**The deadlock hypothesis is reinstated, and sharpened.** With the mask present
+the MP-400 is close to immobile: 6.0 m in 243 s with 28 protective stops and 169
+seconds held up, then 1.6 m in 243 s with 247 seconds held up. It is not
+planning badly, it is being stopped. The MiR250 in the same building with the
+same mask is unaffected.
+
+**The candidate that fits all of it** is that the inflation radius and the
+protective fields are derived INDEPENDENTLY and are not consistent with each
+other. generate_nav2.py takes inflation from the circumscribed radius plus a
+0.05 m band, giving the MP-400 0.4634 m against the MiR250's 0.5510 m.
+generate_fields.py sizes the all-round rotation fields from stopping distance
+and the corridor target, giving the MP-400 half widths up to 0.602 m. So the
+planner will happily route the smaller vehicle into a gap that its own
+protective field cannot fit through, and the monitor then stops it there. The
+MiR250 is protected from this by accident, because its larger inflation radius
+keeps it out of those gaps in the first place.
+
+If that is right, the rule is that the inflation radius must be at least the
+half width of the widest field the vehicle can select at planning speed, and
+neither generator currently knows about the other.
+
+**NOT TESTED.** The earlier inflation experiment does not count: it ran with the
+acceleration bug present and, as the table above shows, cannot be trusted on the
+mask either. Re-run it with the mask confirmed present before believing
+anything.
 
 ### What still fails, and a defect found while looking at it
 
@@ -1463,12 +1501,30 @@ This is the third diagnostic-that-lied in this file, after the stale log reads
 and the `grep active` that matched `inactive`. The pattern is identical: a
 check that reports success without testing the thing it claims to test.
 
-It also gives the terminal wedge a candidate worth testing before anything else.
-With no keepout zones the planner will route the vehicle into rack bays that are
-normally forbidden; once inside, the scan marks the rack legs all round it and
-its own cell becomes occupied, which is exactly the observed signature. NOT
-TESTED. Get the filter servers up, confirm the mask is published, and re-run
-before assuming anything about the corridor targets or the approach poses.
+That hypothesis, that a missing mask routed the vehicle into rack bays where the
+scan then walled it in, was TESTED AND REFUTED. With the mask present the
+vehicle is worse, not better: 0 of 5, and barely moving.
+
+FIXING THE FILTER SERVERS TOOK TWO ATTEMPTS, and the first was wrong for an
+instructive reason. The launch file's own comment attributed the failure to a
+service timeout under load, that explanation was taken at face value, and the
+navigation manager was staggered on the strength of it. The log says something
+simpler:
+
+    023.212  manager: "Configuring filter_mask_server"
+    023.370  filter_mask_server: "lifecycle node launched ... Creating"
+
+The manager asks 158 ms before the node exists to answer. Nav2's lifecycle
+manager does not wait for the nodes it manages to finish constructing, and the
+navigation group is worse, because controller_server builds two costmaps and the
+MPPI optimiser first and its manager gave up 20 ms after asking even with an 8
+second head start. The manager has no wait-for-node option and no service-call
+timeout parameter, both checked against the installed library, so both managers
+are now delayed: 12 s for the filters, 30 s for navigation.
+
+The gate worked as intended in between. The failed attempt printed
+`KEEPOUT FILTER INACTIVE` and exited, instead of driving five more cycles
+without the vehicle's no-go zones.
 
 ### What has NOT been tested
 

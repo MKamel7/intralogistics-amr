@@ -22,7 +22,7 @@ only as a vehicle that will not move.
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, TimerAction
 from launch.substitutions import (LaunchConfiguration, PathJoinSubstitution,
                                   TextSubstitution)
 from launch_ros.actions import Node
@@ -45,6 +45,31 @@ from launch_ros.actions import Node
 #
 # Two managers means one slow node cannot stall the other group, and it matches
 # what nav2's own costmap filter examples do.
+# MANAGER DELAYS, and they are not padding.
+#
+# Nav2's lifecycle manager begins configuring as soon as it starts, and it does
+# NOT wait for the nodes it manages to finish constructing. Measured on this
+# machine with Gazebo and SLAM already running:
+#
+#   023.212  manager: "Configuring filter_mask_server"
+#   023.370  filter_mask_server: "lifecycle node launched ... Creating"
+#
+# The configure request arrived 158 ms before the node existed to answer it. The
+# navigation group is worse: controller_server builds two costmaps and the MPPI
+# optimiser before it serves anything, and its manager gave up 20 ms after
+# asking even with an 8 second head start.
+#
+# The manager has no wait-for-node option and no service-call timeout parameter,
+# both checked against the installed library, so staggering the managers is the
+# only lever available. The nodes themselves all start immediately; only the
+# transitions wait, so this costs bringup time and nothing else.
+#
+# When the FILTER group loses this race the failure is silent and safety
+# relevant: the keepout mask is never published, both costmaps run with no
+# keepout zones, and the only symptom is a WARN per costmap update. See V-25.
+FILTER_MANAGER_DELAY = 12.0
+NAV_MANAGER_DELAY = 30.0
+
 FILTER_NODES = [
     ('filter_mask_server', 'nav2_map_server', 'map_server'),
     ('costmap_filter_info_server', 'nav2_map_server', 'costmap_filter_info_server'),
@@ -121,8 +146,9 @@ def generate_launch_description():
 
     nodes = make(FILTER_NODES) + make(NAV_NODES)
 
-    # The filter group first, and on its own manager.
-    nodes.append(Node(
+    # The filter group first, and on its own manager, delayed so the manager
+    # cannot ask before the node can answer. See MANAGER_DELAYS.
+    nodes.append(TimerAction(period=FILTER_MANAGER_DELAY, actions=[Node(
         package='nav2_lifecycle_manager', executable='lifecycle_manager',
         name='lifecycle_manager_costmap_filters', output='screen',
         parameters=[{
@@ -132,13 +158,36 @@ def generate_launch_description():
             # default timeout is what stalled the whole stack.
             'bond_timeout': 20.0,
             'node_names': [name for name, _, _ in FILTER_NODES],
-        }]))
+        }])]))
 
     # One manager for the navigation nodes. SLAM and the safety nodes have their
     # own managers in robot.launch.py, so navigation can be restarted during
     # tuning without dropping the map or, more to the point, without dropping
     # the collision monitor.
-    nodes.append(Node(
+    #
+    # DELAYED, so the two managers do not configure at the same instant.
+    #
+    # Splitting the filters onto their own manager stopped one slow node
+    # stalling the other group, but both managers still fired together and both
+    # then contended for the same loaded machine. Measured: the two "Starting
+    # managed nodes bringup" lines landed 110 ms apart, the navigation manager
+    # gave up on controller_server SIX MILLISECONDS after asking, and
+    # filter_mask_server printed "Configuring" 400 ms AFTER its own manager had
+    # already declared it failed.
+    #
+    # The consequence when only the filter group loses that race is the worse
+    # one, because it is silent: the mask is never published, both costmaps run
+    # with NO keepout zones, and the only symptom is a WARN per costmap update.
+    # One run completed five cycles that way while preflight reported every
+    # check passing. See V-25.
+    #
+    # Nav2's lifecycle manager has no service-call timeout parameter, so this
+    # cannot be tuned. Giving the filter group a clear head start is the
+    # remaining lever, and it matches the order this file already documents as
+    # the correct one. The nodes themselves all start immediately; only the
+    # transitions are staggered, so this costs a few seconds of bringup and
+    # nothing else.
+    nodes.append(TimerAction(period=NAV_MANAGER_DELAY, actions=[Node(
         package='nav2_lifecycle_manager', executable='lifecycle_manager',
         name='lifecycle_manager_navigation', output='screen',
         parameters=[{
@@ -146,7 +195,7 @@ def generate_launch_description():
             'autostart': True,
             'bond_timeout': 20.0,
             'node_names': [name for name, _, _ in NAV_NODES],
-        }]))
+        }])]))
 
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='true'),

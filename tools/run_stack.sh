@@ -133,6 +133,24 @@ say "collision_monitor active"
 
 sleep 10
 ros2 launch amr_navigation navigation.launch.py platform:=$PLATFORM > "$RUN/nav.log" 2>&1 &
+
+# THE KEEPOUT FILTER GETS THE SAME EXPLICIT RETRY THE MONITOR GETS, and for the
+# same reason: when it fails it does so silently. filter_mask_server reads a map
+# from disk on configure and has repeatedly missed its manager's service
+# timeout under load. When it does, the mask is never published, both costmaps
+# run with NO keepout zones, and the vehicle plans through floor that was
+# declared forbidden before it was switched on. One five-cycle run completed
+# that way with 441 warnings and every preflight check passing. See V-25.
+for n in /filter_mask_server /costmap_filter_info_server; do
+  if ! wait_active $n 90; then
+    say "$n not active, retrying activation"
+    timeout 20 ros2 lifecycle set $n configure >/dev/null 2>&1
+    timeout 20 ros2 lifecycle set $n activate  >/dev/null 2>&1
+    wait_active $n 60 || { say "KEEPOUT FILTER INACTIVE: $n"; exit 1; }
+  fi
+done
+say "keepout filter active"
+
 wait_active /bt_navigator 200 && say "nav2 active" || { say "NAV2 FAILED"; exit 1; }
 
 sleep 10
