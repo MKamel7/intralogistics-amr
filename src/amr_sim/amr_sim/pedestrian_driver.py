@@ -38,6 +38,13 @@ sideways. Walkers also yield to each other: if another is close and roughly
 ahead, this one stops and keeps turning, so a pair untangles instead of
 deadlocking nose to nose.
 
+MEETING THE VEHICLE IS DIFFERENT, and is the point of the scenario. A walker
+that sees the vehicle within `yield_distance` and roughly ahead STOPS DEAD and
+holds its ground, keeping the goal it was walking to. It becomes a stationary
+obstacle in the aisle that the robot has to plan around and then continue past
+to its original target. See the long note beside `robot_response` for the two
+earlier models and why both were wrong.
+
 Motion is seeded. Random has to be repeatable or none of the detection numbers
 measured against these scenarios are comparable between runs.
 """
@@ -70,23 +77,65 @@ class PedestrianDriver(Node):
         self.clearance = self.declare_parameter('clearance', 0.45).value
         self.goal_tolerance = self.declare_parameter('goal_tolerance', 0.30).value
         self.personal_space = self.declare_parameter('personal_space', 1.1).value
-        # HOW FAR PEOPLE STAY FROM THE VEHICLE.
+        # WHAT A PERSON DOES WHEN A VEHICLE COMES AT THEM.
         #
-        # Walkers used to ignore the robot completely, because they have no
+        # THE HISTORY MATTERS, because both earlier answers were wrong in
+        # opposite directions and the second one quietly invalidated the
+        # headline result.
+        #
+        # First, walkers ignored the vehicle entirely, because they have no
         # collision geometry and nothing told them it was there. Measured, one
         # passed within 0.38 m of it and one was inside 1.5 m for 31 percent of
-        # the run. Every one of those was a correct protective stop, and
-        # together they made it impossible for the vehicle to depart at all: it
-        # was stopped 46 percent of the time and averaged 0.03 m/s.
+        # the run. Every resulting protective stop was correct, and together
+        # they made it impossible for the vehicle to depart at all: stopped 46
+        # percent of the time, averaging 0.03 m/s. Modelling people who walk
+        # blindly into a moving AMR does not make the test harder, it makes it
+        # meaningless, because the protective stop is exercised constantly and
+        # nothing else ever is.
         #
-        # That is not what a warehouse looks like. Staff who work alongside AMRs
-        # see them and give way, and ISO 3691-4 assumes trained personnel in the
-        # operating area. Modelling people who walk blindly into a moving
-        # vehicle does not make the test harder, it makes it meaningless: the
-        # protective stop is exercised constantly and nothing else ever is.
+        # Then walkers AVOIDED the vehicle, keeping 1.6 m from it and refusing
+        # to even pick a goal near it. That is what this file did until now, and
+        # it is worse, because it looks reasonable. The largest protective field
+        # the MiR250 uses reaches 1.43 m from the vehicle centre, so a 1.6 m
+        # exclusion radius puts people exactly outside the region that would
+        # trigger a stop. It made the safety layer look cheap by construction,
+        # and, more damaging, it meant THE ROBOT NEVER HAD TO REPLAN AROUND A
+        # PERSON. The whole reason MPPI is used here rather than Pure Pursuit is
+        # that it reacts to an obstacle appearing in the local costmap, and no
+        # scenario in this repository ever produced one.
         #
-        # So walkers avoid the vehicle, and the protective stop is left to prove
-        # itself in the scenario written for it rather than by accident here.
+        # WHAT PEOPLE ACTUALLY DO, and what is modelled now: they see the
+        # vehicle and STOP, and they stay stopped while it deals with them. A
+        # stationary person in an aisle is a dynamic obstacle that then
+        # persists, which is the case that forces the local costmap to mark it,
+        # the global planner to re-route, and the vehicle to reach its original
+        # goal by another way. That is the behaviour worth demonstrating, and it
+        # is also what a trained warehouse worker does, which is what ISO 3691-4
+        # assumes is in the operating area.
+        #
+        # They are NOT steered away from the vehicle's path any more, so they
+        # genuinely get in the way.
+        self.robot_response = self.declare_parameter(
+            'robot_response', 'stop').value
+        # Far enough out that stopping produces a RE-ROUTE rather than a
+        # protective stop: the protective field reaches at most 1.43 m from the
+        # vehicle centre, so a person halting at 3 m is an obstacle the planner
+        # has time to route around. The protective stop stays as the backstop
+        # for when the aisle is too narrow to route around at all, which is the
+        # other half of what this scenario measures.
+        self.yield_distance = self.declare_parameter('yield_distance', 3.0).value
+        self.yield_arc = self.declare_parameter('yield_arc', 75.0).value
+        # NOBODY STANDS THERE FOREVER. In an aisle at this building's measured
+        # median width of 1.34 m there is often no room to route around a
+        # standing person at all, and without a release the vehicle waits and
+        # the person waits and the cycle times out on a deadlock neither of
+        # them would sustain in reality. After this long the person gives up and
+        # moves on, which is also what happens when someone notices an AMR
+        # patiently waiting for them.
+        self.yield_release_s = self.declare_parameter(
+            'yield_release_s', 20.0).value
+        # Retained for the old behaviour, selected with robot_response: avoid,
+        # so the runs measured before this change stay reproducible.
         self.robot_clearance = self.declare_parameter('robot_clearance', 1.6).value
         self.robot_frame = self.declare_parameter('robot_frame', 'amr').value
 
@@ -109,6 +158,8 @@ class PedestrianDriver(Node):
                 'pose': None,
                 'stuck_for': 0.0,
                 'dwell': 0.0,
+                # How long this walker has been standing still for the vehicle.
+                'holding_for': 0.0,
             }
         self.dwell_range = (
             self.declare_parameter('dwell_min', 0.5).value,
@@ -166,10 +217,11 @@ class PedestrianDriver(Node):
                 continue
             if not self.grid.segment_clear(x, y, gx, gy, self.clearance):
                 continue
-            # Do not set off towards a spot the vehicle is occupying. Yielding
-            # while walking handles the vehicle arriving; this stops a walker
-            # choosing to walk at it in the first place.
-            if self._too_near_robot(gx, gy):
+            # In AVOID mode, do not set off towards a spot the vehicle is
+            # occupying. In STOP mode this check is deliberately skipped: a
+            # walker that will not even choose a goal near the vehicle never
+            # gets in its way, and getting in its way is the entire point.
+            if self.robot_response == 'avoid' and self._too_near_robot(gx, gy):
                 continue
             return (gx, gy)
         return None
@@ -195,12 +247,33 @@ class PedestrianDriver(Node):
                 w['pub'].publish(Twist())
             rclpy.spin_once(self, timeout_sec=0.02)
 
+    def _vehicle_ahead(self, x, y, heading):
+        """Is the vehicle close enough and far enough forward to stop for?
+
+        Distance and bearing only. Whether the VEHICLE is heading this way is
+        deliberately not considered: a person who has seen an AMR nearby stops
+        for it, and does not first estimate its heading to decide whether they
+        need to.
+        """
+        robot = self.poses.get(self.robot_frame)
+        if robot is None:
+            return False
+        dx, dy = robot[0] - x, robot[1] - y
+        if math.hypot(dx, dy) > self.yield_distance:
+            return False
+        bearing = math.atan2(dy, dx) - heading
+        bearing = math.atan2(math.sin(bearing), math.cos(bearing))
+        return abs(bearing) < math.radians(self.yield_arc)
+
     def _blocked_by_person(self, name, x, y, heading):
         """Is another pedestrian, or the vehicle, close and roughly ahead?"""
         for other, pose in self.poses.items():
             if other == name:
                 continue
             if other == self.robot_frame:
+                if self.robot_response != 'avoid':
+                    continue        # handled by _vehicle_ahead, which stops
+                                    # dead rather than turning away
                 gap, arc = self.robot_clearance, 90.0
             elif other in self.walkers:
                 gap, arc = self.personal_space, 70.0
@@ -254,6 +327,26 @@ class PedestrianDriver(Node):
                 w['dwell'] = self.rng.uniform(*self.dwell_range)
                 w['pub'].publish(Twist())
                 continue
+
+            # STAND STILL FOR THE VEHICLE.
+            #
+            # Zero twist and no turn, so the figure holds its ground and its
+            # footprint stays where the costmap put it. A walker that spun on
+            # the spot here would smear its returns across neighbouring cells
+            # and read as a moving obstacle rather than a standing person.
+            #
+            # The goal is KEPT, not abandoned, and stuck_for is not advanced, so
+            # the walker resumes the journey it was on once the vehicle has
+            # gone, rather than wandering off and taking the obstacle with it.
+            if self.robot_response == 'stop' and self._vehicle_ahead(x, y, yaw):
+                if w['holding_for'] < self.yield_release_s:
+                    w['holding_for'] += self.dt
+                    w['pub'].publish(Twist())
+                    continue
+                # Held long enough that the vehicle is evidently not getting
+                # past. Move on, and do not stop for it again until clear.
+            else:
+                w['holding_for'] = 0.0
 
             err = math.atan2(dy, dx) - yaw
             err = math.atan2(math.sin(err), math.cos(err))

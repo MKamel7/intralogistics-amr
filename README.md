@@ -1,8 +1,12 @@
-# Intralogistics AMR Fleet
+# Intralogistics AMR
 
-A multi-robot autonomous mobile robot fleet for indoor intralogistics, on ROS 2 Jazzy, Gazebo
-Harmonic and Nav2. Robots move VDA KLT load carriers between conveyor stations in a warehouse
-shared with people on foot, under a central traffic controller.
+An autonomous mobile robot for indoor intralogistics, on ROS 2 Jazzy, Gazebo Harmonic and Nav2.
+It moves load carriers between stations in a warehouse shared with people on foot, with a safety
+layer that sits after the planner and can override it.
+
+**One robot, not a fleet.** The repository was originally named for a multi-robot system and the
+name outran the code; there is no traffic controller and no task allocation. A fleet layer is
+listed under Roadmap and is claimed nowhere else.
 
 **Status: early. Phase 0 and part of Phase 1 are done.** This README documents what exists and what
 is measured, not what is planned. Anything not yet built is listed under Roadmap and is not claimed
@@ -10,11 +14,19 @@ anywhere else.
 
 ## Why this exists
 
-Most student ROS 2 fleet projects stop at "several robots navigate to goals". The things that
-decide whether an AMR is usable in a real plant are the ones that get skipped: whether it localises
-without cheating, whether it sees a person in time to stop, whether the fleet deadlocks in a
-two-way aisle, whether anything is actually carried, and whether any of it is measured. This project
-is aimed squarely at those.
+Most ROS 2 navigation projects stop at "the robot reaches the goal". The things that decide whether
+an AMR is usable in a real plant are the ones that get skipped: whether it localises without
+cheating, whether it sees a person in time to stop, whether anything is actually carried, and
+whether any of it is measured against a source rather than asserted.
+
+The claim this repository is built around:
+
+> Every physical constant is traceable to a source, the protective envelope is generated from the
+> vehicle specification rather than tuned, and the build fails when either stops being true.
+
+That is enforced, not aspirational. `test_platform_spec.py` fails the build when a value loses its
+provenance, and it has caught a real fault: a scanner mounting position quoted to the millimetre
+from an operating manual that described a different sensor than the one fitted. See V-23.
 
 ## Current state
 
@@ -222,7 +234,6 @@ src/amr_description   platform specs, xacro description, meshes
     amr_perception    detection, tracking, prediction (C++)
     amr_navigation    costmap layers, behaviour tree nodes, Nav2 params
     amr_safety        safety supervisor, protective field configuration
-    amr_fleet         task allocation, traffic control, VDA 5050 client
     amr_sim           world, scenery models, importer, scenarios
     amr_bringup       launch
     amr_evaluation    KPI harness and analysis

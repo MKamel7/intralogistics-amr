@@ -21,8 +21,15 @@
 # 31 percent of the run. Every resulting protective stop was correct, and
 # together they held the vehicle stopped 46 percent of the time at an average
 # 0.03 m/s: it could not leave its parking spot, so nothing else in the stack
-# was ever exercised. Walkers now also give way to the vehicle, the way staff
-# working alongside an AMR do.
+# was ever exercised. Spawning them clear fixes the departure without telling
+# them anything about where the vehicle goes afterwards.
+#
+# WALKERS STOP FOR THE VEHICLE AND STAND THEIR GROUND. They do not steer around
+# it and they are not stopped from walking into its path, so the robot has to
+# plan around a person standing in an aisle and then carry on to the station it
+# was already going to. That is the case this scenario exists to produce; see
+# the note beside `robot_response` in pedestrian_driver.py for the two earlier
+# models and why both of them made the result meaningless.
 #
 # This does NOT mean the protective stop goes untested. It is tested by the
 # scenario written to test it, where a pedestrian crosses the vehicle's path
