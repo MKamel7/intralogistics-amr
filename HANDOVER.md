@@ -2,6 +2,14 @@
 
 ## Overnight session, 13 August 2026. Read this first
 
+**`control_latency` can now be measured.** `tools/run_stack.sh --run mission
+--latency` attaches a passive probe that times the scan stamp that shows a
+protective violation against the command that acts on it, and reports p50, p95
+and the tail. It writes nothing: the p95 is a candidate for the spec, not a
+decision, because a tool that edited a platform spec from its own measurement
+would be one bad run away from shrinking every protective field in the project.
+Take 20 or more samples before changing anything.
+
 **Start with `docs/findings.md`.** It is the short version of the
 validation record and the thing worth showing anyone.
 
