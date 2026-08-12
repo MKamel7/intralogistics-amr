@@ -16,7 +16,19 @@ import pytest
 import yaml
 
 SPEC_DIR = Path(__file__).resolve().parents[1] / 'config' / 'platforms'
-VALID_KINDS = {'datasheet', 'derived', 'estimated', 'tuned'}
+VALID_KINDS = {
+    'datasheet',   # published by the manufacturer, archived
+    'derived',     # computed from a datasheet figure
+    'estimated',   # not published; a stated engineering judgement
+    'tuned',       # chosen to make something behave, and admitted as such
+    # MEASURED ON THE RUNNING SYSTEM. Added when self_filter_margin was
+    # corrected from a derived 28.7 mm to a measured 40 mm: the derivation from
+    # housing geometry was sound and incomplete, and the vehicle was observed
+    # returning hits on its own structure 11 mm outside the derived margin.
+    # This is the strongest kind available short of a datasheet, and the
+    # taxonomy simply did not have a name for it.
+    'measured',
+}
 
 
 def spec_files():
