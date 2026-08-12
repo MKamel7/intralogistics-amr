@@ -31,7 +31,9 @@ jobs:
             src/amr_description/test/test_platform_spec.py \
             src/amr_safety/test/test_fields.py \
             src/amr_navigation/test/test_nav2_config.py \
-            src/amr_mission/test/test_transport_limits.py
+            src/amr_mission/test/test_transport_limits.py \
+            src/amr_sim/test/test_test_track.py \
+            src/amr_evaluation/test/test_experiment.py
 
   build:
     name: colcon build and test
