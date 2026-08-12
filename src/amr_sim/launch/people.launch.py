@@ -35,8 +35,18 @@ def spawn_people(context, *_, **__):
     nodes.append(Node(
         package='amr_sim', executable='ground_truth_publisher', output='screen',
         parameters=[{'use_sim_time': True, 'world': world}]))
+    # The true floorplan, latched for display and for scoring the SLAM map.
+    # Same namespace and same rule as the pose oracle: evaluation only.
+    nodes.append(Node(
+        package='amr_sim', executable='truth_map_publisher', output='screen',
+        parameters=[{'use_sim_time': True}]))
 
-    walkers = [q for q in spec.get('people', []) if q.get('path')]
+    # Anyone who moves needs a cmd_vel bridge and a driver. The key used to be
+    # `path`, from the fixed-lane era, and after the switch to `wander` this
+    # test matched nobody: the bridge and the driver were never launched at all,
+    # so the figures stood still with no error anywhere to say why. Match on
+    # either, so a scenario file cannot silently produce a dead crowd.
+    walkers = [q for q in spec.get('people', []) if q.get('wander') or q.get('path')]
     if walkers:
         # One bridge entry per walker, ROS to Gazebo, feeding the VelocityControl
         # plugin the person model carries.

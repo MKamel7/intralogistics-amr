@@ -1,0 +1,7 @@
+image: warehouse_truth_robot.pgm
+resolution: 0.05
+origin: [-7.4902, -10.9533, 0.0]
+negate: 0
+occupied_thresh: 0.65
+free_thresh: 0.196
+mode: trinary

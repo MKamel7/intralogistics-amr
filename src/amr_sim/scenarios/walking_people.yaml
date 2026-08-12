@@ -1,49 +1,59 @@
-# Pedestrians walking fixed legs, back and forth, on lanes MEASURED to be clear.
+# Pedestrians wandering randomly on floor the robot has actually mapped.
 #
-# The lanes are not guessed. They were read off the live merged scan by probing
-# a grid of world points for 0.5 m of clearance:
+# There are no lanes here any more, and that is the point. The driver picks a
+# random goal for each walker and accepts it only if the straight line to it is
+# clear in the occupancy map, with a clearance radius around every sample along
+# the way. A route through a rack is rejected before it is walked rather than
+# ending in a collision the physics engine has to sort out. Unknown cells count
+# as blocked, so the figures stay on floor that has actually been observed.
 #
-#     y \ x    -1   0   1   2   3   4   5
-#     -1.0      O   X   O   O   X   X   X      <- the robot sits at (2, -1)
-#     -1.6      O   X   O   O   X   O   X
-#     -2.2      O   O   O   O   X   O   X
-#     -2.8      O   O   O   O   X   O   X
-#     -3.4      O   O   O   O   X   O   X
-#     -4.0      O   O   O   O   X   O   X
+# Earlier versions encoded hand-guessed lane endpoints, and two of three walkers
+# spawned inside the racking. The scenario no longer needs to know anything about
+# the warehouse layout.
 #
-# x = 3 is blocked at every row, and that is precisely where two walkers and the
-# standing worker had been placed by guesswork: they spawned inside the clutter,
-# which is why they never moved and why one ended up hovering. x = -1 to 2 is a
-# clear run at any y below -2, and x = 4 is a clear column below y = -1.6.
+# Motion is seeded (see the driver's `seed` parameter) so a run replays
+# identically. Random has to be repeatable or detection numbers measured against
+# this scenario cannot be compared between runs.
+#
+# SPAWN POINTS ARE CLEAR OF THE VEHICLE, which starts at about (2.0, -1.0).
+# They used to be 1 to 2 m from it, and because walkers also had no idea the
+# vehicle existed, one passed within 0.38 m of it and one was inside 1.5 m for
+# 31 percent of the run. Every resulting protective stop was correct, and
+# together they held the vehicle stopped 46 percent of the time at an average
+# 0.03 m/s: it could not leave its parking spot, so nothing else in the stack
+# was ever exercised. Walkers now also give way to the vehicle, the way staff
+# working alongside an AMR do.
+#
+# This does NOT mean the protective stop goes untested. It is tested by the
+# scenario written to test it, where a pedestrian crosses the vehicle's path
+# deliberately, rather than by three people permanently standing on it.
 
 name: walking_people
-description: Three pedestrians on measured-clear lanes, one stationary worker
+description: Three pedestrians wandering the mapped floor, one stationary worker
 
 people:
-  # Long lane down the open aisle.
-  - name: walker_aisle
-    x: -1.0
-    y: -2.2
-    yaw: 0.0
-    path: {length: 3.0, speed: 1.0}
+  - name: walker_a
+    x: 0.0
+    y: -6.0
+    yaw: 1.57
+    wander: {speed: 1.1, range: 6.0}
 
-  # Parallel lane, slower.
-  - name: walker_slow
-    x: -1.0
-    y: -3.4
-    yaw: 0.0
-    path: {length: 3.0, speed: 0.6}
-
-  # Crosses the aisle up the clear column at x = 4.
-  - name: walker_crossing
-    x: 4.0
+  - name: walker_b
+    x: -3.0
     y: -4.0
-    yaw: 1.5708
-    path: {length: 2.4, speed: 1.2}
+    yaw: 0.0
+    wander: {speed: 0.8, range: 6.0}
+
+  - name: walker_c
+    x: -3.1
+    y: 3.0
+    yaw: 3.14159
+    wander: {speed: 1.3, range: 6.0}
 
   # A worker standing at a station. Deliberately included: a stationary person
-  # is the case the motion test CANNOT distinguish from structure.
+  # is the case the motion test CANNOT distinguish from structure, so leaving it
+  # out would flatter the tracker's numbers.
   - name: worker_standing
-    x: 1.0
-    y: -1.6
+    x: -3.5
+    y: -1.0
     yaw: 3.14159

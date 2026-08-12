@@ -17,7 +17,11 @@ install(PROGRAMS ${PROJECT_NAME}/ground_truth_publisher.py
         DESTINATION lib/${PROJECT_NAME}
         RENAME ground_truth_publisher)
 
-install(DIRECTORY models worlds tools scenarios launch
+install(PROGRAMS ${PROJECT_NAME}/truth_map_publisher.py
+        DESTINATION lib/${PROJECT_NAME}
+        RENAME truth_map_publisher)
+
+install(DIRECTORY models worlds tools scenarios launch maps
         DESTINATION share/${PROJECT_NAME}
         PATTERN "__pycache__" EXCLUDE)
 
