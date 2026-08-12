@@ -1324,11 +1324,86 @@ pocket of floor. That has not been tested. `tools/track_goal.py` on a failing
 dispatch leg against the MiR250's successful one is the measurement, and it is
 what the existing open item on cycle time variance already recommends.
 
+### CAUSE FOUND for the distance: an asymmetric acceleration envelope
+
+`tools/track_goal.py` on a failing leg returned the answer the tool was built to
+give:
+
+    CAME WITHIN 0.02 m at t=92s and then moved away to 0.95 m
+      the vehicle reached the goal and did not stop there, so the goal
+      checker is not being satisfied
+    commanding motion in 188/200 samples, peak 0.75 m/s
+
+The distance to the goal oscillated between 0.09 and 1.22 m with the throttle
+pinned at 0.7 m/s. The vehicle was not lost and it was not blocked. It was
+arriving and failing to stop, orbiting the station until the leg timed out.
+
+The cause was introduced by generate_nav2.py in this same session. It capped
+BRAKING against the emergency reserve and left ACCELERATION at the platform
+rating:
+
+| | MiR250 | MP-400 |
+|---|---|---|
+| ax_max | 1.00 | 2.40 |
+| ax_min | -1.00 | -1.00 |
+
+On the MiR250 `min(1.0 rating, 0.667 x 1.5)` is 1.0, which equals its rating, so
+the envelope came out symmetric BY COINCIDENCE and the fault was invisible. On
+the MP-400 it produced a vehicle that accelerates 2.4 times harder than it can
+brake, so every trajectory MPPI sampled towards the goal overshot it.
+
+The reasoning that produced it was that acceleration has no safety coupling.
+That is true and it is beside the point: it has a CONTROL coupling. The envelope
+is now one figure in both directions, which leaves the MiR250 output unchanged
+and gives the MP-400 1.00 against 1.00. `test_the_vehicle_can_brake_as_hard_as
+_it_accelerates` asserts it on both the controller and the smoother.
+
+**Measured, it is decisive on the quantity it was meant to fix:**
+
+| | before | after | MiR250 |
+|---|---|---|---|
+| distance, completed cycle | 70.1 m | 19.9 m | 19.1 m |
+| all cycles | 50.8 to 104.7 m | 5.0 to 27.1 m | 15.2 to 20.5 m |
+
+### And it exposed a SECOND fault, which is now the dominant one
+
+Still 1 of 5, but failing in a completely different way.
+
+| | before | after |
+|---|---|---|
+| protective stops, cycle 1 | 3 | 71 |
+| held up by safety | 1 s | 400 s of 484 s |
+| commanding motion | 188/199 samples | 93/199 |
+| mean speed | | 0.10 m/s |
+
+The vehicle is no longer driving too far. It is barely driving, held by
+protective stops for about 80 percent of the run.
+
+**The hypothesis, NOT yet tested**, is the deadlock class that generate_fields.py
+documents at length for the MiR250: a vehicle creeping out of rest selects an
+all-round rotation field, the field is violated by the racking, it is held
+stopped, and so it never reaches a speed that would select a narrower field.
+Halving the MP-400's acceleration from 2.4 to 1.0 keeps it in the creep band
+longer, which would make it more exposed to exactly that.
+
+If it is that, the root is a number V-23 already flagged. The rotation ladder is
+sized against `corridor_width_dynamic`, which on this platform is 0.979 m and is
+an ESTIMATE derived from the MiR250's published figures, not a measurement of
+this building. Its rot_2 field is 0.489 m half width and rot_3 is 0.602 m,
+against a building whose measured median corridor is 1.34 m but whose 25th
+percentile is 0.64 m.
+
+The discriminating measurement is the free width actually available along the
+route against the half width of the field selected at each moment. Do that
+before changing anything.
+
 ### What has NOT been tested
 
 Recorded so the next person does not mistake them for conclusions.
 
-    the dispatch approach pose itself, which is the leading candidate above.
+    the deadlock hypothesis immediately above, which is now the leading one.
+    the dispatch approach pose, which the leg analysis pointed at and which the
+      acceleration fix may or may not have already addressed.
     the local costmap window, 5 m against 6 m, and the footprint itself.
     whether the costmap is contaminated, and by what. "Start occupied" in 1.2 m
       of clear floor means something marked that cell. The candidates are the

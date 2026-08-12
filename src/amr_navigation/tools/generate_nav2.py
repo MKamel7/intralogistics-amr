@@ -58,15 +58,28 @@ SPEC_DIR = (Path(__file__).resolve().parents[2]
 # fraction so it means the same thing on a 2.0 m/s vehicle and a 1.5 m/s one.
 COMMISSIONED_SPEED_FRACTION = 0.5
 
-# ORDINARY BRAKING AGAINST THE EMERGENCY RESERVE. The controller's braking
-# limit is capped at two thirds of the emergency deceleration, so the emergency
-# rate is always a genuine reserve rather than a number the controller is
-# already using. Without the cap this is a real hazard on the MP-400, whose
-# unladen acceleration rating of 2.4 m/s2 is HIGHER than its 1.5 m/s2 emergency
-# rate: taken literally it would let the controller brake harder in normal
-# driving than the protective fields assume it can in an emergency, and every
-# stopping distance behind those fields would be computed from the wrong
-# number. On the MiR250 the cap is not binding.
+# THE ORDINARY MOTION ENVELOPE, and it is SYMMETRIC.
+#
+# Braking is capped at two thirds of the emergency deceleration so the emergency
+# rate stays a genuine reserve rather than a number the controller is already
+# using. On the MP-400 that cap is doing real work: its unladen acceleration
+# rating of 2.4 m/s2 is HIGHER than its 1.5 m/s2 emergency rate, so taken
+# literally the controller would brake harder in normal driving than the
+# protective fields assume it can in an emergency.
+#
+# ACCELERATION IS CAPPED AT THE SAME FIGURE, and that was learned the hard way.
+# The first version of this file capped braking alone and left acceleration at
+# the platform rating, on the reasoning that acceleration has no safety
+# coupling. It does not, but it has a CONTROL coupling: a vehicle that can
+# accelerate harder than it can brake cannot converge on a goal, because every
+# trajectory MPPI samples towards the goal overshoots it.
+#
+# It was invisible on the MiR250, where min(1.0 rating, 0.667 x 1.5) is 1.0 and
+# the envelope comes out symmetric BY COINCIDENCE. On the MP-400 it gave 2.4
+# against 1.0, and the vehicle drove to within 0.02 m of a station at 0.7 m/s,
+# failed to stop, and orbited it until the leg timed out. Measured with
+# tools/track_goal.py: "CAME WITHIN 0.02 m and then moved away", commanding
+# motion in 188 of 200 samples. See V-25.
 ORDINARY_DECEL_FRACTION = 2.0 / 3.0
 
 # INFLATION CLEARANCE. The inflation radius is the vehicle's circumscribed
@@ -122,8 +135,11 @@ def derive(spec, platform):
     r_inscribed = min(half_x, half_y)
 
     vx_max = COMMISSIONED_SPEED_FRACTION * v['max_linear_speed']
-    ordinary_decel = min(v['max_linear_accel_unladen'],
+    # One figure for both directions. See the note on ORDINARY_DECEL_FRACTION:
+    # an envelope that accelerates harder than it brakes cannot converge.
+    ordinary_accel = min(v['max_linear_accel_unladen'],
                          ORDINARY_DECEL_FRACTION * v['emergency_decel'])
+    ordinary_decel = ordinary_accel
     inflation_radius = r_circ + INFLATION_CLEARANCE
 
     # LOCAL COSTMAP SIZE. The controller looks one MPPI horizon ahead, so the
@@ -147,9 +163,10 @@ def derive(spec, platform):
         f"= {inflation_radius:.4f} m",
         f"commissioned speed {COMMISSIONED_SPEED_FRACTION:.2f} x "
         f"{v['max_linear_speed']:.2f} m/s rated = {vx_max:.2f} m/s",
-        f"ordinary braking min({v['max_linear_accel_unladen']:.2f} unladen "
-        f"rating, {ORDINARY_DECEL_FRACTION:.3f} x {v['emergency_decel']:.2f} "
-        f"emergency) = {ordinary_decel:.2f} m/s2",
+        f"ordinary envelope, both directions, "
+        f"min({v['max_linear_accel_unladen']:.2f} unladen rating, "
+        f"{ORDINARY_DECEL_FRACTION:.3f} x {v['emergency_decel']:.2f} emergency) "
+        f"= {ordinary_accel:.2f} m/s2",
         f"local costmap 2 x {vx_max:.2f} m/s x {horizon_s:.2f} s horizon "
         f"= {2.0 * lookahead:.2f} m, rounded up to {local_size} m square",
         f"voxel layer {v['vehicle_envelope_height']:.2f} m envelope / "
@@ -177,7 +194,7 @@ def derive(spec, platform):
         'vx_max': f'{vx_max:.2f}',
         'vx_min': f"{-v['max_reverse_speed']:.2f}",
         'wz_max': f"{v['max_angular_speed']:.2f}",
-        'ax_max': f"{v['max_linear_accel_unladen']:.2f}",
+        'ax_max': f'{ordinary_accel:.2f}',
         'ax_min': f'{-ordinary_decel:.2f}',
         'az_max': f'{AZ_MAX:.2f}',
         'rated_speed': f"{v['max_linear_speed']:.2f}",
@@ -190,8 +207,7 @@ def derive(spec, platform):
                                  f"{v['max_angular_speed']:.2f}]",
         'smoother_min_velocity': f"[{-v['max_reverse_speed']:.2f}, 0.0, "
                                  f"{-v['max_angular_speed']:.2f}]",
-        'smoother_max_accel': f"[{v['max_linear_accel_unladen']:.2f}, 0.0, "
-                              f'{AZ_MAX:.2f}]',
+        'smoother_max_accel': f'[{ordinary_accel:.2f}, 0.0, {AZ_MAX:.2f}]',
         'smoother_max_decel': f'[{-ordinary_decel:.2f}, 0.0, {-AZ_MAX:.2f}]',
 
         'mppi_time_steps': f'{MPPI_TIME_STEPS}',

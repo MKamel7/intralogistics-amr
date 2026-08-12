@@ -9,7 +9,7 @@
 #   circumscribed radius 0.5010 m, inscribed 0.2950 m
 #   inflation radius 0.5010 + 0.05 clearance = 0.5510 m
 #   commissioned speed 0.50 x 2.00 m/s rated = 1.00 m/s
-#   ordinary braking min(1.00 unladen rating, 0.667 x 1.50 emergency) = 1.00 m/s2
+#   ordinary envelope, both directions, min(1.00 unladen rating, 0.667 x 1.50 emergency) = 1.00 m/s2
 #   local costmap 2 x 1.00 m/s x 2.80 s horizon = 5.60 m, rounded up to 6 m square
 #   voxel layer 1.20 m envelope / 0.10 m = 12 voxels
 
@@ -171,24 +171,36 @@ controller_server:
       vx_min: -0.30                  # reversing out of a dead end only
       vy_max: 0.0                    # differential drive
       wz_max: 1.50                   # platform maximum angular speed
-      # UNLADEN acceleration. On the MiR250 build this is 1.0 m/s2 rather than
-      # that sheet's 0.3 m/s2 laden figure, which is a load-retention limit;
-      # using the laden figure did not merely make the vehicle gentle, it
-      # stopped MPPI working. Every sampled trajectory landed within 0.015 m/s
-      # of the last command, the candidate set had no diversity to choose
-      # between, and the optimiser returned essentially its prior. Measured on
-      # that build with a valid 167-pose plan in hand: 0.014 m/s commanded,
-      # 0.32 m travelled in three minutes.
-      # See max_linear_accel_unladen in the platform spec.
-      ax_max: 1.00
-      # BRAKING IS CAPPED BELOW THE EMERGENCY RATE, and on this platform that
-      # is min(1.00 unladen rating, two thirds of 1.50 emergency) = 1.00 m/s2.
+      # THE ORDINARY ENVELOPE, SYMMETRIC, and on this platform it is
+      # min(1.00 unladen rating, two thirds of 1.50 emergency) = 1.00 m/s2 in
+      # BOTH directions.
       #
-      # The cap is not decoration. The MP-400's unladen acceleration rating is
-      # HIGHER than its emergency deceleration, so taken literally the
-      # controller would brake harder in normal driving than the protective
-      # fields assume it can in an emergency, and every stopping distance
-      # behind those fields would be computed from a rate the vehicle beats.
+      # Two separate reasons cap this and they pull on different limits.
+      #
+      # BRAKING is capped so the emergency rate stays a reserve. The MP-400's
+      # unladen acceleration rating is HIGHER than its emergency deceleration,
+      # so taken literally the controller would brake harder in normal driving
+      # than the protective fields assume it can in an emergency, and every
+      # stopping distance behind those fields would be computed from a rate the
+      # vehicle beats.
+      #
+      # ACCELERATION is capped to the same figure so the envelope is symmetric.
+      # A vehicle that can accelerate harder than it can brake cannot converge
+      # on a goal, because every trajectory MPPI samples towards the goal
+      # overshoots it. Measured on the MP-400 when this was not done, with
+      # tools/track_goal.py: it came within 0.02 m of a station at 0.7 m/s, did
+      # not stop, and orbited it until the leg timed out, commanding motion in
+      # 188 of 200 samples. It was invisible on the MiR250, where the two
+      # figures happen to be equal anyway.
+      #
+      # The UNLADEN rating is the input rather than the laden one. On the MiR250
+      # build the sheet's 0.3 m/s2 laden figure is a load-retention limit, and
+      # using it did not merely make the vehicle gentle, it stopped MPPI
+      # working: every sampled trajectory landed within 0.015 m/s of the last
+      # command, so the candidate set had no diversity and the optimiser
+      # returned essentially its prior. Measured on that build with a valid
+      # 167-pose plan in hand: 0.014 m/s commanded, 0.32 m in three minutes.
+      ax_max: 1.00
       ax_min: -1.00
       az_max: 2.00                   # no angular acceleration is published
                                      # in either platform spec, so this is a

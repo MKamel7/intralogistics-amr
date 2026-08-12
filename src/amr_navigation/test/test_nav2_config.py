@@ -205,6 +205,28 @@ def test_ordinary_braking_stays_inside_the_emergency_reserve(values, cfg):
         f"{values['emergency_decel']} m/s2")
 
 
+def test_the_vehicle_can_brake_as_hard_as_it_accelerates(cfg):
+    """A vehicle that accelerates harder than it brakes cannot reach a goal.
+
+    This is a CONTROL constraint, not a safety one, and it was found the
+    expensive way. The generator originally capped braking against the
+    emergency reserve and left acceleration at the platform rating, which on
+    the MiR250 comes out symmetric by coincidence and on the MP-400 gave 2.4
+    against 1.0. The vehicle drove to within 0.02 m of a station at 0.7 m/s,
+    failed to stop, and orbited it until the leg timed out. Nothing errored:
+    every trajectory MPPI sampled towards the goal simply overshot it.
+
+    Asserted on both the controller and the smoother, because the smoother is
+    what actually shapes the command that reaches the wheels.
+    """
+    mppi = _mppi(cfg)
+    assert mppi['ax_max'] <= -mppi['ax_min'] + 1e-9, (
+        f"ax_max {mppi['ax_max']} exceeds the braking limit "
+        f"{-mppi['ax_min']}; the vehicle cannot undo what it commands")
+    sm = cfg['velocity_smoother']['ros__parameters']
+    assert sm['max_accel'][0] <= -sm['max_decel'][0] + 1e-9
+
+
 def test_the_smoother_does_not_contradict_the_controller(cfg):
     """The smoother sits between MPPI and the wheels and can only subtract.
 
