@@ -161,6 +161,45 @@ def test_the_scored_aisle_cannot_hold_a_reroute(spec, derived):
         'forces the wait it was built to demonstrate')
 
 
+def test_the_track_contains_an_aisle_the_vehicle_cannot_turn_in(spec, derived):
+    """A designed property, not an accident, and the track's first result.
+
+    The MiR250's circumscribed diameter is 1.0021 m and its published
+    `corridor_width_dynamic` is 1.0000 m, so it is 2.1 mm too large to rotate in
+    the corridor its own datasheet claims. That is not a contradiction in the
+    sheet: MiR quote the figure "with dynamic footprint and SICK safety
+    configuration", and this stack plans with a STATIC footprint. The claim is
+    therefore unreachable as configured, by arithmetic rather than by tuning.
+
+    Asserted so the fact survives. It is also what makes the pedestrian pair
+    work: an aisle a vehicle cannot turn in is one it cannot route around a
+    person in either, so waiting is the correct behaviour there rather than a
+    choice someone made.
+    """
+    v = spec['values']
+    diameter = 2.0 * math.hypot(v['scanner_mount_x'], v['scanner_mount_y'])
+    lo, hi = derived['aisle_2_y']
+    assert (hi - lo) < diameter, (
+        f'the scored aisle is {hi - lo:.4f} m against a circumscribed diameter '
+        f'of {diameter:.4f} m, so the vehicle can now turn in it and the track '
+        f'no longer tests the claim it was built for')
+
+
+def test_the_widest_aisle_does_allow_a_turn(spec, derived):
+    """The track must not be uniformly impossible.
+
+    If every aisle forbade rotation the vehicle could never recover anywhere,
+    and every failure would look the same. The default-footprint corridor is
+    the one where turning is expected to work.
+    """
+    v = spec['values']
+    diameter = 2.0 * math.hypot(v['scanner_mount_x'], v['scanner_mount_y'])
+    lo, hi = derived['aisle_1_y']
+    assert (hi - lo) > diameter, (
+        f'aisle 1 is {hi - lo:.4f} m against a {diameter:.4f} m diameter, so '
+        f'there is nowhere on the track the vehicle can turn')
+
+
 def test_station_approach_poses_are_generated(spec):
     """Hand-authored approach poses are how one platform's pose outlived it."""
     st = yaml.safe_load(stations_path().read_text())

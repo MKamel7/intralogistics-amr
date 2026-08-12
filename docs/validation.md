@@ -1584,6 +1584,51 @@ is worth saying plainly that the cause is still unknown.
 
 ---
 
+## V-26. The test track's first result, and it is arithmetic
+
+The purpose-built track exists so the vehicle is scored against the corridor
+figures its own datasheet publishes. It produced a result during its first
+survey, before completing a single transport cycle.
+
+    MiR250 circumscribed diameter        1.0021 m
+    corridor_width_dynamic, published    1.0000 m
+    margin                              -0.0021 m
+
+**The vehicle is 2.1 mm too large to rotate in the corridor it claims to work
+in.** It can drive straight through with 0.205 m either side; it cannot turn,
+recover, or route around anything there.
+
+This is not a contradiction in the datasheet. MiR quote that figure "with
+dynamic footprint and SICK safety configuration", and a dynamic footprint
+shrinks the modelled body at low speed. THIS STACK PLANS WITH A STATIC
+FOOTPRINT, `footprint_padding: 0.0` over a fixed rectangle, so the published
+claim is unreachable as configured, by arithmetic rather than by tuning.
+
+Observed in the survey as round 6 timing out after 180 s without arriving, on a
+leg that crosses the scored aisle.
+
+**Why this is the result the track was built to produce.** On the AWS warehouse
+the same failure would have read as "the robot got stuck", indistinguishable
+from a planner problem, a costmap problem or a 0.64 m corridor. Here it reads as
+a specific published claim, a specific missing capability, and a 2.1 mm margin.
+
+Two tests now hold it in place: that the scored aisle is narrower than the
+circumscribed diameter, so the track keeps testing the claim it was built for,
+and that the default-footprint aisle is wider, so the track is not uniformly
+impossible and a failure everywhere would still be distinguishable.
+
+It also explains the pedestrian pair without any tuning. An aisle a vehicle
+cannot turn in is one it cannot route around a person in, so waiting there is
+correct behaviour forced by geometry rather than a decision someone made.
+
+**What to do about it is a real choice, not a fix.** Either implement dynamic
+footprint switching, which is what the claim assumes and what a commissioned
+MiR250 does, or state plainly that the 1.000 m figure is not met and why. The
+second is honest and cheap; the first is a genuine capability and a good piece
+of work. Do not quietly widen the aisle.
+
+---
+
 ## Known limitations of the model
 
 Recorded here rather than discovered later. None of these are bugs; they are places where the model
