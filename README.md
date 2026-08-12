@@ -258,9 +258,21 @@ python3 -m pytest src/amr_description/test -q
 
 ## How this is built
 
-Decisions that were expensive to make are recorded as [ADRs](docs/adr/). Four exist so far: the
-Jazzy and Harmonic target, the platform choice, the three-tier simulation, and the C++ and Python
-split. Each states the context and the measurement that forced it.
+Decisions that were expensive to make are recorded as [ADRs](docs/adr/). Ten exist so far, one of them still Proposed. Each
+states the context and the measurement that forced it.
+
+| # | Decision |
+|---|---|
+| [0001](docs/adr/0001-ros2-jazzy-and-gazebo-harmonic.md) | ROS 2 Jazzy and Gazebo Harmonic as the target |
+| [0002](docs/adr/0002-mir250-class-reference-platform.md) | A MiR250-class reference platform, chosen on provenance |
+| [0003](docs/adr/0003-three-tier-simulation.md) | Three simulation tiers, so the CPU budget is explicit |
+| [0004](docs/adr/0004-cpp-and-python-split.md) | C++ for hot paths and plugins, Python for tooling |
+| [0005](docs/adr/0005-scanner-for-safety-cameras-for-navigation.md) | The scanner is the safety sensor, the cameras are navigation sensors |
+| [0006](docs/adr/0006-ground-truth-is-an-oracle-not-an-input.md) | Ground truth is an evaluation oracle and never an input |
+| [0007](docs/adr/0007-keepout-zones-are-commissioning-data.md) | Keepout zones are commissioning data, authored from the site layout |
+| [0008](docs/adr/0008-margin-belongs-to-the-mission-layer.md) | Navigation margin belongs to the mission layer, not the planner |
+| [0009](docs/adr/0009-the-monitor-limits-speed-and-covers-every-velocity.md) | The monitor caps speed, and its bands must cover every velocity |
+| [0010](docs/adr/0010-localisation-mode-for-mission-runs.md) | **Proposed.** Bound SLAM, or localise on a saved map, for mission runs |
 
 Physical constants are never hardcoded. They live in a platform spec, carry a recorded source, and
 a test fails the build if that decays.

@@ -628,6 +628,315 @@ anything, because an unconfigured lifecycle node has no parameters to set under 
 
 ---
 
+## V-16. Navigation: seven silent faults, none of them where they appeared to be
+
+The vehicle would not drive. Over several days this presented, every time, as a controller tuning
+problem: the commanded speed sat at a fraction of what was asked for, or the vehicle spun on the
+spot, or it crawled and gave up. It was never once a controller tuning problem. Seven separate
+faults produced the same symptom, and every one of them was silent.
+
+**Nothing published on `/odom`.** ros2_control publishes `/diff_drive_controller/odom`; every Nav2
+default is plain `/odom`. MPPI reads its measured velocity from that topic and limits each command
+to what the acceleration limit allows from there, so with no odometry it believed the vehicle was
+permanently stationary and every command was 0 + ax_max * model_dt = 0.015 m/s, forever. Measured:
+0.019 m/s commanded, 0.24 m travelled in 180 s. No node logged anything; the topic simply had no
+publisher and the subscriber waited.
+
+**Two publishers on `/clock`.** An orphaned bridge from an earlier launch survived a teardown. With
+two clock sources, simulated time jumps backwards, every node clears its TF buffer several times a
+second, and 19 percent of `map` to `base_link` lookups fail. After the fix, 1.4 percent.
+
+**The collision monitor left INACTIVE.** Its lifecycle activation timed out during a crowded
+start-up. With no monitor, nothing forwards commands to the wheels. Everything else reported
+healthy.
+
+**An uncovered velocity silences the monitor.** See ADR 0009. Reverse and spot turns above 1 rad/s
+matched no polygon, and the monitor responded by publishing nothing rather than by stopping.
+
+**The warning field scaled instead of capped.** See ADR 0009. Stable fixed point at 0.0064 m/s.
+
+**The survey offered goals the planner must refuse.** Goals were required to have 0.45 m of
+clearance against an inscribed radius of 0.501 m, so essentially every goal was inscribed-inflated
+and therefore lethal. Eleven consecutive "no valid path found". With no path there is nothing to
+follow, so the behaviour tree ran its recoveries, and the spinning that looked so much like a
+controller fault was the `spin` recovery doing its job correctly.
+
+**Reachability meant two different things.** The survey's flood fill walked free cells; the planner
+needs a corridor of at least twice the inscribed radius. So the survey could offer a goal reachable
+only through a gap the vehicle does not fit through. Fixed with a Euclidean distance transform so
+the fill traverses only cells the vehicle fits in.
+
+The lesson is not any one of these. It is that six of the seven were invisible from the topic list
+and none produced an error. `tools/preflight.py` now checks all of them in about fifteen seconds:
+one clock publisher, every lifecycle node active, every link of the command chain with a publisher,
+TF resolving, sensors flowing. It would have found the first four immediately.
+
+Two of its own checks were wrong when first written, in the same way the system was: it counted
+publishers before discovery had settled and reported 0 publishers for a topic it simultaneously
+measured flowing at 14.4 Hz, and it counted TF failures during the listener's buffer-fill period
+and scored a healthy system at 11.7 percent against a 10 percent threshold. Both are fixed and both
+are commented, because a diagnostic that lies is worse than no diagnostic.
+
+---
+
+## V-17. Orphaned nodes: the teardown script was wrong for most of the project's life
+
+`ros2 node list` showed **19 `/battery_model`, 6 `/leg_detector` and 5 `/people_tracker`** nodes
+alive at once. Load average was 47 on 12 cores and the MPPI control loop had starved to 2.5 Hz
+against a required 20 Hz, which of course presented as a navigation problem.
+
+The cause was `tools/stop_all.sh`. It matched a hand-maintained list of process names that included
+the simulator, the bridges and the Nav2 servers, and omitted every node this workspace builds
+itself. Each restart therefore left those behind, across dozens of restarts.
+
+The first fix was also wrong, and instructively so: it resolved `/proc/PID/exe` and killed anything
+executing from the workspace install tree. That catches C++ nodes. A Python node's executable is
+`/usr/bin/python3`, so every Python node in the project survived it. The list of survivors is
+exactly the list of Python nodes: battery_model, pedestrian_driver, ground_truth_publisher,
+truth_map_publisher, survey_runner.
+
+The script now tests both the resolved executable and the command line, and reports what it could
+not stop rather than exiting quietly. Verified: 50 processes stopped, 0 survivors, load average
+falling from 47 to 17.8.
+
+Related and worth recording: `pkill -f 'gz sim'` matches the shell running the pkill, because that
+shell's own command line contains the pattern. The shell dies partway through the pattern list, the
+rest never runs, and the caller sees exit 144 while half the stack is still alive. This cost three
+separate debugging rounds before it was understood.
+
+---
+
+## V-18. Mapping quality, measured rather than looked at
+
+Every mapping fault in this project survived because the map was judged by eye. `score_map.py` now
+compares the SLAM map against the ground truth floorplan, searching the alignment offset rather
+than assuming it.
+
+Current figures, on the map produced by an unattended survey from a standing start:
+
+| | |
+|---|---|
+| true floor, vehicle height band | 236.2 m2 |
+| mapped as free | 212.5 m2 |
+| coverage of the true floor | 78.2 % |
+| precision of the mapped free space | 87.0 % |
+| IoU on free space | 70.1 % |
+| obstacle recall, within one 50 mm cell | 10.7 % |
+| **claimed free but really obstacle** | **6.93 m2, 3.26 % of what it calls free** |
+
+Two of these need reading carefully rather than quoting.
+
+**Obstacle recall is low and that is mostly the metric, not the map.** The ground truth marks every
+mesh outline, including interior and hidden surfaces no scanner can ever see, while SLAM marks only
+cells where a beam actually returned. Matching is already given one 50 mm cell of tolerance, without
+which two correct outlines of the same wall offset by a single cell score zero and the figure read
+2.4 percent. The number is kept because it is honest, not because it is flattering.
+
+**The last row is the one that matters**, because it is the dangerous direction: floor the planner
+would route through that is really obstacle. It is the residual under-racking space, and it is why
+ADR 0007 declares keepout zones rather than relying on the map being right.
+
+A bug in this project's own map writer was found while establishing these figures. The generated
+YAML used `free_thresh: 0.25`. The PGM writes unknown as 205, which decodes to an occupancy of
+exactly 0.196, so at 0.25 every unknown cell decoded as FREE. That inflated the ground truth floor
+from 236.2 m2 to 312.8 m2 and would have quietly flattered every coverage number measured against
+it. The ROS convention is 0.196 precisely so unknown lands on the boundary.
+
+---
+
+## V-19. The transport task, and the layering mistake that hid inside it
+
+The first complete pick and deliver cycle:
+
+    cycle 1: complete in 123 s, 17.6 m driven, 0 protective stops, 0 s held up
+             [goods_in 86 s, dispatch 27 s]
+
+Before the fix below, that same delivery leg timed out at 240 s having covered
+12.1 m of an 8.1 m journey, with no protective stops, no planner errors and
+nothing else wrong. Three separate causes were eliminated on the way, and each
+looked plausible while it lasted.
+
+**The vehicle was stopping for itself.** 12 of 12 protective stops in one run
+came from a return at exactly 0.440 m, minimum equal to median equal to maximum,
+always forward, and absent from BOTH costmaps. A real obstacle gives varying
+ranges and appears in the costmap; fixed geometry does neither. 0.400 m of half
+length plus a 0.035 m self filter margin is 0.435 m, so the vehicle's own
+structure sat 5 mm outside its own filter. The margin had been DERIVED as 28.7 mm
+from the scanner housing geometry, which was sound and incomplete. Measured, the
+reach is 40 mm. At 0.060 m the stop count went to zero.
+
+**The payload feature reintroduced a fault this project had already fixed.** The
+laden acceleration limit was being applied to MPPI's `ax_max`. That parameter is
+not a physical limit, it is the bound used to generate candidate trajectories,
+and at 0.3 m/s2 every one of the 2000 samples lands within 0.015 m/s of the last
+command, so the optimiser has no gradient and returns its prior. ADR 0008 records
+exactly this happening and being fixed by raising `ax_max` to 1.0. The transport
+task then set it back to 0.3 the moment the vehicle picked something up.
+Measured on the laden leg: 0.013 to 0.022 m/s commanded for four minutes, which
+is 0.3 * 0.05 = 0.015 m/s to three figures. The unladen pick-up leg on the same
+run arrived normally, which is what finally made the pattern visible.
+
+The limit now goes to the VELOCITY SMOOTHER, which is a rate limiter between the
+controller and the wheels. A load that must not slide is a constraint on the
+commanded profile, and a smoother is what enforces those. It is not a constraint
+on how a controller explores its options, and conflating the two cost a day.
+
+**A diagnostic that lied.** The tool written to find this tracked distance to
+`/goal_pose`, which the mission never publishes because it drives through the
+NavigateToPose action. It fell back to the first plan's endpoint and held it for
+the whole run, then reported that the plan ended 8.17 m from the goal. That was
+an artefact of the tool, not a finding, and it is recorded because it was very
+nearly reported as one. It now tracks the live plan endpoint.
+
+Still outstanding: 1 of 2 cycles completes. The second failed at the dispatch
+station after 8 s, which is a goal rejection rather than a drive failure, and is
+not yet diagnosed.
+
+---
+
+## V-20. Five cycles: the transport task works, and fails in one specific way
+
+Five consecutive cycles in a single run, which is the first measurement here
+with enough repeats to separate a real effect from run to run noise:
+
+| cycle | result | time |
+|---|---|---|
+| 1 | complete | 69 s |
+| 2 | complete | 66 s |
+| 3 | failed | 10 s |
+| 4 | failed |  9 s |
+| 5 | failed | 25 s |
+
+    2 of 5 complete, mean cycle time 67 s, mean distance 17.5 m,
+    mean speed 0.26 m/s, safety cost 4 percent of cycle time
+
+**The completed cycles are tight: 69 s and 66 s, a 3 s spread.** That matters
+beyond the headline, because earlier single-run comparisons in this document
+were made against a baseline that varied by a factor of five, and several
+conclusions were drawn from them more confidently than the evidence allowed. A
+3 s spread says the 175 s cycle measured before the MPPI critic rebalance was a
+genuinely different regime rather than a bad draw, so that change did what it
+appeared to do.
+
+**Every failure is one fault.** Three TF extrapolation errors, three "Unable to
+transform goal pose into costmap frame", three failed cycles. The correspondence
+is exact. No failed cycle had any other cause.
+
+**And it degrades rather than failing randomly.** Cycles 1 and 2 succeed, then 3,
+4 and 5 all fail within 6 to 10 seconds. Something accumulates across the run.
+The leading hypothesis is that slam_toolbox's map to odom publication slows as
+the pose graph grows, widening the window in which a request for "now" outruns
+the newest transform. That is a hypothesis and it is written here as one; the
+measurement that would confirm it is logging the map to odom publish interval
+across a five cycle run and checking whether it grows.
+
+Raising the consumers' transform tolerance did not help, and the reason is worth
+keeping: a tolerance governs how far into the PAST a lookup may reach. This
+request is in the future. Setting slam_toolbox's own `transform_timeout` to
+publish the transform valid 0.2 s ahead did not close it either, so the gap is
+larger than 0.2 s by the time it fails, which is itself consistent with a
+widening interval rather than fixed jitter.
+
+The two candidate responses are recorded as ADR 0010, deliberately left Proposed
+rather than decided, because the measurement that would choose between them has
+not been taken.
+
+---
+
+## V-21. The goal transform failure: two hypotheses refuted, cause still open
+
+The transport task completes 2 of 5 cycles. Every failure is one fault, and it
+has survived two explanations, both of which were tested rather than assumed.
+
+**Refuted: slam_toolbox's pose graph slowing its publication.** Measured, 15140
+`map -> odom` publications across five cycles hold a flat 20.0 ms mean and
+22.9 ms p95 from first window to last, with the single worst gap occurring at
+STARTUP and improving afterwards. ADR 0010 rested on this and is Rejected. Both
+of its options would have fixed nothing, and one of them was attractive enough
+to have been built and believed.
+
+**Refuted: the mission stamping goals with its own clock.** Goals are now
+stamped zero, meaning latest available. Failures went from 3 to 6.
+
+**Where it actually fails.** `controller_server`, transforming into the LOCAL
+costmap's frame, which is `odom`, hence a `map -> odom` lookup:
+
+    Exception in transformPose
+    Requested time 292.980000 but the latest data is at time 292.944000
+    looking up transform from frame [map] to frame [odom]
+
+36 ms into the future, consistently, and roughly two publish periods. The local
+costmap's `transform_tolerance` is 0.5 s, so the lookup should wait rather than
+throw, and it does not.
+
+**The cause, and it was the third thing looked at.** slam_toolbox's `restamp_tf`
+defaults to false, which stamps `map -> odom` from the SCAN time rather than
+from the clock. Measured over 599 publications, the stamp sat ahead of "now" by
+between 40 ms and 28 SECONDS, mean 3.4 s. A 28 second spread on a transform
+published every 20 ms is not jitter, and the low end of that range is the same
+order as the 36 ms failures.
+
+Setting `restamp_tf: true` closed it:
+
+| | before | after |
+|---|---|---|
+| goal transform failures | 6 | **0** |
+| cycles completed | 2 of 5 | **4 of 5** |
+
+The lesson is not the parameter. It is that the first two explanations were
+each coherent, each supported by a real observation, and each wrong, and the
+only thing that separated them was measuring the quantity that would have
+distinguished them BEFORE building anything. ADR 0010 was written and rejected
+without a line of its implementation being started, which is the whole point of
+having written it down as Proposed.
+
+---
+
+## V-22. A number that was asserted rather than measured, and what it cost
+
+Throughout this project's navigation work the test warehouse was described as
+having 1.35 m aisles, and a chain of reasoning was built on it: that the
+MiR250's 1.002 m circumscribed diameter left only 0.348 m of slack, that this
+explained the marginal clearance failures, and that a smaller platform would
+therefore fix them.
+
+The 1.35 m was never measured. It is `corridor_width_default` from the MiR250
+DATASHEET, the corridor width the manufacturer quotes for their vehicle, and it
+was repeated as though it described this building.
+
+Measured properly, from the ground truth map at robot height, corridor width
+being twice the distance to the nearest obstacle at each free cell:
+
+| percentile | corridor width |
+|---|---|
+| p5 | 0.20 m |
+| p25 | 0.64 m |
+| median | 1.34 m |
+| p75 | 2.30 m |
+
+| corridor at least | fraction of floor |
+|---|---|
+| 0.82 m, the MP-400 | 67.8 % |
+| 1.00 m, the MiR250 | 63.2 % |
+
+So the building is not the constraint that was claimed, the two platforms differ
+by five percentage points of reachable floor rather than by a transformation,
+and **the cause of the marginal clearance failures is still unknown**.
+
+Three consequences, recorded so the wrong ones are not carried forward:
+
+    do NOT widen the aisles. The measurement does not support it.
+    the MP-400's value is architectural, not clearance. It proves the platform
+      abstraction and it has better documented provenance. It is not a fix.
+    the clearance failures need their own investigation, which has not started.
+
+This is the same failure as the stale log reads earlier in this document: an
+assertion that sounded right, was never checked, and directed real work. The
+difference is that this one was caught by someone asking whether the aisles
+could simply be widened, which forced the number to be looked at.
+
+---
+
 ## Known limitations of the model
 
 Recorded here rather than discovered later. None of these are bugs; they are places where the model
