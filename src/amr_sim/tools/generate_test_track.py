@@ -76,6 +76,18 @@ RACK_X1 = 17.0             # m, and ends here
 PINCH_WIDTH = 1.340        # m, median corridor of the AWS warehouse
 OPEN_BAY_MIN = 2.300       # m, 75th percentile of the same
 
+# WHERE THE VEHICLE STARTS, in world coordinates, and it matters more than it
+# looks. SLAM puts the MAP FRAME ORIGIN at the robot's start pose, so goals are
+# expressed relative to here and not in world coordinates. The first run of this
+# track sent the vehicle to the station's world position while it sat at map
+# (0, 0), and the planner correctly reported no valid path to a point outside
+# the building it had mapped.
+#
+# Placed in the open bay and deliberately NOT on top of goods_in: a vehicle that
+# starts on its first goal never demonstrates the leg.
+SPAWN_X = 4.5              # m, world
+SPAWN_Y_OFFSET = 0.0       # m, relative to the scored aisle centre
+
 
 def zones(spec):
     """The zone table. Every width is a figure with a stated origin."""
@@ -195,10 +207,14 @@ def build_world(spec, platform):
                       door_lo / 2.0, WALL_H / 2.0,
                       blk_x1 - blk_x0, door_lo, WALL_H, grey))
 
-    stations = {
+    # Stations in WORLD coordinates first, then converted to the map frame
+    # below, because that is the frame the goals are sent in.
+    spawn = (SPAWN_X, (a2_lo + a2_hi) / 2.0 + SPAWN_Y_OFFSET, 0.0)
+    stations_world = {
         'goods_in': (2.5, (a2_lo + a2_hi) / 2.0, 0.0),
         'dispatch': (INTERIOR_X - 2.5, (door_lo + door_hi) / 2.0, 0.0),
     }
+    stations = {n: (x, y, yaw) for n, (x, y, yaw) in stations_world.items()}
 
     # Every solid rectangle, in world coordinates, for the ground truth map and
     # the pedestrian scenario. Collected here rather than re-parsed from the SDF
@@ -212,6 +228,8 @@ def build_world(spec, platform):
     ]
 
     derived = {
+        'spawn': spawn,
+        'stations_world': stations_world,
         'solids': solids,
         'aisle_1_y': lay['aisle_1'],
         'aisle_2_y': lay['aisle_2'],
@@ -419,25 +437,39 @@ def build_keepout_mask():
 
 
 def build_stations(derived, spec):
-    """Station poses, with approach headings DERIVED rather than hand-authored.
+    """Station poses IN THE MAP FRAME, with approach headings derived.
 
-    The approach heading is the direction the vehicle must be facing on arrival.
-    Both stations here are approached along the aisle they sit on, so the
-    heading follows from the geometry instead of being typed in. On the AWS
-    world these were hand-authored against one platform, and the leg that kept
-    failing was the one whose approach pose nobody had re-derived.
+    THE FRAME IS THE WHOLE POINT AND IT COST A RUN. Goals are sent in the `map`
+    frame, and with SLAM running the map origin is wherever the vehicle started,
+    not the world origin. The first version of this file emitted world
+    coordinates, so the vehicle sat at map (0, 0) and was asked to drive to
+    (2.50, 6.00), a point outside the building it had mapped. The planner said
+    "no valid path found" three times in a row, 0.3 m driven per cycle, which
+    reads as a navigation failure and is a coordinate error.
+
+    So every station is written relative to the spawn pose, which this generator
+    also owns. The two cannot disagree because one produces the other.
+
+    The approach heading is the direction the vehicle faces on arrival, and it
+    follows from the geometry rather than being typed in: both stations here sit
+    on a corridor that is entered from the west.
     """
-    gi = derived['stations']['goods_in']
-    dp = derived['stations']['dispatch']
+    sx, sy, _ = derived['spawn']
+    out = []
+    for name, (x, y, yaw) in derived['stations_world'].items():
+        out.append({
+            'name': name,
+            'x': round(x - sx, 3),
+            'y': round(y - sy, 3),
+            'yaw': yaw,
+            'world_xy': [round(x, 3), round(y, 3)],
+            'note': 'map frame, relative to the spawn pose recorded below',
+        })
     return {
-        'stations': [
-            {'name': 'goods_in', 'x': round(gi[0], 3), 'y': round(gi[1], 3),
-             'yaw': 0.0,
-             'note': 'west end of aisle 2, approached heading east'},
-            {'name': 'dispatch', 'x': round(dp[0], 3), 'y': round(dp[1], 3),
-             'yaw': 0.0,
-             'note': 'east of the doorway, approached heading east'},
-        ],
+        # Recorded so run_stack.sh spawns the vehicle where the station offsets
+        # assume it did. A spawn somewhere else silently shifts every goal.
+        'spawn': {'x': round(sx, 3), 'y': round(sy, 3), 'yaw': 0.0},
+        'stations': out,
         'route': ['goods_in', 'dispatch'],
     }
 

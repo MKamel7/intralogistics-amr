@@ -134,6 +134,14 @@ if [ "$TRACK_WORLD" = true ]; then
   STATIONS="$REPO/src/amr_mission/config/stations.test_track.$PLATFORM.yaml"
   SCENARIO=track_people
   TRUTH_MAP=test_track_truth
+  # THE SPAWN COMES FROM THE GENERATED STATIONS FILE, not from a number typed
+  # here. Station coordinates are in the map frame, whose origin SLAM puts at
+  # the vehicle's start pose, so spawning anywhere else silently shifts every
+  # goal by the difference. One generator owns both, and this reads it back.
+  SPAWN_X=$(awk '/^spawn:/{f=1;next} f&&/^  x:/{print $2;exit}' "$STATIONS")
+  SPAWN_Y=$(awk '/^spawn:/{f=1;next} f&&/^  y:/{print $2;exit}' "$STATIONS")
+  [ -n "$SPAWN_X" ] && [ -n "$SPAWN_Y" ] || {
+    echo "could not read the spawn pose from $STATIONS"; exit 2; }
 fi
 
 # FAIL BEFORE LAUNCHING, not thirty seconds in. A platform whose generated

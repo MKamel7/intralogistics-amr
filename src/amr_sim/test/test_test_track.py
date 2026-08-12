@@ -171,11 +171,37 @@ def test_station_approach_poses_are_generated(spec):
         assert 'note' in s and s['note'], 'every station states how it is approached'
 
 
+def test_stations_are_in_the_map_frame_not_world_coordinates(derived):
+    """Goals are sent in `map`, whose origin SLAM puts at the spawn pose.
+
+    Emitting world coordinates put the vehicle at map (0, 0) and asked it to
+    drive to a point outside the building it had mapped. Three cycles, 0.3 m
+    each, "no valid path found", which reads as a navigation failure and is a
+    coordinate error. The offset is asserted rather than trusted.
+    """
+    st = yaml.safe_load(stations_path().read_text())
+    sx, sy, _ = derived['spawn']
+    assert st['spawn']['x'] == pytest.approx(sx)
+    assert st['spawn']['y'] == pytest.approx(sy)
+    for s in st['stations']:
+        wx, wy = s['world_xy']
+        assert s['x'] == pytest.approx(wx - sx, abs=1e-3)
+        assert s['y'] == pytest.approx(wy - sy, abs=1e-3)
+
+
+def test_the_vehicle_does_not_start_on_its_first_goal(derived):
+    """A vehicle spawned on the station never demonstrates the leg."""
+    sx, sy, _ = derived['spawn']
+    gx, gy, _ = derived['stations_world']['goods_in']
+    assert math.hypot(gx - sx, gy - sy) > 1.0, (
+        'the spawn pose is on top of goods_in, so the first leg proves nothing')
+
+
 def test_stations_sit_on_the_aisles_they_belong_to(derived):
     """A station off its own aisle is a goal the planner cannot reach cleanly."""
     a2_lo, a2_hi = derived['aisle_2_y']
     d_lo, d_hi = derived['doorway_y']
-    gi = derived['stations']['goods_in']
-    dp = derived['stations']['dispatch']
+    gi = derived['stations_world']['goods_in']
+    dp = derived['stations_world']['dispatch']
     assert a2_lo < gi[1] < a2_hi, 'goods_in is not on the dynamic-corridor aisle'
     assert d_lo < dp[1] < d_hi, 'dispatch is not aligned with the doorway'
