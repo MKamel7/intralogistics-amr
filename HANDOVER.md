@@ -29,10 +29,27 @@ the corridor figures the datasheet publishes, read from `validation_targets`.
 `gz sdf` reports it valid, the stack brings up on it, and preflight passes 21 of
 21 checks. Run it with `tools/run_stack.sh --test-track`.
 
-**It has not yet completed a transport cycle**, and the reason is the useful
-finding of the night rather than a fault: three separate assets are expressed in
-map coordinates and were bound to the AWS world rather than to whichever world
-is running.
+**It has not yet completed a transport cycle**, and the last reason is not a
+fault at all. Six assets were bound to the AWS world rather than to whichever
+world is running; all six are now paired, and what remains is the documented
+workflow.
+
+THE STATE AS OF THE LAST RUN. Bringup clean, preflight 21 of 21, `goods_in`
+reached in 16 s over 2.5 m. Then:
+
+    Goal Coordinates of(17.000000, 2.375000) was outside bounds
+
+`dispatch` is 19 m east through floor SLAM has never seen, and
+`allow_unknown: false` means the vehicle plans only on surveyed floor. That is a
+deliberate decision, not a regression. THE TRACK NEEDS SURVEYING FIRST:
+
+    tools/run_stack.sh --test-track --run survey     # map it
+    tools/run_stack.sh --test-track --run mission --cycles 5
+
+The AWS world tolerates a cold mission because its stations sit inside what the
+opening scans cover. On a 24 m track they do not. If the two-step is a nuisance,
+the fix is to chain them in run_stack.sh, not to allow planning into unknown
+space, which V-16 already argued against at length.
 
     world file        was already an argument, now checked before launch
     keepout mask      was hardcoded; now selected by name, track ships its own
