@@ -42,6 +42,13 @@ def generate_launch_description():
         DeclareLaunchArgument('gui', default_value='true',
                               description='run the Gazebo GUI'),
         DeclareLaunchArgument('rviz', default_value='false'),
+        # Two layouts. robot.rviz is the sensing view used while bringing the
+        # vehicle up. navigation.rviz is the one that explains a decision:
+        # costmaps, the global plan, the several thousand trajectories MPPI
+        # considered, the one it chose, and the protective fields that will
+        # stop it regardless. Use it whenever showing obstacle avoidance.
+        DeclareLaunchArgument('rviz_config', default_value='navigation.rviz',
+                              description='robot.rviz or navigation.rviz'),
         DeclareLaunchArgument('cameras', default_value='true',
                               description='false gives the fleet-tier robot'),
         DeclareLaunchArgument('scanners', default_value='true'),
@@ -279,7 +286,7 @@ def generate_launch_description():
         package='rviz2', executable='rviz2', output='screen',
         condition=IfCondition(LaunchConfiguration('rviz')),
         arguments=['-d', PathJoinSubstitution(
-            [bringup_share, 'rviz', 'robot.rviz'])],
+            [bringup_share, 'rviz', LaunchConfiguration('rviz_config')])],
         parameters=[{'use_sim_time': True}])
 
     return LaunchDescription(args + [
