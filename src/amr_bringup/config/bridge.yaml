@@ -5,9 +5,20 @@
 # subscriber, so an unused bridge entry is not free: it makes the simulator
 # render frames nobody reads. See docs/adr/0003-three-tier-simulation.md.
 #
-# The point clouds are deliberately NOT bridged by default. They are the most
-# expensive payload here and the perception pipeline will consume them inside
-# the simulator-side process once it exists.
+# THE CAMERA POINT CLOUDS ARE BRIDGED, and they were not always. They are the
+# most expensive payload here, and the earlier judgement that nothing consumed
+# them was simply wrong: without them the vehicle navigates on a single 150 mm
+# scan plane, which cannot represent its drivable space.
+#
+# Measured on this world, geometry occupying the band a person walks through
+# covers 108.7 m2, and the band the SCANNER sees covers 16.4 m2. Warehouse
+# racking stands on legs, so at 150 mm it reads as a row of thin posts with
+# generous gaps between them. The planner routed straight into one of those
+# gaps and the vehicle wedged underneath the shelving at 0.400 m clearance
+# against its own 0.501 m inscribed radius, unable to move in any direction.
+#
+# The clouds feed the costmap only. They are NOT a safety input: the collision
+# monitor stays on the rated scanner. See docs/adr/0005.
 
 - ros_topic_name: "/clock"
   gz_topic_name: "/clock"
@@ -70,4 +81,19 @@
   gz_topic_name: "/camera_right/camera_info"
   ros_type_name: "sensor_msgs/msg/CameraInfo"
   gz_type_name: "gz.msgs.CameraInfo"
+  direction: GZ_TO_ROS
+
+# ---- Depth point clouds -------------------------------------------------
+# Consumed by the voxel layer in both costmaps so the planner sees structure
+# above the scan plane. Navigation input, never a safety input.
+- ros_topic_name: "/camera_left/points"
+  gz_topic_name: "/camera_left/points"
+  ros_type_name: "sensor_msgs/msg/PointCloud2"
+  gz_type_name: "gz.msgs.PointCloudPacked"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/camera_right/points"
+  gz_topic_name: "/camera_right/points"
+  ros_type_name: "sensor_msgs/msg/PointCloud2"
+  gz_type_name: "gz.msgs.PointCloudPacked"
   direction: GZ_TO_ROS

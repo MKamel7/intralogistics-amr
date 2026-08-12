@@ -114,7 +114,25 @@
 
     <!-- Optical frame: REP 103 puts camera optical axes as z forward, x right,
          y down, which is not the robot convention, so the two are kept as
-         separate frames rather than silently mixed. -->
+         separate frames rather than silently mixed.
+
+         IT IS DEFINED BUT IT IS NOT WHAT THE POINT CLOUD IS STAMPED WITH, and
+         the difference cost a full debugging round. Gazebo Harmonic publishes
+         the rgbd_camera point cloud in the camera's LINK convention, x forward,
+         y left, z up, not in the optical convention. Stamping it as the optical
+         frame makes every consumer apply a 90 degree rotation the data has
+         already accounted for.
+
+         Measured on the running system: labelled optical, 41.8 percent of the
+         cloud landed BELOW THE FLOOR, which is impossible, and 17173 points
+         landed inside the vehicle's own footprint, so the costmap marked the
+         vehicle as standing in an obstacle and the planner answered
+         "Start occupied" while the vehicle sat in an aisle with 3.05 m of
+         clearance. Labelled as the link frame, both counts are exactly zero.
+
+         The frame is kept because it is correct for IMAGE geometry, and if
+         anything ever reprojects the colour or depth image it will need it.
+         Nothing does today, and the point cloud is what navigation consumes. -->
     <link name="${name}_optical_frame"/>
     <joint name="${name}_optical_joint" type="fixed">
       <parent link="${name}_link"/>
@@ -128,14 +146,32 @@
         <update_rate>${p['camera_update_rate']}</update_rate>
         <always_on>1</always_on>
         <visualize>false</visualize>
-        <gz_frame_id>${name}_optical_frame</gz_frame_id>
+        <!-- The LINK frame, deliberately. See the note above the optical
+             frame definition: the cloud is already in this convention. -->
+        <gz_frame_id>${name}_link</gz_frame_id>
         <camera>
           <horizontal_fov>${radians(p['camera_hfov'])}</horizontal_fov>
           <image>
-            <!-- 640x480 at 15 Hz is a CPU budget decision, not a sensor limit.
-                 See docs/adr/0003-three-tier-simulation.md. -->
-            <width>640</width>
-            <height>480</height>
+            <!-- 320x240, and this is a CPU budget decision rather than a
+                 sensor limit. See docs/adr/0003-three-tier-simulation.md.
+                 
+                 It was 640x480. Each frame is then 307200 points, two cameras
+                 produce 3.7 million points per second, and every one of them
+                 is serialised by the bridge and inserted into a voxel layer on
+                 two costmaps. Measured with that setting: bridge at 72 percent
+                 of a core, controller at 84 percent, load average 35 on 12
+                 cores, and the MPPI control loop falling from its required
+                 20 Hz to between 8 and 19 Hz until the behaviour tree gave up
+                 waiting with "Failed to get result for follow_path".
+
+                 320x240 is a quarter of the data and loses nothing that
+                 matters: across an 87 degree field, 320 columns put samples
+                 about 24 mm apart at the 4 m marking range, still finer than
+                 the 50 mm costmap cell they are being written into. Sampling a
+                 grid four times more finely than its resolution is not extra
+                 information, it is extra cost. -->
+            <width>320</width>
+            <height>240</height>
             <format>R8G8B8</format>
           </image>
           <!-- Clip planes are the SENSOR's limits, not a convenient framing.

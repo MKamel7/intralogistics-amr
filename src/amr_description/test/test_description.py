@@ -285,3 +285,40 @@ def test_controllers_yaml_matches_the_platform_spec(spec):
     assert dd['angular.z.max_velocity'] == pytest.approx(v['max_angular_speed'])
     # base_frame_id itself is checked against the description's root in
     # test_odometry_frame_is_the_root_link, which is the property that matters.
+
+
+def test_depth_cloud_is_stamped_with_the_link_frame_not_the_optical_frame(urdf):
+    """Gazebo publishes the RGBD cloud in the LINK convention, not the optical one.
+
+    This is the single most expensive convention mistake available here,
+    because nothing reports it. Stamping the cloud with the optical frame makes
+    every consumer apply a rotation the data has already accounted for. On the
+    running system that put 41.8 percent of the cloud below the floor, which is
+    impossible, and 17173 points inside the vehicle's own footprint, so the
+    costmap marked the vehicle as standing in an obstacle and the planner
+    replied "Start occupied" while it sat in an aisle with 3.05 m of clearance.
+    Labelled as the link frame, both counts are exactly zero.
+
+    The optical frame is still DEFINED, because it is correct for image
+    geometry. It simply must not be what the sensor stamps.
+    """
+    root = urdf
+    cameras = [s for s in root.iter('sensor') if s.get('type') == 'rgbd_camera']
+    assert cameras, 'no rgbd_camera sensors found'
+    for sensor in cameras:
+        frame = sensor.findtext('gz_frame_id')
+        assert frame is not None, f'{sensor.get("name")} has no gz_frame_id'
+        assert not frame.endswith('_optical_frame'), (
+            f'{sensor.get("name")} stamps its cloud with {frame}; Gazebo emits '
+            f'link-convention data, so this rotates it twice')
+        assert frame.endswith('_link'), frame
+
+    # The optical frame must still exist, with the REP 103 rotation, so image
+    # geometry remains available to anything that needs it later.
+    joints = {j.get('name'): j for j in root.iter('joint')}
+    optical = [n for n in joints if n.endswith('_optical_joint')]
+    assert optical, 'the optical frames were deleted rather than left unused'
+    for name in optical:
+        rpy = joints[name].find('origin').get('rpy').split()
+        assert abs(float(rpy[0]) + math.pi / 2) < 1e-6, name
+        assert abs(float(rpy[2]) + math.pi / 2) < 1e-6, name
