@@ -12,6 +12,17 @@ V-26, V-27 and V-28, which are the results this session produced.
 
 `tools/run_stack.sh --test-track --run survey_mission --cycles 5`
 
+BUDGET AN HOUR. Surveying scales with floor area and this building has about
+480 m2 of it, roughly double the first version. A 2400 s cap killed a run at
+round 17 with 476.9 m2 mapped, which is all but finished, and the truncation
+reads as a failed survey rather than as a clock running out. The AWS warehouse
+needs a fraction of this.
+
+The right fix is not a longer timeout. It is to survey ONCE, save the map, and
+run missions against it with AMCL, which is what a commissioned vehicle does and
+what the amcl block in the Nav2 configuration is already there for. That is a
+real piece of work and it is not done.
+
 42.0 by 13.56 m, and the height is DERIVED from the zones it must hold rather
 than fixed, because a shell sized independently of its contents leaves a
 remainder and a remainder is either a corridor or a trap. It carries four
