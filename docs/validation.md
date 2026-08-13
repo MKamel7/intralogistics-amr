@@ -1769,6 +1769,82 @@ a decision, not an overnight edit.
 
 ---
 
+## V-29. The latency tail was congestion, and the aisles were the cost
+
+The same two probes were run again after the track was widened, so every aisle
+carries the vehicle's turning width plus room to pass a person. The comparison
+is the useful part, because only the geometry changed.
+
+| | narrow aisles | wide aisles |
+|---|---|---|
+| protective stops in the mission | 155 | 0 |
+| mean speed | 0.15 m/s | 0.49 m/s |
+| completed cycle | 261 s over 38.7 m | 93 s over 45.1 m |
+| held up by safety | 224 s of 261 | 0 s |
+| latency p50 | 76 ms | 78 ms |
+| latency p95 | 328 ms | 116 ms |
+| latency standard deviation | 82.8 ms | 32.5 ms |
+
+### The 0.10 s estimate is defensible after all, and the tail was a symptom
+
+V-28 reported a p95 of 328 ms against an estimate of 100 ms and called the
+protective field short by 228 mm in one stop in twenty. That reading was
+correct about the measurement and wrong about the cause.
+
+The p50 barely moved, 76 to 78 ms. The p95 fell from 328 ms to 116 ms and the
+spread more than halved. Sensor-to-command time is not intrinsically long
+tailed here: it becomes long tailed when the vehicle is being protective
+stopped every few seconds, MPPI is re-planning against a costmap full of
+violations, and everything is contending for the same CPU.
+
+So `control_latency: 0.10` is a reasonable figure for a HEALTHY system and the
+earlier tail was the system misbehaving. V-28's own note predicted this in the
+abstract, that a long tail means the fix is in the stack rather than in the
+number, and this is that case measured.
+
+**It does not make the estimate safe by default.** 116 ms still exceeds 100 ms
+at the p95, the sample is only 18 and the tool says so, and a protective field
+is sized for the tail. The honest position is that the number is close, the
+earlier alarm was congestion, and it wants a longer run before anything is
+written to a spec.
+
+### The structure stops track how close the vehicle drives to racking
+
+Forty five stops, all structure, none pedestrian, and NONE OF THEM DURING THE
+TRANSPORT CYCLES. The mission legs recorded zero; every stop happened during
+the survey, which is the phase that deliberately drives the vehicle up to
+unmapped edges.
+
+What changed in their character is more interesting than the count:
+
+    narrow aisles: costmap did not know about 126 of 155
+    wide aisles:   costmap knew 39 of 45 were lethal
+
+In the narrow track the vehicle was being stopped by things the costmap had no
+record of. In the wide one it is being stopped while driving close to structure
+it knows about, which is what a survey does.
+
+**This weakens the self filter hypothesis considerably.** A vehicle carries its
+own pods everywhere, so if the stops were self observation leaking past the
+filter's corners, widening the aisles could not have removed them from the
+mission entirely. It did.
+
+### What survives as the open question
+
+    ahead 26, to the side 2, BEHIND 17
+
+Seventeen of forty five stops were for something behind the vehicle while it
+drove forward, and the costmap knew about them. That is not an obstacle and it
+is not the filter. It is the rear field being live during forward motion, which
+is a field selection question in generate_fields.py: the reverse band covers
+linear_min to 0.0, and a vehicle creeping forward at under the threshold can
+still select it.
+
+That is narrow, checkable and untested, and it is now the only structural stop
+finding that has survived two runs and a geometry change.
+
+---
+
 ## Known limitations of the model
 
 Recorded here rather than discovered later. None of these are bugs; they are places where the model
