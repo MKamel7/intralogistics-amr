@@ -61,7 +61,12 @@ SPEC_DIR = (Path(__file__).resolve().parents[2]
 # ---- fixed building geometry ---------------------------------------------
 # The shell is a plain rectangle. Its size is a consequence of the zones that
 # have to fit inside it, not a number with meaning of its own.
-INTERIOR_X = 34.0          # m, wide enough for a real staging bay either end
+# WIDE ENOUGH FOR THE BACK BAY TO HOLD THINGS. At 34.0 m the dispatch apron was
+# 5.6 m across and had to fit three delivery bays, a column line and a pallet
+# between each pair of bays, all at 2.2 m spacing. It could not: a column was
+# silently dropped and a pallet landed on the column line. Space is the fix, not
+# tighter packing.
+INTERIOR_X = 42.0          # m
 # INTERIOR_Y IS DERIVED, see interior_y(). Fixing it meant that widening the
 # aisles pushed the racking down until 0.543 m was left against the south wall,
 # which is narrower than the vehicle: it drove in from the open bay and wedged.
@@ -322,7 +327,7 @@ def box(name, x, y, z, sx, sy, sz, colour):
 """
 
 
-def clutter(spec, iy, keep_clear=()):
+def clutter(spec, iy, keep_clear=(), bay_gap_ys=()):
     """Roof columns, staged pallets and a charger, on a grid that cannot trap.
 
     THE HARD RULE. Every gap this leaves, between two objects and between an
@@ -356,67 +361,23 @@ def clutter(spec, iy, keep_clear=()):
     signal = (0.85, 0.62, 0.15)
     out = []
 
-    # ROOF COLUMNS on a solved grid. Columns march down a warehouse on a
-    # regular pitch; the pitch here is whatever leaves a passing width between
-    # them, rounded up so the arithmetic is not marginal.
-    pitch = gap + COLUMN + 0.20
-
-    def conflicts(cx, cy):
-        """Would a column here crowd a pose, or leave an unusable nook?
-
-        The wall check is not an afterthought. Phasing the line to clear the
-        spawn pushed the end column to 0.974 m from the south wall, which is a
-        strip the vehicle can drive into and not turn in: the same fault as the
-        leftover under the racking, arrived at from a different direction.
-        """
-        if not (COLUMN / 2 >= cy - 1e-9 or cy - COLUMN / 2 >= gap):
-            return True                      # too close to the south wall
-        if not (cy + COLUMN / 2 >= iy - 1e-9 or iy - cy - COLUMN / 2 >= gap):
-            return True                      # too close to the north wall
-        for kx, ky in keep_clear:
-            dx = max(cx - COLUMN / 2 - kx, kx - cx - COLUMN / 2, 0.0)
-            dy = max(cy - COLUMN / 2 - ky, ky - cy - COLUMN / 2, 0.0)
-            if math.hypot(dx, dy) < gap:
-                return True
-        return False
-
-    def line(x, tag):
-        """A full column line, PHASED rather than punched through.
-
-        Columns used to be laid on a fixed grid and any that crowded the spawn
-        or a station were dropped, which left visible holes in the line exactly
-        where the eye expects a column: a warehouse whose roof is unsupported
-        over the two places people stand. Shifting the whole line by a fraction
-        of its pitch keeps every column and moves them all off the poses that
-        have to stay clear, which is what a real building does when a column
-        would land somewhere inconvenient.
-        """
-        n = max(1, int((iy - gap) // pitch))
-        span = (n - 1) * pitch
-        base = (iy - span) / 2.0
-        best, best_bad = 0.0, None
-        for step in range(24):                     # a full pitch, in 24 steps
-            shift = (step / 24.0) * pitch - pitch / 2.0
-            bad = sum(conflicts(x, base + i * pitch + shift) for i in range(n))
-            if best_bad is None or bad < best_bad:
-                best, best_bad = shift, bad
-            if bad == 0:
-                break
-        for i in range(n):
-            cy = base + i * pitch + best
-            if conflicts(x, cy):
-                continue                            # only if no phase clears it
-            out.append((f'column_{tag}{i}', x - COLUMN / 2, x + COLUMN / 2,
+    # FOUR COLUMNS, EQUIDISTANT. A roof grid, not a hedge: two down each
+    # staging bay at the same two heights, so they read as a structural grid
+    # from any angle and the spacing is one number rather than a solved pitch.
+    #
+    # Four was chosen rather than derived. What IS derived is that each one
+    # clears the passing width from every wall, every other object and every
+    # pose the vehicle has to occupy, which is checked below and asserted by a
+    # test. If a position cannot satisfy that it is reported rather than
+    # silently dropped, because a missing column is a hole in the roof grid and
+    # should be noticed.
+    col_ys = (iy / 3.0, 2.0 * iy / 3.0)
+    col_xs = (RACK_X0 * 0.8, INTERIOR_X - (INTERIOR_X - RACK_X1) / 2.0 + 1.0)
+    for xi, cx in enumerate(col_xs):
+        for yi, cy in enumerate(col_ys):
+            out.append((f'column_{"we"[xi]}{yi}',
+                        cx - COLUMN / 2, cx + COLUMN / 2,
                         cy - COLUMN / 2, cy + COLUMN / 2, COLUMN_H, concrete))
-
-    # One line in each staging bay, both on open floor the vehicle crosses
-    # every cycle. The west line is deliberately NOT at the middle of the bay:
-    # that put it through the spawn, so the column beside the home square could
-    # not be placed at any phase and the roof was unsupported over the one spot
-    # the vehicle always occupies. Set clear of the spawn instead, and the whole
-    # line survives.
-    line(RACK_X0 * 0.8, 'w')
-    line(INTERIOR_X - (INTERIOR_X - RACK_X1) / 2.0 + 1.0, 'e')
 
     # STAGED PALLETS in the west bay, clear of the columns and of the route
     # between goods_in and the racking. Laid out as a pair, which is how they
@@ -433,7 +394,17 @@ def clutter(spec, iy, keep_clear=()):
         out.append((f'pallet_w{i}', px, px + PALLET_X,
                     py - PALLET_Y / 2, py + PALLET_Y / 2, PALLET_H, timber))
 
-    # NO PALLETS IN THE EAST BAY. They were tried and the clearance test threw
+    # A PALLET STACK BETWEEN CONSECUTIVE DELIVERY BAYS, which is what makes
+    # three bays worth having: reaching one means routing past what stands
+    # between it and its neighbour, rather than driving at a single wide
+    # target. Placed on the aisle side of the bays so they are in the way
+    # rather than behind them.
+    bx = INTERIOR_X - 2.5 - 3.4
+    for i, by in enumerate(bay_gap_ys):
+        out.append((f'pallet_bay{i}', bx, bx + PALLET_X,
+                    by - PALLET_Y / 2, by + PALLET_Y / 2, PALLET_H, timber))
+
+    # NO FURTHER PALLETS IN THE EAST BAY. They were tried and the clearance test threw
     # them out: 2.100 m to the nearest column against a 2.202 m requirement,
     # and the only other space is inside the cross aisle the route uses. The
     # east apron is 5.6 m wide and already carries a column line and the
@@ -536,9 +507,22 @@ def build_world(spec, platform):
     # Stations in WORLD coordinates first, then converted to the map frame
     # below, because that is the frame the goals are sent in.
     spawn = (SPAWN_X, (a2_lo + a2_hi) / 2.0 + SPAWN_Y_OFFSET, 0.0)
+
+    # THE DELIVERY BAYS ARE LAID OUT FIRST AND THE STATION FOLLOWS THEM, not the
+    # other way round. Spreading three bays symmetrically about the dispatch
+    # pose put the top one at y = 14.33 in a 13.56 m building, outside the north
+    # wall, because that pose is level with the doorway rather than with the
+    # middle of the floor. Spacing them across the building and then putting the
+    # station in the middle bay cannot produce a bay outside the shell.
+    bay = 1.6
+    bay_margin = 1.5
+    bay_lo = bay_margin + bay / 2.0
+    bay_hi = iy - bay_margin - bay / 2.0
+    bay_ys = [bay_lo, (bay_lo + bay_hi) / 2.0, bay_hi]
+
     stations_world = {
         'goods_in': (2.5, (a2_lo + a2_hi) / 2.0, 0.0),
-        'dispatch': (INTERIOR_X - 2.5, (door_lo + door_hi) / 2.0, 0.0),
+        'dispatch': (INTERIOR_X - 2.5, bay_ys[1], 0.0),
     }
     stations = {n: (x, y, yaw) for n, (x, y, yaw) in stations_world.items()}
 
@@ -554,23 +538,30 @@ def build_world(spec, platform):
     models.append(floor_marking('mark_home', spawn[0], spawn[1],
                                 home, home, yellow))
 
-    # THE MIDDLE BAY CONTAINS THE DELIVERY POSE. They were painted 1.6 m east
-    # of it, so the vehicle stopped next to the markings rather than in one and
-    # the bays were decoration on floor nothing used. A marked bay the vehicle
-    # never stands in is worse than no marking: it says the wrong thing.
-    dx, dy = stations_world['dispatch'][0], stations_world['dispatch'][1]
-    bay = 1.6
-    for i in range(3):
-        models.append(floor_marking(
-            f'mark_bay_{i + 1}', dx, dy + (i - 1) * (bay + 0.4),
-            bay, bay, white))
+    # THREE BAYS SPREAD DOWN THE BACK OF THE BUILDING, with something to avoid
+    # between each pair. Stacked shoulder to shoulder they were one wide target
+    # and the vehicle drove at them in a straight line; spread out, reaching a
+    # bay means routing past whatever stands between it and the last one, which
+    # is the point of having three rather than one.
+    #
+    # The MIDDLE bay contains the delivery pose. They were once painted 1.6 m
+    # east of it, so the vehicle stopped beside the markings rather than in
+    # one, and a marked bay the vehicle never stands in says the wrong thing to
+    # anyone reading the floor.
+    dx = stations_world['dispatch'][0]
+    for i, by in enumerate(bay_ys):
+        models.append(floor_marking(f'mark_bay_{i + 1}', dx, by,
+                                    bay, bay, white))
 
     # ---- warehouse furniture ---------------------------------------------
     # The spawn and both stations are places the vehicle must be able to stand,
     # so nothing is placed near them.
     keep_clear = [(spawn[0], spawn[1])] + [
         (x, y) for x, y, _ in stations_world.values()]
-    for name, x0, x1, y0, y1, h, colour in clutter(spec, iy, keep_clear):
+    # Midpoints between consecutive delivery bays, so a pallet can stand in
+    # each gap and reaching a bay means routing round something.
+    gap_ys = [(bay_ys[0] + bay_ys[1]) / 2.0, (bay_ys[1] + bay_ys[2]) / 2.0]
+    for name, x0, x1, y0, y1, h, colour in clutter(spec, iy, keep_clear, gap_ys):
         models.append(box(name, (x0 + x1) / 2.0, (y0 + y1) / 2.0, h / 2.0,
                           x1 - x0, y1 - y0, h, colour))
 
@@ -584,11 +575,14 @@ def build_world(spec, platform):
         (blk_x0, blk_x1, door_hi, iy),
         (blk_x0, blk_x1, 0.0, door_lo),
     ] + [
-        (x0, x1, y0, y1) for _, x0, x1, y0, y1, _, _ in clutter(spec, iy, keep_clear)
+        (x0, x1, y0, y1)
+        for _, x0, x1, y0, y1, _, _ in clutter(spec, iy, keep_clear, gap_ys)
     ]
 
     derived = {
         'spawn': spawn,
+        'bay_ys': bay_ys,
+        'interior_y': iy,
         'stations_world': stations_world,
         'solids': solids,
         'aisle_1_y': lay['aisle_1'],

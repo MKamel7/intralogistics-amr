@@ -69,13 +69,13 @@
          and nowhere else. -->
     <model name="ground_plane">
       <static>true</static>
-      <pose>17.000 6.778 0 0 0 0</pose>
+      <pose>21.000 6.778 0 0 0 0</pose>
       <link name="link">
         <collision name="collision">
-          <geometry><plane><normal>0 0 1</normal><size>54.0 54.0</size></plane></geometry>
+          <geometry><plane><normal>0 0 1</normal><size>62.0 62.0</size></plane></geometry>
         </collision>
         <visual name="visual">
-          <geometry><plane><normal>0 0 1</normal><size>54.0 54.0</size></plane></geometry>
+          <geometry><plane><normal>0 0 1</normal><size>62.0 62.0</size></plane></geometry>
           <material>
             <ambient>0.32 0.33 0.32 1</ambient>
             <diffuse>0.36 0.37 0.36 1</diffuse>
@@ -86,13 +86,13 @@
 
     <model name="wall_south">
       <static>true</static>
-      <pose>17.0000 -0.1000 1.5000 0 0 0</pose>
+      <pose>21.0000 -0.1000 1.5000 0 0 0</pose>
       <link name="link">
         <collision name="collision">
-          <geometry><box><size>34.4000 0.2000 3.0000</size></box></geometry>
+          <geometry><box><size>42.4000 0.2000 3.0000</size></box></geometry>
         </collision>
         <visual name="visual">
-          <geometry><box><size>34.4000 0.2000 3.0000</size></box></geometry>
+          <geometry><box><size>42.4000 0.2000 3.0000</size></box></geometry>
           <material>
             <ambient>0.55 0.56 0.54 1</ambient>
             <diffuse>0.55 0.56 0.54 1</diffuse>
@@ -102,13 +102,13 @@
     </model>
     <model name="wall_north">
       <static>true</static>
-      <pose>17.0000 13.6567 1.5000 0 0 0</pose>
+      <pose>21.0000 13.6567 1.5000 0 0 0</pose>
       <link name="link">
         <collision name="collision">
-          <geometry><box><size>34.4000 0.2000 3.0000</size></box></geometry>
+          <geometry><box><size>42.4000 0.2000 3.0000</size></box></geometry>
         </collision>
         <visual name="visual">
-          <geometry><box><size>34.4000 0.2000 3.0000</size></box></geometry>
+          <geometry><box><size>42.4000 0.2000 3.0000</size></box></geometry>
           <material>
             <ambient>0.55 0.56 0.54 1</ambient>
             <diffuse>0.55 0.56 0.54 1</diffuse>
@@ -134,7 +134,7 @@
     </model>
     <model name="wall_east">
       <static>true</static>
-      <pose>34.1000 6.7783 1.5000 0 0 0</pose>
+      <pose>42.1000 6.7783 1.5000 0 0 0</pose>
       <link name="link">
         <collision name="collision">
           <geometry><box><size>0.2000 13.5567 3.0000</size></box></geometry>
@@ -288,7 +288,7 @@
     </model>
     <model name="mark_bay_1">
       <static>true</static>
-      <pose>31.5000 7.3556 0.005 0 0 0</pose>
+      <pose>39.5000 2.3000 0.005 0 0 0</pose>
       <link name="link">
         <visual name="bar0">
           <pose>0.0000 0.7500 0 0 0 0</pose>
@@ -330,7 +330,7 @@
     </model>
     <model name="mark_bay_2">
       <static>true</static>
-      <pose>31.5000 9.3556 0.005 0 0 0</pose>
+      <pose>39.5000 6.7783 0.005 0 0 0</pose>
       <link name="link">
         <visual name="bar0">
           <pose>0.0000 0.7500 0 0 0 0</pose>
@@ -372,7 +372,7 @@
     </model>
     <model name="mark_bay_3">
       <static>true</static>
-      <pose>31.5000 11.3556 0.005 0 0 0</pose>
+      <pose>39.5000 11.2567 0.005 0 0 0</pose>
       <link name="link">
         <visual name="bar0">
           <pose>0.0000 0.7500 0 0 0 0</pose>
@@ -414,7 +414,7 @@
     </model>
     <model name="column_w0">
       <static>true</static>
-      <pose>7.2000 2.4582 1.5000 0 0 0</pose>
+      <pose>7.2000 4.5189 1.5000 0 0 0</pose>
       <link name="link">
         <collision name="collision">
           <geometry><box><size>0.4000 0.4000 3.0000</size></box></geometry>
@@ -430,7 +430,7 @@
     </model>
     <model name="column_w1">
       <static>true</static>
-      <pose>7.2000 5.2605 1.5000 0 0 0</pose>
+      <pose>7.2000 9.0378 1.5000 0 0 0</pose>
       <link name="link">
         <collision name="collision">
           <geometry><box><size>0.4000 0.4000 3.0000</size></box></geometry>
@@ -444,25 +444,9 @@
         </visual>
       </link>
     </model>
-    <model name="column_w2">
+    <model name="column_e0">
       <static>true</static>
-      <pose>7.2000 8.0627 1.5000 0 0 0</pose>
-      <link name="link">
-        <collision name="collision">
-          <geometry><box><size>0.4000 0.4000 3.0000</size></box></geometry>
-        </collision>
-        <visual name="visual">
-          <geometry><box><size>0.4000 0.4000 3.0000</size></box></geometry>
-          <material>
-            <ambient>0.62 0.61 0.58 1</ambient>
-            <diffuse>0.62 0.61 0.58 1</diffuse>
-          </material>
-        </visual>
-      </link>
-    </model>
-    <model name="column_w3">
-      <static>true</static>
-      <pose>7.2000 10.8649 1.5000 0 0 0</pose>
+      <pose>34.5000 4.5189 1.5000 0 0 0</pose>
       <link name="link">
         <collision name="collision">
           <geometry><box><size>0.4000 0.4000 3.0000</size></box></geometry>
@@ -478,23 +462,7 @@
     </model>
     <model name="column_e1">
       <static>true</static>
-      <pose>30.5000 3.9761 1.5000 0 0 0</pose>
-      <link name="link">
-        <collision name="collision">
-          <geometry><box><size>0.4000 0.4000 3.0000</size></box></geometry>
-        </collision>
-        <visual name="visual">
-          <geometry><box><size>0.4000 0.4000 3.0000</size></box></geometry>
-          <material>
-            <ambient>0.62 0.61 0.58 1</ambient>
-            <diffuse>0.62 0.61 0.58 1</diffuse>
-          </material>
-        </visual>
-      </link>
-    </model>
-    <model name="column_e2">
-      <static>true</static>
-      <pose>30.5000 6.7783 1.5000 0 0 0</pose>
+      <pose>34.5000 9.0378 1.5000 0 0 0</pose>
       <link name="link">
         <collision name="collision">
           <geometry><box><size>0.4000 0.4000 3.0000</size></box></geometry>
@@ -527,6 +495,38 @@
     <model name="pallet_w1">
       <static>true</static>
       <pose>0.6000 9.3541 0.5250 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>1.2000 0.8000 1.0500</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>1.2000 0.8000 1.0500</size></box></geometry>
+          <material>
+            <ambient>0.55 0.41 0.24 1</ambient>
+            <diffuse>0.55 0.41 0.24 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="pallet_bay0">
+      <static>true</static>
+      <pose>36.7000 4.5392 0.5250 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>1.2000 0.8000 1.0500</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>1.2000 0.8000 1.0500</size></box></geometry>
+          <material>
+            <ambient>0.55 0.41 0.24 1</ambient>
+            <diffuse>0.55 0.41 0.24 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="pallet_bay1">
+      <static>true</static>
+      <pose>36.7000 9.0175 0.5250 0 0 0</pose>
       <link name="link">
         <collision name="collision">
           <geometry><box><size>1.2000 0.8000 1.0500</size></box></geometry>

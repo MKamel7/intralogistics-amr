@@ -444,11 +444,42 @@ def test_the_vehicle_does_not_start_on_its_first_goal(derived):
         'the spawn pose is on top of goods_in, so the first leg proves nothing')
 
 
-def test_stations_sit_on_the_aisles_they_belong_to(derived):
-    """A station off its own aisle is a goal the planner cannot reach cleanly."""
+def test_stations_sit_where_they_belong(derived):
+    """goods_in on its aisle, and dispatch INSIDE a marked delivery bay.
+
+    The dispatch pose used to be taken from the doorway centre, which is fine
+    for reaching it and says nothing about where the vehicle ends up. Now the
+    bays are laid out first and the station is the middle one, so the vehicle
+    stops on paint rather than beside it. Asserting containment rather than
+    alignment is the stronger property and the one a person reading the floor
+    would expect.
+    """
     a2_lo, a2_hi = derived['aisle_2_y']
-    d_lo, d_hi = derived['doorway_y']
     gi = derived['stations_world']['goods_in']
     dp = derived['stations_world']['dispatch']
     assert a2_lo < gi[1] < a2_hi, 'goods_in is not on the dynamic-corridor aisle'
-    assert d_lo < dp[1] < d_hi, 'dispatch is not aligned with the doorway'
+
+    bays = derived['bay_ys']
+    assert len(bays) == 3, 'there should be three delivery bays'
+    assert dp[1] == pytest.approx(bays[1], abs=1e-6), (
+        'the dispatch pose is not in the middle bay, so the vehicle stops '
+        'beside the markings rather than in one')
+    iy = derived['interior_y']
+    for i, by in enumerate(bays):
+        assert 0.0 < by - 0.8 and by + 0.8 < iy, (
+            f'bay {i + 1} at y={by:.2f} does not fit inside a {iy:.2f} m '
+            f'building')
+
+
+def test_the_bays_are_spread_with_something_between_them(derived, spec):
+    """Three bays shoulder to shoulder are one wide target.
+
+    Spreading them means reaching one involves routing past whatever stands
+    between it and its neighbour, which is the point of having three.
+    """
+    bays = derived['bay_ys']
+    need = gen.rotation_width(spec) + gen.PASSING_ALLOWANCE
+    for a, b in zip(bays, bays[1:]):
+        assert (b - a) > need, (
+            f'bays {a:.2f} and {b:.2f} are {b - a:.2f} m apart, too close for '
+            f'anything to stand between them')
