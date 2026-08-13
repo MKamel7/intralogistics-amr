@@ -2130,3 +2130,108 @@ The fix is to make `_nearest_clear` return a point beyond `goal_tolerance`, so
 that an escape goal is one the walker actually has to travel to, together with
 a test that a walker placed in an obstructed cell reaches clearance rather than
 oscillating. Both land after the experiment reports.
+
+---
+
+## V-33. The MP-400 was driving on the MiR250's wheels
+
+**The cause of V-31 and V-32, and of five refuted hypotheses before them.**
+`config/controllers.yaml` was a single hand written file holding MiR250
+literals, loaded by every platform, because ros2_control reads plain YAML and
+cannot resolve a platform spec.
+
+| | configured | true | error |
+|---|---|---|---|
+| `wheel_radius` | 0.100 | 0.075 | +33 % |
+| `wheel_separation` | 0.450 | 0.529 | -18 % |
+
+The radius error scales distance and the separation error scales heading rate,
+which is a map that is both stretched and sheared. That is precisely what the
+SLAM map looked like.
+
+### The measurement that settled it
+
+Taken during a survey, with `tools/measure_slip.py` integrating wheel odometry
+and ground truth over the same window:
+
+    wheels claim     21.75 m of path
+    vehicle moved    16.18 m of path
+    RATIO truth/odom = 0.744
+
+Predicted over count from the radius alone, 0.100 / 0.075 = **1.333**.
+Measured, 1 / 0.744 = **1.344**. One percent apart. A hypothesis that predicts
+a number to one percent before you look is not a candidate, it is the cause.
+
+After regenerating the controller config from the spec, on the same track with
+the same vehicle:
+
+    RATIO truth/odom = 1.025   (2.5 % error)
+
+### Why five hypotheses missed it
+
+Because every part of the system was individually healthy, and said so.
+
+* Odometry was smooth and continuous, 575 samples, largest step 7.2 mm.
+* The merged scan was validated against the real building from the real pose:
+  1886 finite beams, **zero** reporting a range beyond the wall, zero inside
+  the chassis radius.
+* The scanner block is byte for byte identical across the two platforms.
+* The vehicle drove. It accelerated, turned, and stopped when it should.
+
+Only the map was wrong, and a wrong map reads as a mapping problem. Four
+hypotheses went to SLAM, one to clearance. None went to the wheels, because the
+wheels were reporting beautifully. **They were reporting beautifully about a
+different vehicle.**
+
+### The gate that existed, was correct, and passed
+
+`test_controllers_yaml_matches_the_platform_spec` was written for exactly this
+failure. Its docstring says so: "This is the gate that stops the two drifting
+apart, which would show up as odometry error nobody could explain."
+
+It passed every run. Its fixture was:
+
+    SPEC = PKG / 'config' / 'platforms' / 'mir250_class.yaml'
+    ['xacro', str(XACRO), 'platform:=mir250_class']
+
+So it compared the MiR250 configuration against the MiR250 spec. Every check in
+that file did. The suite was a single platform test wearing the clothes of a
+platform independent one, and adding a second vehicle did not add a single
+assertion about it.
+
+Parametrising the fixtures over every platform with a spec turned 30 checks
+into 65 and fails on the original values, verified by reinstating them.
+
+**The lesson that generalises, and it is not "write more tests".** It is that a
+test's fixtures are part of its claim. This one claimed to check that the
+controller matches the platform, and checked that the controller matches the
+platform it was written for. Adding platforms to a project does not
+automatically add them to the tests, and the tests will not mention it.
+
+### Two diagnostics that would have hidden it again
+
+**`measure_slip.py` accepted 0.7 to 1.3.** It measured 0.744 and printed
+"Odometry is consistent with ground truth over this window. Whatever else is
+wrong, it is not the wheels." The measurement was correct and the verdict
+written on it was wrong, which is the more dangerous half, because the number
+was right there. Odometry feeding scan matching has to be good to a few
+percent; the band is now 2 percent and the verdict names `wheel_radius` and
+`wheel_separation` as the things to compare.
+
+**`pedestrian_driver._nearest_clear`**, the V-32 fault, was fixed in the same
+change. Recovery warnings fell from 19050 in one run to 2, and for the first
+time in this project pedestrians moved: 2.38 m, 0.54 m and 4.55 m over fifteen
+seconds, with `worker_standing` correctly stationary.
+
+### Open, and deliberately not folded into this change
+
+**The 2.5 percent residual.** Under the 5 percent band where caster scrub and
+turning are sufficient explanation, and measured over a survey window that is
+mostly rotation. It is not evidence of a second wrong constant and it is not
+yet evidence of nothing. It wants a straight line window.
+
+**`linear.x.min_velocity` is the negated top speed**, while the spec carries
+`max_reverse_speed` at 0.3 m/s on both platforms. The controller therefore
+permits reversing faster than either vehicle is rated to reverse. Left alone
+here on purpose: this change exists to fix wheel geometry, and moving a second
+limit in the same edit is how a measurement stops being attributable.
