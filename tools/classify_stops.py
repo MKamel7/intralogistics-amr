@@ -40,6 +40,7 @@ import time
 from collections import Counter
 
 import rclpy
+from rclpy.executors import ExternalShutdownException
 import tf2_ros
 from nav2_msgs.msg import CollisionMonitorState
 from rclpy.node import Node
@@ -247,7 +248,7 @@ def main():
     node = StopClassifier()
     try:
         code = node.run()
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
         node.report()
         code = 0
     finally:

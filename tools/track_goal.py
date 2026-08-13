@@ -34,6 +34,7 @@ import sys
 import time
 
 import rclpy
+from rclpy.executors import ExternalShutdownException
 import tf2_ros
 from geometry_msgs.msg import PoseStamped, TwistStamped
 from nav_msgs.msg import Path
@@ -168,7 +169,7 @@ def main():
     node = GoalTracker()
     try:
         code = node.run()
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
         node.report()
         code = 0
     finally:

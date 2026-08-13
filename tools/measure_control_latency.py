@@ -62,6 +62,7 @@ import sys
 
 import rclpy
 from geometry_msgs.msg import TwistStamped
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import QoSDurabilityPolicy, QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
 from sensor_msgs.msg import LaserScan
@@ -178,7 +179,12 @@ def main():
     node = LatencyProbe()
     try:
         rclpy.spin(node)
-    except (KeyboardInterrupt, SystemExit):
+    except (KeyboardInterrupt, SystemExit, ExternalShutdownException):
+        # ExternalShutdownException is what rclpy raises when the context is
+        # shut down from outside, which is what stop_all.sh does. Without it
+        # here the probe dies with a traceback and the samples it spent the
+        # whole run collecting are never printed. Measured: a full run's data
+        # lost on teardown.
         pass
     finally:
         if node.samples or node.rejected:
