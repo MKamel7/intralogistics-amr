@@ -164,6 +164,35 @@ for f in "src/amr_navigation/config/nav2.$PLATFORM.yaml" \
   [ -f "$f" ] || { echo "no $f; is $PLATFORM a platform, and has it been generated?"; exit 2; }
 done
 
+# REFUSE TO SHARE THE ROS DOMAIN.
+#
+# Preflight already checks for a single /clock publisher, and it works: it
+# caught this exact fault. But it only runs once the whole stack is up, so by
+# then a second simulator has booted and two minutes are gone.
+#
+# The reason this is worth a pre-launch gate rather than trusting preflight is
+# what a second stack does while it is up. Both publish /scan, /tf, /map and
+# /cmd_vel, so the two vehicles drive each other, and every measurement taken
+# during that window is meaningless in a way that looks entirely ordinary in
+# the logs.
+#
+# Measured: a MiR250 stack from a completed run was still up three hours and
+# forty minutes later, because nothing had torn it down. An MP-400 run launched
+# beside it inherited two /clock publishers and six nodes it did not own.
+# -x, so the WHOLE command line must equal `gz sim server`, which is exactly
+# what that process is called. Without -x this matches any process whose
+# command line merely contains the words, including the shell that invoked
+# this script when the phrase appears anywhere in its command. The first
+# version of this guard did that and reported a stale simulator on a clean
+# machine, which would have blocked every run in the project.
+STALE=$(pgrep -xcf 'gz sim server' || true)
+if [ "${STALE:-0}" -gt 0 ]; then
+  echo "a simulator is already running ($STALE process(es))."
+  echo "Two stacks on one ROS domain corrupt each other silently. Stop it with:"
+  echo "    tools/stop_all.sh"
+  exit 2
+fi
+
 say "starting: platform=$PLATFORM world=$WORLD cameras=$CAMERAS rviz=$RVIZ task=$TASK"
 ros2 launch amr_bringup robot.launch.py platform:=$PLATFORM world:=$WORLD \
      x:=$SPAWN_X y:=$SPAWN_Y \
