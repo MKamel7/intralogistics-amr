@@ -1,12 +1,65 @@
 # Handover
 
-## Overnight session, 13 August 2026. Read this first
+## Session of 13 August 2026, evening. Read this first
 
-**Nothing is broken. 163 tests pass, ruff is clean, `gz sdf` validates the
-world, and the MiR250 on the AWS warehouse is untouched at 5 of 5 cycles.**
+**261 tests pass, ruff is clean, `gz sdf` validates both worlds, and the
+MiR250 is untouched at 3 of 3 cycles on the generated track.**
 
-Start with `docs/findings.md`, the short version of the validation record. Then
-V-26, V-27 and V-28, which are the results this session produced.
+The headline is that the MP-400 was never broken in the way five hypotheses
+assumed. `config/controllers.yaml` was a single hand written file of MiR250
+wheel geometry loaded by every vehicle, so the MP-400 integrated odometry with
+a wheel radius 33 percent too large and a track 18 percent too narrow. SLAM
+fought that on every update, the map came out sheared, and the planner refused
+to plan from a pose it believed was inside a wall.
+
+Fixing it moved the platform from 0 m driven with every goal aborted to
+completing transport cycles, and fixed three things nobody was looking at: the
+map became orthogonal, the survey started converging, and pedestrians moved for
+the first time in the project's history.
+
+Start with `docs/findings.md`, then V-31 through V-37 in `docs/validation.md`,
+which are this session's results. V-33 is the one to read if you only read one.
+
+### The four faults that were all the same shape
+
+Worth naming together, because the next one will look like these:
+
+* `config/controllers.yaml`, one file of wheel geometry for every platform.
+* `scenarios/track_people.yaml`, one pedestrian scenario written by whichever
+  platform was generated last, while every coordinate in it derives from that
+  platform's aisle positions. People moved by up to 0.50 m between them.
+* the pedestrian behaviour key list, kept by hand in `people.launch.py` and
+  again in `score_tracks.py`, so adding a behaviour to the driver produced
+  models that spawn, a driver that runs, no command bridge, and a crowd that
+  stands still with no error anywhere.
+
+Each was silent. Each looked fully configured. Each was found by measuring a
+physical outcome, never by reading the code. Anything derived per platform must
+be generated per platform, and any list two programs share must have one owner.
+
+### What the instruments now measure
+
+Five probes, all reading `/ground_truth/poses` as a label oracle that never
+touches the control path:
+
+    tools/measure_slip.py             wheel odometry against ground truth
+    tools/measure_localisation.py     believed pose against true pose
+    tools/measure_contacts.py         how close the vehicle came to people
+    tools/measure_path_efficiency.py  planner overhead against controller overhead
+    tools/measure_control_latency.py  sensor to command, still unresolved
+
+`measure_contacts.py` exists because a pedestrian was seen walking through the
+robot. The person model carries no collision geometry on purpose, which means
+**a person cannot be hit in this simulation**, so every safety claim about the
+collision monitor was unfalsifiable and nothing anywhere counted contacts. It
+measured a vehicle passing within **89 mm** of a person with no protective stop,
+which is the largest open question in the project.
+
+Two of these probes measured correctly and then printed the wrong verdict on
+their own numbers: `measure_slip` accepted a 34 percent odometry error as
+consistent, and `measure_localisation` compared a bare error against a bay edge
+without the vehicle that has to fit inside it. Writing the measurement is the
+easy half.
 
 ### The test track is now a warehouse, and it is generated
 

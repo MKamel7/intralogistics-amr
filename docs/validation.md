@@ -2438,3 +2438,70 @@ attack. This is the baseline that work now has to beat.
 
 None of these numbers could have been taken yesterday, because nothing in the
 building moved.
+
+---
+
+## V-37. Goals were aborted because the controller was busy, not because it was dead
+
+**`default_server_timeout` was 30 ms.** The behaviour tree gives
+`controller_server` that long to accept a `follow_path` goal. MPPI runs 2000
+samples over 56 steps with `consider_footprint` on a single threaded executor,
+and its worst iteration measured **152 ms in one run and 380 ms in another**.
+
+A handshake that lands inside one of those cannot be answered, so the node
+times out and the goal aborts:
+
+    Timed out while waiting for action server to acknowledge goal request
+    for follow_path
+
+Every failed cycle across three runs maps to one of those lines, and there were
+**zero planner failures in any of them**. It fires during the survey too, which
+is why surveys were reporting "timed out waiting for arrival" on frontiers the
+vehicle could reach perfectly well.
+
+### Why it looked like a planning fault
+
+An operator watching described it as the vehicle "taking weird paths and not
+reaching the delivery square even though it was next to it". That is exactly
+what an aborted goal looks like from outside: the vehicle abandons its approach
+near the bay, the mission re-issues the goal, and it sets off again from
+wherever it happened to be. The planner was never at fault and the map was
+fine.
+
+Two candidate explanations were killed by measurement rather than argument:
+
+* **Localisation**, the obvious suspect given V-34's 0.495 m. Measured on this
+  run at p50 0.027 m while driving and 0.055 m parked, a tenfold improvement
+  after the wheel geometry was corrected. Error plus tolerance plus the
+  vehicle's half extent reaches 0.555 m against a 0.80 m bay edge, so the body
+  sits inside the painted square. Not the cause.
+* **A stalled simulator.** Real time factor sampled every 25 s across a full
+  run held at 1.04 while load peaked at 25.4 on 12 cores.
+
+### The fix, and what it deliberately does not fix
+
+Raised to 1000 ms. **The timeout exists to detect a dead server, not a busy
+one**; a controller that is mid solve is working. 1000 ms is Nav2's own
+convention for waiting on a service and clears the worst measured iteration by
+a factor of 2.6.
+
+The test carries `WORST_CONTROL_ITERATION_MS` as a constant and requires a
+factor of two of margin, so making the controller more expensive without
+re-measuring fails the build.
+
+**This does not excuse the control loop missing its rate 63 times in one run.**
+That is a real cost problem and it is the likely cause of the remaining path
+overhead: a cycle drove 58.3 m on a journey whose straight line is about 39 m,
+a factor of 1.49. Raising a timeout stops goals aborting; it does not make a
+path efficient.
+
+`tools/measure_path_efficiency.py` was written to decide what to do about that,
+because "make the paths efficient" is two different fixes wearing one number:
+
+    planner overhead     plan length / straight line
+    controller overhead  distance driven / plan length
+
+Tuning the planner while the controller owns the overhead is how a week gets
+spent making things worse. Re-routing around a person is legitimate overhead
+and should raise the planner term; the controller term is the one no obstacle
+excuses.
