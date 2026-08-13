@@ -65,8 +65,8 @@ from geometry_msgs.msg import TwistStamped
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import QoSDurabilityPolicy, QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
+from nav2_msgs.msg import CollisionMonitorState
 from sensor_msgs.msg import LaserScan
-from std_msgs.msg import String
 
 SENSOR_QOS = QoSProfile(
     reliability=QoSReliabilityPolicy.BEST_EFFORT,
@@ -89,14 +89,20 @@ class LatencyProbe(Node):
 
         self.last_scan = None        # stamp of the most recent scan
         self.pending = None          # stamp of the scan that triggered a stop
-        self.state = 'unknown'
+        self.polygon = ''            # which field fired, for context
+        self.stopping = False
         self.was_moving = False
+        self.states_seen = 0
         self.samples = []
         self.rejected = 0
 
         self.create_subscription(LaserScan, '/scan', self._scan, SENSOR_QOS)
-        self.create_subscription(String, '/collision_monitor_state',
-                                 self._state, 10)
+        # nav2_msgs/CollisionMonitorState, NOT std_msgs/String. The first
+        # version of this subscribed with the wrong type and therefore received
+        # nothing at all, so it reported no samples across thirty four
+        # protective stops. The message was honest and the cause was mine.
+        self.create_subscription(CollisionMonitorState,
+                                 '/collision_monitor_state', self._state, 20)
         self.create_subscription(TwistStamped,
                                  '/diff_drive_controller/cmd_vel',
                                  self._cmd, 10)
@@ -115,12 +121,17 @@ class LatencyProbe(Node):
         The scan that caused it is the most recent one, which is the closest
         attribution available without reaching inside the monitor. It is an
         upper bound on the scan-to-decision half and is honest about that.
+
+        The RISING EDGE only. While the field stays violated the monitor keeps
+        publishing STOP, and treating every message as a fresh event would time
+        the wrong thing.
         """
-        new = msg.data.strip().lower()
-        if new != self.state:
-            if 'stop' in new and self.last_scan is not None:
-                self.pending = self.last_scan
-            self.state = new
+        self.states_seen += 1
+        stopping = msg.action_type == CollisionMonitorState.STOP
+        if stopping and not self.stopping and self.last_scan is not None:
+            self.pending = self.last_scan
+            self.polygon = msg.polygon_name
+        self.stopping = stopping
 
     def _cmd(self, msg):
         moving = abs(msg.twist.linear.x) > self.stop_eps
@@ -131,7 +142,8 @@ class LatencyProbe(Node):
             if 0.0 < dt < 2.0:
                 self.samples.append(dt)
                 self.get_logger().info(
-                    f'  sample {len(self.samples)}: {dt * 1000:.1f} ms')
+                    f'  sample {len(self.samples)}: {dt * 1000:.1f} ms '
+                    f'({self.polygon or "field"})')
             else:
                 # Out of range means the pairing is wrong, not that the system
                 # is slow. Counted, never averaged in.
@@ -150,9 +162,16 @@ class LatencyProbe(Node):
         print(f'  sensor to command latency, {n} sample(s), '
               f'{self.rejected} rejected as unpairable')
         if n == 0:
-            print('  NO SAMPLES. The vehicle never stopped for the protective')
-            print('  field while this was attached. Run it against a mission')
-            print('  with pedestrians, and check the monitor is active.')
+            print(f'  NO SAMPLES. {self.states_seen} monitor state message(s) '
+                  f'were seen.')
+            if self.states_seen == 0:
+                print('  ZERO STATE MESSAGES, so the probe heard nothing at')
+                print('  all. Check the monitor is active and that this is')
+                print('  subscribed with the right message type; getting that')
+                print('  wrong is silent and looks exactly like a quiet run.')
+            else:
+                print('  The monitor was heard but the vehicle never stopped')
+                print('  for it while this was attached.')
             print('=' * 70)
             return
         s = sorted(self.samples)
@@ -187,8 +206,10 @@ def main():
         # lost on teardown.
         pass
     finally:
-        if node.samples or node.rejected:
-            node.report()
+        # ALWAYS report. Reporting only when there is something to say meant a
+        # run that heard nothing printed nothing, which is indistinguishable
+        # from the probe not having run.
+        node.report()
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
