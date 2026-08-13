@@ -412,22 +412,6 @@
         </visual>
       </link>
     </model>
-    <model name="column_w0">
-      <static>true</static>
-      <pose>7.2000 4.5189 1.5000 0 0 0</pose>
-      <link name="link">
-        <collision name="collision">
-          <geometry><box><size>0.4000 0.4000 3.0000</size></box></geometry>
-        </collision>
-        <visual name="visual">
-          <geometry><box><size>0.4000 0.4000 3.0000</size></box></geometry>
-          <material>
-            <ambient>0.62 0.61 0.58 1</ambient>
-            <diffuse>0.62 0.61 0.58 1</diffuse>
-          </material>
-        </visual>
-      </link>
-    </model>
     <model name="column_w1">
       <static>true</static>
       <pose>7.2000 9.0378 1.5000 0 0 0</pose>

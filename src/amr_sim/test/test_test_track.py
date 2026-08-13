@@ -396,7 +396,7 @@ def test_nobody_spawns_on_the_vehicle(spec, derived):
     stood 0.1 m from the vehicle before either had moved.
     """
     scen = yaml.safe_load(
-        (PKG / 'scenarios' / 'track_people.yaml').read_text())
+        (PKG / 'scenarios' / f'track_people.{PLATFORM}.yaml').read_text())
     sx, sy, _ = derived['spawn']
     need = gen.rotation_width(spec) + gen.PASSING_ALLOWANCE
     for person in scen['people']:
@@ -483,3 +483,85 @@ def test_the_bays_are_spread_with_something_between_them(derived, spec):
         assert (b - a) > need, (
             f'bays {a:.2f} and {b:.2f} are {b - a:.2f} m apart, too close for '
             f'anything to stand between them')
+
+
+def track_layout(platform_spec):
+    """The generator's own rack and aisle bands."""
+    return gen.layout(platform_spec)
+
+
+def test_the_scenario_is_generated_per_platform():
+    """No shared track_people.yaml.
+
+    It was one file written by whichever platform was generated last, while
+    every coordinate in it is derived from that platform's aisle positions.
+    Every person moved by up to 0.50 m between the two, and in a 2.0 m aisle
+    that is enough to put somebody inside the 0.45 m clearance the driver
+    needs, which leaves them stranded in the recovery path rather than
+    walking. Same shape as the shared controllers.yaml in V-33.
+    """
+    stray = PKG / 'scenarios' / 'track_people.yaml'
+    assert not stray.exists(), (
+        'scenarios/track_people.yaml is back. The track scenario is generated '
+        'per platform; delete this and regenerate.')
+    for p in (SPEC_DIR).glob('*.yaml'):
+        f = PKG / 'scenarios' / f'track_people.{p.stem}.yaml'
+        assert f.exists(), f'no scenario for {p.stem}; regenerate the track'
+
+
+def test_every_scripted_walker_starts_with_clearance(spec):
+    """A walker spawned without clearance never walks.
+
+    The driver sends such a walker to the nearest clear point, and for the
+    whole life of this project that recovery could not recover, so nobody
+    moved at all (V-32). The recovery is fixed, but a scenario that relies on
+    it is still wrong: the person starts by stepping sideways out of a rack
+    rather than doing what the scenario says.
+    """
+    scen = yaml.safe_load(
+        (PKG / 'scenarios' / f'track_people.{PLATFORM}.yaml').read_text())
+    # Distance to the nearest rack band, which is what people actually stand
+    # between. Racks are full width bands in y, so the y gap is the binding one.
+    rows = track_layout(spec)
+    need = 0.45
+    for person in scen['people']:
+        y = person['y']
+        for name, (lo, hi) in rows.items():
+            if not name.startswith('rack'):
+                continue
+            if lo - need < y < hi + need:
+                raise AssertionError(
+                    f'{person["name"]} at y={y:.2f} is within {need} m of '
+                    f'{name} ({lo:.2f} to {hi:.2f}), so it spawns without the '
+                    f'clearance the driver requires')
+
+
+def test_the_generator_and_the_driver_agree_on_clearance():
+    """The generator places people; the driver decides if they can move.
+
+    PERSON_CLEARANCE is duplicated between them because they are separate
+    programs. If the driver's requirement rises above the generator's
+    assumption, every scripted walker silently stops walking, which is exactly
+    how V-32 went unnoticed for the life of the project.
+    """
+    import re
+    driver = (PKG.parents[0] / 'amr_sim' / 'amr_sim'
+              / 'pedestrian_driver.py').read_text()
+    m = re.search(r"declare_parameter\('clearance',\s*([\d.]+)\)", driver)
+    assert m, 'could not find the driver clearance default'
+    assert gen.PERSON_CLEARANCE >= float(m.group(1)), (
+        f'the generator assumes {gen.PERSON_CLEARANCE} m of clearance but the '
+        f'driver requires {m.group(1)} m, so every scripted walker spawns '
+        f'stranded and none of them move')
+
+
+def test_the_crossing_actually_crosses():
+    """A crossing that barely leaves the kerb is not the case being tested."""
+    import math
+    scen = yaml.safe_load(
+        (PKG / 'scenarios' / f'track_people.{PLATFORM}.yaml').read_text())
+    p = next(q for q in scen['people'] if 'cross' in q)
+    span = math.dist((p['x'], p['y']), p['cross']['to'])
+    assert span > 0.8, (
+        f'the crossing spans only {span:.2f} m, which does not carry a person '
+        f'across the vehicle path')

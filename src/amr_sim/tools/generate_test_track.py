@@ -78,6 +78,12 @@ WALL_H = 3.00              # m
 
 RACK_DEPTH = 1.20          # m, standard pallet depth
 RACK_HEIGHT = 2.20         # m
+# The clearance pedestrian_driver requires around a walker before it will move.
+# Duplicated here because the generator places people and the driver moves them,
+# and a scenario that ignores it produces people who never walk. Asserted
+# against the driver's own default by test_test_track.py.
+PERSON_CLEARANCE = 0.45
+
 RACK_X0 = 9.0              # m, racking field starts here
 RACK_X1 = 25.0             # m, and ends here
 
@@ -435,6 +441,46 @@ def clutter(spec, iy, keep_clear=(), bay_gap_ys=()):
     return [i for i in out if clear_of_everything(i)]
 
 
+def people_anchors(spec, spawn):
+    """Where the scripted pedestrians stand, as a pure function of the layout.
+
+    Needed in two places that run at different times: the furniture placer, so
+    nothing is dropped on a crossing, and the scenario writer. Computing it
+    twice from the same primitives would be two chances to disagree, which is
+    the shape of most of the faults in docs/findings.md.
+
+    The crossing sits on aisle 2, which is the band the vehicle travels between
+    goods_in and dispatch, far enough east of the spawn that the vehicle is
+    moving by the time it arrives.
+    """
+    rows = layout(spec)
+    a2_lo, a2_hi = rows['aisle_2']
+    a1_lo, a1_hi = rows['aisle_1']
+    a1_mid = (a1_lo + a1_hi) / 2.0
+
+    # Clear of the racking field, so the crossing happens in open aisle where
+    # the vehicle has somewhere to react rather than in a pinch where its only
+    # legal answer is to stop.
+    cross_x = round(min(RACK_X0 - 1.5, spawn[0] + 8.0), 2)
+    # MUST EXCEED THE DRIVER'S OWN CLEARANCE, or the person spawns stranded.
+    #
+    # pedestrian_driver requires PERSON_CLEARANCE around a walker before it
+    # will move; anyone placed closer than that to a rack face is sent into
+    # the recovery path instead of doing what the scenario says. Written at
+    # 0.35 first, which a test caught immediately: 0.35 is less than 0.45, so
+    # the crossing walker would have started every run stuck against rack_c.
+    margin = PERSON_CLEARANCE + 0.10
+    crossing = ((cross_x, round(a2_lo + margin, 2)),
+                (cross_x, round(a2_hi - margin, 2)))
+
+    # A route along the wide north aisle, walked end to end. Deterministic, so
+    # two runs put this person in the same place at the same point in the
+    # journey and a metric measured under one is comparable with the other.
+    route = [(round(RACK_X0 + 1.0, 2), round(a1_mid, 2)),
+             (round(RACK_X1 - 1.0, 2), round(a1_mid, 2))]
+    return {'crossing': crossing, 'route': route}
+
+
 def build_world(spec, platform):
     iy = interior_y(spec)
     lay = layout(spec)
@@ -560,8 +606,13 @@ def build_world(spec, platform):
     # ---- warehouse furniture ---------------------------------------------
     # The spawn and both stations are places the vehicle must be able to stand,
     # so nothing is placed near them.
-    keep_clear = [(spawn[0], spawn[1])] + [
-        (x, y) for x, y, _ in stations_world.values()]
+    # The scripted pedestrians need their ground kept clear too. A pallet
+    # dropped on a crossing point does not fail anything: the walker simply
+    # never gets there, and the scenario quietly contains one fewer person.
+    anchors = people_anchors(spec, spawn)
+    keep_clear = ([(spawn[0], spawn[1])]
+                  + [(x, y) for x, y, _ in stations_world.values()]
+                  + list(anchors['crossing']) + list(anchors['route']))
     # Midpoints between consecutive delivery bays, so a pallet can stand in
     # each gap and reaching a bay means routing round something.
     gap_ys = [(bay_ys[0] + bay_ys[1]) / 2.0, (bay_ys[1] + bay_ys[2]) / 2.0]
@@ -727,7 +778,7 @@ def build_truth_map(derived, iy):
     return pgm, meta, (w, h)
 
 
-def build_scenario(derived, spec):
+def build_scenario(derived, spec, platform):
     """Pedestrians placed where the geometry decides the outcome.
 
     The two zones exist so the SAME behaviour produces different results:
@@ -739,6 +790,7 @@ def build_scenario(derived, spec):
     re-routing, which is the flattering half of the story. One of each is what
     makes the pair a measurement instead of a demo.
     """
+    anchors = people_anchors(spec, derived['spawn'])
     a2_lo, a2_hi = derived['aisle_2_y']
     a2_mid = (a2_lo + a2_hi) / 2.0
     a1_lo, a1_hi = derived['aisle_1_y']
@@ -751,7 +803,7 @@ def build_scenario(derived, spec):
     bay_x = sx + clear + 0.5
 
     return {
-        'name': 'track_people',
+        'name': f'track_people.{platform}',
         'description': ('Pedestrians on the generated test track: one in the '
                         'open bay where a re-route is possible, one in the '
                         'scored aisle where it is not'),
@@ -776,6 +828,32 @@ def build_scenario(derived, spec):
             # structure, and leaving it out flatters the tracker.
             {'name': 'worker_standing', 'x': 2.0,
              'y': round((a1_lo + a1_hi) / 2.0, 2), 'yaw': 3.14159},
+            # P3. A FIXED ROUTE along the wide aisle, end to end.
+            #
+            # Everyone above wanders, which is honest and useless for
+            # comparing two configurations: no two runs put anybody in the
+            # same place, so a difference in a metric could be the change
+            # under test or could be where people happened to walk. This one
+            # is deterministic under the scenario seed.
+            {'name': 'walker_route',
+             'x': anchors['route'][0][0], 'y': anchors['route'][0][1],
+             'yaw': 0.0,
+             'route': {'speed': 0.8, 'waypoints': anchors['route'],
+                       'mode': 'pingpong'}},
+            # P4. THE CROSSING. Waits beside aisle 2 and steps across it when
+            # the vehicle comes within 6 m.
+            #
+            # This is the case the local planner exists for and the one no
+            # scenario in this repository has ever produced: an obstacle that
+            # appears in the local costmap with no warning from the global
+            # map. Every other walker yields to the vehicle, so none of them
+            # can ever step in front of one. This one does not yield while it
+            # is crossing, which is what makes the encounter happen at all.
+            {'name': 'walker_cross',
+             'x': anchors['crossing'][0][0], 'y': anchors['crossing'][0][1],
+             'yaw': 1.5708,
+             'cross': {'speed': 1.2, 'to': list(anchors['crossing'][1]),
+                       'trigger_distance': 6.0, 'resets': True}},
         ],
     }
 
@@ -926,12 +1004,19 @@ def main():
         + yaml.safe_dump(tmeta, sort_keys=False))
     print(f'wrote {PKG / "maps" / "test_track_truth.yaml"}  ({tw} x {th} cells)')
 
-    scen = PKG / 'scenarios' / 'track_people.yaml'
+    # PER PLATFORM, like the world, the mask, the stations and the truth map.
+    # It was a single shared file while being derived from platform specific
+    # geometry, so whichever platform was generated last decided where people
+    # stood for both. Every person moved by up to 0.50 m between the two, and
+    # in a 2.0 m aisle that is enough to put somebody inside the 0.45 m
+    # clearance the driver needs, which strands them in the recovery path.
+    # Same fault as the shared controllers.yaml in V-33.
+    scen = PKG / 'scenarios' / f'track_people.{args.platform}.yaml'
     scen.write_text(
         '# GENERATED by amr_sim/tools/generate_test_track.py alongside the\n'
         '# world. Spawn points are placed against the zones, so P1 lands where a\n'
         '# re-route is possible and P2 where it is not. Do not hand-edit.\n'
-        + yaml.safe_dump(build_scenario(derived, spec), sort_keys=False))
+        + yaml.safe_dump(build_scenario(derived, spec, args.platform), sort_keys=False))
     print(f'wrote {scen}')
 
     for name, w, origin in zones(spec):

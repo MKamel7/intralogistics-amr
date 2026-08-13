@@ -144,16 +144,35 @@ class PedestrianDriver(Node):
         source = Path(path) if path else (SCENARIOS / f'{name}.yaml')
         spec = yaml.safe_load(source.read_text())
 
+        # THREE KINDS OF PEDESTRIAN, because one is not a scenario.
+        #
+        # `wander` picks reachable goals at random. It is the honest model of
+        # someone working an aisle, and it is useless for comparing two
+        # configurations, because no two runs put anybody in the same place.
+        #
+        # `route` walks a fixed list of waypoints. Deterministic, so a metric
+        # measured under it can be compared against the same metric measured
+        # later. The plan is explicit that without repeatable scenarios none of
+        # its comparison tables mean anything.
+        #
+        # `cross` waits beside the aisle and steps across it when the vehicle
+        # comes within a trigger distance. This is the case the whole local
+        # planner exists for: an obstacle that appears in the local costmap
+        # with no warning from the global map. It is deliberately the only
+        # behaviour that does NOT yield, for the reason recorded in _tick.
         self.walkers = {}
         for person in spec.get('people', []):
-            w = person.get('wander')
-            if not w:
-                continue
-            self.walkers[person['name']] = {
+            kind = next((k for k in ('wander', 'route', 'cross')
+                         if person.get(k)), None)
+            if kind is None:
+                continue          # a stationary worker, correctly, does nothing
+            cfg = person[kind]
+            w = {
                 'pub': self.create_publisher(
                     Twist, f'/model/{person["name"]}/cmd_vel', 10),
-                'speed': float(w.get('speed', 1.0)),
-                'range': float(w.get('range', 6.0)),
+                'kind': kind,
+                'speed': float(cfg.get('speed', 1.0)),
+                'range': float(cfg.get('range', 6.0)),
                 'goal': None,
                 'pose': None,
                 'stuck_for': 0.0,
@@ -161,6 +180,21 @@ class PedestrianDriver(Node):
                 # How long this walker has been standing still for the vehicle.
                 'holding_for': 0.0,
             }
+            if kind == 'route':
+                pts = [(float(a), float(b)) for a, b in cfg['waypoints']]
+                if len(pts) < 2:
+                    raise SystemExit(
+                        f'{person["name"]}: a route needs at least two '
+                        f'waypoints, got {len(pts)}')
+                w.update(waypoints=pts, leg=0, step=1,
+                         mode=cfg.get('mode', 'pingpong'))
+            elif kind == 'cross':
+                w.update(home=(float(person['x']), float(person['y'])),
+                         far=(float(cfg['to'][0]), float(cfg['to'][1])),
+                         trigger=float(cfg.get('trigger_distance', 6.0)),
+                         resets=bool(cfg.get('resets', True)),
+                         phase='waiting')
+            self.walkers[person['name']] = w
         self.dwell_range = (
             self.declare_parameter('dwell_min', 0.5).value,
             self.declare_parameter('dwell_max', 3.0).value)
@@ -190,9 +224,64 @@ class PedestrianDriver(Node):
                 self.walkers[tf.child_frame_id]['pose'] = self.poses[tf.child_frame_id]
 
     def _pick_goal(self, w):
-        """A random point this walker can reach in a straight line."""
+        """Where this walker goes next, according to its kind."""
         if w['pose'] is None:
             return None
+        if w['kind'] == 'route':
+            return self._route_goal(w)
+        if w['kind'] == 'cross':
+            return self._cross_goal(w)
+        return self._wander_goal(w)
+
+    def _route_goal(self, w):
+        """The next waypoint on a fixed route.
+
+        Not checked against the map. A route is authored deliberately, so a
+        waypoint that is unreachable is a fault in the scenario and should
+        show up as a walker visibly stuck against a rack, not be silently
+        skipped into something that still looks plausible.
+        """
+        pts = w['waypoints']
+        w['leg'] += w['step']
+        if w['leg'] >= len(pts):
+            if w['mode'] == 'loop':
+                w['leg'] = 0
+            else:
+                w['step'] = -1
+                w['leg'] = len(pts) - 2
+        elif w['leg'] < 0:
+            w['step'] = 1
+            w['leg'] = 1
+        return pts[w['leg']]
+
+    def _cross_goal(self, w):
+        """Wait beside the aisle, then step across it in front of the vehicle.
+
+        The trigger is proximity rather than a timer, so the crossing happens
+        where the vehicle actually is rather than where a fixed schedule
+        guessed it would be. A timed crossing in a run whose duration varies by
+        a hundred seconds produces an encounter in a different place every
+        time, which is the thing routes exist to avoid.
+        """
+        robot = self.poses.get(self.robot_frame)
+        if w['phase'] == 'waiting':
+            if robot is None:
+                return None
+            x, y, _ = w['pose']
+            if math.hypot(robot[0] - x, robot[1] - y) > w['trigger']:
+                return None
+            w['phase'] = 'crossing'
+            return w['far']
+        if w['phase'] == 'crossing':
+            if not w['resets']:
+                return None
+            w['phase'] = 'returning'
+            return w['home']
+        w['phase'] = 'waiting'
+        return None
+
+    def _wander_goal(self, w):
+        """A random point this walker can reach in a straight line."""
         x, y, _ = w['pose']
 
         # A walker that is not itself standing clear can never satisfy the
@@ -357,7 +446,17 @@ class PedestrianDriver(Node):
             # The goal is KEPT, not abandoned, and stuck_for is not advanced, so
             # the walker resumes the journey it was on once the vehicle has
             # gone, rather than wandering off and taking the obstacle with it.
-            if self.robot_response == 'stop' and self._vehicle_ahead(x, y, yaw):
+            # A CROSSING PEDESTRIAN DOES NOT YIELD, and that is the point.
+            #
+            # Every other walker stops and holds its ground for the vehicle,
+            # which produces a persistent obstacle and forces a re-route. If a
+            # crossing walker did the same it would freeze at the kerb the
+            # instant the vehicle came near, which is the exact moment it is
+            # supposed to step out. The scenario would then contain no crossing
+            # at all, and would still look busy.
+            crossing = w['kind'] == 'cross' and w.get('phase') == 'crossing'
+            if (self.robot_response == 'stop' and not crossing
+                    and self._vehicle_ahead(x, y, yaw)):
                 if w['holding_for'] < self.yield_release_s:
                     w['holding_for'] += self.dt
                     w['pub'].publish(Twist())

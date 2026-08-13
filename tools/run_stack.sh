@@ -141,7 +141,7 @@ if [ "$TRACK_WORLD" = true ]; then
   SPAWN_Y=6.0
   KEEPOUT=keepout_mask_test_track
   STATIONS="$REPO/src/amr_mission/config/stations.test_track.$PLATFORM.yaml"
-  SCENARIO=track_people
+  SCENARIO=track_people.$PLATFORM
   TRUTH_MAP=test_track_truth
   # THE SPAWN COMES FROM THE GENERATED STATIONS FILE, not from a number typed
   # here. Station coordinates are in the map frame, whose origin SLAM puts at
@@ -160,7 +160,8 @@ fi
 for f in "src/amr_navigation/config/nav2.$PLATFORM.yaml" \
          "src/amr_safety/config/collision_monitor.$PLATFORM.yaml" \
          "src/amr_description/config/platforms/$PLATFORM.yaml" \
-         "src/amr_sim/worlds/$WORLD.sdf"; do
+         "src/amr_sim/worlds/$WORLD.sdf" \
+         ${TRACK_WORLD:+"src/amr_sim/scenarios/$SCENARIO.yaml"}; do
   [ -f "$f" ] || { echo "no $f; is $PLATFORM a platform, and has it been generated?"; exit 2; }
 done
 
