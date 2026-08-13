@@ -109,6 +109,41 @@ def fmt(d, unit=''):
             f'[{d["min"]:.1f} to {d["max"]:.1f}]{sd}  n={d["n"]}')
 
 
+def simulator_running():
+    """True while a `gz sim server` process is alive.
+
+    Matched with -x so the whole command line must equal it; without that this
+    also matches the shell running the check, which reports a simulator on a
+    clean machine.
+    """
+    return subprocess.run(['pgrep', '-xf', 'gz sim server'],
+                          capture_output=True).returncode == 0
+
+
+def wait_for_teardown(timeout=90.0):
+    """Block until the simulator is actually gone, and say so if it is not.
+
+    `stop_all.sh` asks politely and a fixed sleep afterwards was an assumption
+    about how long that takes. It became load bearing when run_stack.sh started
+    refusing to launch onto a live ROS domain: an incomplete teardown no longer
+    corrupts the next run, it makes the next run refuse to start, and a refused
+    run produces a log directory with no mission in it. Five runs would report
+    one result and four exclusions, and the exclusions would look like the
+    vehicle failing rather than the harness never having started it.
+
+    Returns (clean, forced). `forced` means SIGKILL was needed, which is worth
+    recording against the run that follows.
+    """
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if not simulator_running():
+            return True, False
+        time.sleep(2.0)
+    subprocess.run(['pkill', '-9', '-xf', 'gz sim server'], capture_output=True)
+    time.sleep(5.0)
+    return not simulator_running(), True
+
+
 def main():
     ap = argparse.ArgumentParser(
         description='Run a stack configuration N times and report the spread.')
@@ -135,10 +170,15 @@ def main():
         before = set(LOG_ROOT.glob('2*')) if LOG_ROOT.is_dir() else set()
         t0 = time.time()
         print(f'  run {i}/{a.runs} ... ', end='', flush=True)
-        subprocess.run([str(RUN_STACK)] + stack_args,
-                       cwd=REPO, capture_output=True, text=True)
+        proc = subprocess.run([str(RUN_STACK)] + stack_args,
+                              cwd=REPO, capture_output=True, text=True)
+        # Exit 2 is run_stack.sh refusing to start, most often because the
+        # previous simulator had not gone away. That is a harness fault and
+        # must never be read as the vehicle failing.
+        refused = proc.returncode == 2
         subprocess.run([str(REPO / 'tools' / 'stop_all.sh')],
                        cwd=REPO, capture_output=True)
+        clean, forced = wait_for_teardown()
         after = set(LOG_ROOT.glob('2*')) if LOG_ROOT.is_dir() else set()
         fresh = sorted(after - before)
         if not fresh:
@@ -151,13 +191,25 @@ def main():
             continue
         r = parse_run(fresh[-1])
         r['wall_s'] = round(time.time() - t0, 1)
+        if refused:
+            r['healthy'] = False
+            r['notes'].append(
+                'run_stack.sh REFUSED to start (exit 2); this is the harness, '
+                'not the vehicle')
+        if forced:
+            r['notes'].append('simulator needed SIGKILL to tear down')
+        if not clean:
+            r['healthy'] = False
+            r['notes'].append(
+                'simulator still running after teardown; the next run starts '
+                'dirty')
         results.append(r)
         state = 'ok' if r['healthy'] else 'EXCLUDED'
         done = f'{r["completed"]}/{r["attempted"]}' if r['attempted'] else '?'
         print(f'{done} cycles, {r["wall_s"]:.0f} s wall, {state}')
         for n in r['notes']:
             print(f'      {n}')
-        time.sleep(a.settle)
+        time.sleep(a.settle)  # after teardown is confirmed, not instead of it
 
     good = [r for r in results if r['healthy']]
     print(f'\n{"=" * 68}')
