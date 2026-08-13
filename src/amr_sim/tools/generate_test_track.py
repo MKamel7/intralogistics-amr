@@ -190,6 +190,22 @@ def layout(spec):
                     ('rack_d', RACK_DEPTH)):
         rows.append((name, y - w, y))       # (name, y_lo, y_hi)
         y -= w
+
+    # NO LEFTOVER STRIP NARROWER THAN THE VEHICLE CAN USE.
+    #
+    # Widening the aisles pushed the racking down and left 0.543 m between the
+    # bottom rack and the south wall, against a 0.590 m vehicle. There is no
+    # rack west of x = 7, so the vehicle could drive into that strip from the
+    # open bay and then had nowhere to go: it wedged at y = 0.477 and the
+    # planner reported no valid path for the rest of the run. See V-27, which
+    # is the same fault in a different place.
+    #
+    # The bottom rack is therefore extended to the wall whenever what is left
+    # under it is too narrow to turn in. A leftover wide enough to be a real
+    # aisle is left alone, because then it is one.
+    name, lo, hi = rows[-1]
+    if 0.0 < lo < rotation_width(spec):
+        rows[-1] = (name, 0.0, hi)
     return {name: (lo, hi) for name, lo, hi in rows}
 
 

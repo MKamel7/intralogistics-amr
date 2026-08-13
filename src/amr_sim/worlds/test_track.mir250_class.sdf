@@ -182,13 +182,13 @@
     </model>
     <model name="rack_d">
       <static>true</static>
-      <pose>12.0000 1.1433 1.1000 0 0 0</pose>
+      <pose>12.0000 0.8717 1.1000 0 0 0</pose>
       <link name="link">
         <collision name="collision">
-          <geometry><box><size>10.0000 1.2000 2.2000</size></box></geometry>
+          <geometry><box><size>10.0000 1.7433 2.2000</size></box></geometry>
         </collision>
         <visual name="visual">
-          <geometry><box><size>10.0000 1.2000 2.2000</size></box></geometry>
+          <geometry><box><size>10.0000 1.7433 2.2000</size></box></geometry>
           <material>
             <ambient>0.42 0.45 0.50 1</ambient>
             <diffuse>0.42 0.45 0.50 1</diffuse>

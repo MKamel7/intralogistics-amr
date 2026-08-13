@@ -249,7 +249,11 @@ fi
 # protective field in the stack and is still an estimate on both platforms.
 # This measures it passively from whatever the run does anyway.
 if [ "$LATENCY" = true ]; then
-  python3 -u tools/measure_control_latency.py --ros-args -p duration_s:=600.0 \
+  # LONG ENOUGH TO OUTLIVE A SURVEY. At 600 s the probe expired at 03:01 on a
+  # run whose mission did not start until 03:04, so all sixteen protective
+  # stops happened after it had stopped listening and it correctly reported no
+  # samples. The probe was right; the window was wrong.
+  python3 -u tools/measure_control_latency.py --ros-args -p duration_s:=2400.0 \
           > "$RUN/latency.log" 2>&1 &
   LAT=$!
 fi

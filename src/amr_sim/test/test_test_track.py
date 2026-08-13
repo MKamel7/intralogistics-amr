@@ -144,6 +144,26 @@ def test_the_adversarial_case_has_not_been_deleted(spec):
         'for the vehicle and nothing adversarial is measured anywhere')
 
 
+def test_no_strip_is_too_narrow_for_the_vehicle_to_use(spec, derived):
+    """Nothing on the track may be enterable but not usable.
+
+    Widening the aisles pushed the racking down and left 0.543 m between the
+    bottom rack and the south wall, against a 0.590 m vehicle. There is no rack
+    west of the racking field, so the vehicle drove into that strip from the
+    open bay and wedged: no valid path for the rest of the run.
+
+    This is the corner fault in a different place, so it gets the same rule.
+    Every band between a solid and the wall is either wide enough to turn in or
+    does not exist.
+    """
+    turn = gen.rotation_width(spec)
+    lows = [y0 for _, _, y0, _ in derived['solids']]
+    bottom = min(lows)
+    assert bottom <= 0.0 + 1e-9 or bottom >= turn, (
+        f'a {bottom:.3f} m strip is left below the lowest solid, against a '
+        f'{turn:.3f} m turning requirement; the vehicle can enter it and stop')
+
+
 def test_zones_do_not_overlap_or_leave_gaps(derived):
     """Rows are solved from the top down, so an error shows up as an overlap."""
     bands = sorted([derived['aisle_1_y'], derived['aisle_2_y'],
