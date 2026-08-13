@@ -249,39 +249,39 @@
       <pose>4.5000 5.8033 0.005 0 0 0</pose>
       <link name="link">
         <visual name="bar0">
-          <pose>0.0000 0.5100 0 0 0 0</pose>
-          <geometry><box><size>1.1200 0.1000 0.010</size></box></geometry>
+          <pose>0.0000 0.8100 0 0 0 0</pose>
+          <geometry><box><size>1.7600 0.1400 0.010</size></box></geometry>
           <material>
-            <ambient>0.85 0.68 0.10 1</ambient>
-            <diffuse>0.85 0.68 0.10 1</diffuse>
-            <emissive>0.26 0.20 0.03 1</emissive>
+            <ambient>0.10 0.80 0.25 1</ambient>
+            <diffuse>0.10 0.80 0.25 1</diffuse>
+            <emissive>0.03 0.24 0.07 1</emissive>
           </material>
         </visual>
         <visual name="bar1">
-          <pose>0.0000 -0.5100 0 0 0 0</pose>
-          <geometry><box><size>1.1200 0.1000 0.010</size></box></geometry>
+          <pose>0.0000 -0.8100 0 0 0 0</pose>
+          <geometry><box><size>1.7600 0.1400 0.010</size></box></geometry>
           <material>
-            <ambient>0.85 0.68 0.10 1</ambient>
-            <diffuse>0.85 0.68 0.10 1</diffuse>
-            <emissive>0.26 0.20 0.03 1</emissive>
+            <ambient>0.10 0.80 0.25 1</ambient>
+            <diffuse>0.10 0.80 0.25 1</diffuse>
+            <emissive>0.03 0.24 0.07 1</emissive>
           </material>
         </visual>
         <visual name="bar2">
-          <pose>-0.5100 0.0000 0 0 0 0</pose>
-          <geometry><box><size>0.1000 0.9200 0.010</size></box></geometry>
+          <pose>-0.8100 0.0000 0 0 0 0</pose>
+          <geometry><box><size>0.1400 1.4800 0.010</size></box></geometry>
           <material>
-            <ambient>0.85 0.68 0.10 1</ambient>
-            <diffuse>0.85 0.68 0.10 1</diffuse>
-            <emissive>0.26 0.20 0.03 1</emissive>
+            <ambient>0.10 0.80 0.25 1</ambient>
+            <diffuse>0.10 0.80 0.25 1</diffuse>
+            <emissive>0.03 0.24 0.07 1</emissive>
           </material>
         </visual>
         <visual name="bar3">
-          <pose>0.5100 0.0000 0 0 0 0</pose>
-          <geometry><box><size>0.1000 0.9200 0.010</size></box></geometry>
+          <pose>0.8100 0.0000 0 0 0 0</pose>
+          <geometry><box><size>0.1400 1.4800 0.010</size></box></geometry>
           <material>
-            <ambient>0.85 0.68 0.10 1</ambient>
-            <diffuse>0.85 0.68 0.10 1</diffuse>
-            <emissive>0.26 0.20 0.03 1</emissive>
+            <ambient>0.10 0.80 0.25 1</ambient>
+            <diffuse>0.10 0.80 0.25 1</diffuse>
+            <emissive>0.03 0.24 0.07 1</emissive>
           </material>
         </visual>
       </link>
@@ -294,36 +294,36 @@
           <pose>0.0000 0.7500 0 0 0 0</pose>
           <geometry><box><size>1.6000 0.1000 0.010</size></box></geometry>
           <material>
-            <ambient>0.90 0.90 0.88 1</ambient>
-            <diffuse>0.90 0.90 0.88 1</diffuse>
-            <emissive>0.27 0.27 0.26 1</emissive>
+            <ambient>0.92 0.92 0.90 1</ambient>
+            <diffuse>0.92 0.92 0.90 1</diffuse>
+            <emissive>0.28 0.28 0.27 1</emissive>
           </material>
         </visual>
         <visual name="bar1">
           <pose>0.0000 -0.7500 0 0 0 0</pose>
           <geometry><box><size>1.6000 0.1000 0.010</size></box></geometry>
           <material>
-            <ambient>0.90 0.90 0.88 1</ambient>
-            <diffuse>0.90 0.90 0.88 1</diffuse>
-            <emissive>0.27 0.27 0.26 1</emissive>
+            <ambient>0.92 0.92 0.90 1</ambient>
+            <diffuse>0.92 0.92 0.90 1</diffuse>
+            <emissive>0.28 0.28 0.27 1</emissive>
           </material>
         </visual>
         <visual name="bar2">
           <pose>-0.7500 0.0000 0 0 0 0</pose>
           <geometry><box><size>0.1000 1.4000 0.010</size></box></geometry>
           <material>
-            <ambient>0.90 0.90 0.88 1</ambient>
-            <diffuse>0.90 0.90 0.88 1</diffuse>
-            <emissive>0.27 0.27 0.26 1</emissive>
+            <ambient>0.92 0.92 0.90 1</ambient>
+            <diffuse>0.92 0.92 0.90 1</diffuse>
+            <emissive>0.28 0.28 0.27 1</emissive>
           </material>
         </visual>
         <visual name="bar3">
           <pose>0.7500 0.0000 0 0 0 0</pose>
           <geometry><box><size>0.1000 1.4000 0.010</size></box></geometry>
           <material>
-            <ambient>0.90 0.90 0.88 1</ambient>
-            <diffuse>0.90 0.90 0.88 1</diffuse>
-            <emissive>0.27 0.27 0.26 1</emissive>
+            <ambient>0.92 0.92 0.90 1</ambient>
+            <diffuse>0.92 0.92 0.90 1</diffuse>
+            <emissive>0.28 0.28 0.27 1</emissive>
           </material>
         </visual>
       </link>
@@ -336,36 +336,36 @@
           <pose>0.0000 0.7500 0 0 0 0</pose>
           <geometry><box><size>1.6000 0.1000 0.010</size></box></geometry>
           <material>
-            <ambient>0.90 0.90 0.88 1</ambient>
-            <diffuse>0.90 0.90 0.88 1</diffuse>
-            <emissive>0.27 0.27 0.26 1</emissive>
+            <ambient>0.92 0.92 0.90 1</ambient>
+            <diffuse>0.92 0.92 0.90 1</diffuse>
+            <emissive>0.28 0.28 0.27 1</emissive>
           </material>
         </visual>
         <visual name="bar1">
           <pose>0.0000 -0.7500 0 0 0 0</pose>
           <geometry><box><size>1.6000 0.1000 0.010</size></box></geometry>
           <material>
-            <ambient>0.90 0.90 0.88 1</ambient>
-            <diffuse>0.90 0.90 0.88 1</diffuse>
-            <emissive>0.27 0.27 0.26 1</emissive>
+            <ambient>0.92 0.92 0.90 1</ambient>
+            <diffuse>0.92 0.92 0.90 1</diffuse>
+            <emissive>0.28 0.28 0.27 1</emissive>
           </material>
         </visual>
         <visual name="bar2">
           <pose>-0.7500 0.0000 0 0 0 0</pose>
           <geometry><box><size>0.1000 1.4000 0.010</size></box></geometry>
           <material>
-            <ambient>0.90 0.90 0.88 1</ambient>
-            <diffuse>0.90 0.90 0.88 1</diffuse>
-            <emissive>0.27 0.27 0.26 1</emissive>
+            <ambient>0.92 0.92 0.90 1</ambient>
+            <diffuse>0.92 0.92 0.90 1</diffuse>
+            <emissive>0.28 0.28 0.27 1</emissive>
           </material>
         </visual>
         <visual name="bar3">
           <pose>0.7500 0.0000 0 0 0 0</pose>
           <geometry><box><size>0.1000 1.4000 0.010</size></box></geometry>
           <material>
-            <ambient>0.90 0.90 0.88 1</ambient>
-            <diffuse>0.90 0.90 0.88 1</diffuse>
-            <emissive>0.27 0.27 0.26 1</emissive>
+            <ambient>0.92 0.92 0.90 1</ambient>
+            <diffuse>0.92 0.92 0.90 1</diffuse>
+            <emissive>0.28 0.28 0.27 1</emissive>
           </material>
         </visual>
       </link>
@@ -378,36 +378,36 @@
           <pose>0.0000 0.7500 0 0 0 0</pose>
           <geometry><box><size>1.6000 0.1000 0.010</size></box></geometry>
           <material>
-            <ambient>0.90 0.90 0.88 1</ambient>
-            <diffuse>0.90 0.90 0.88 1</diffuse>
-            <emissive>0.27 0.27 0.26 1</emissive>
+            <ambient>0.92 0.92 0.90 1</ambient>
+            <diffuse>0.92 0.92 0.90 1</diffuse>
+            <emissive>0.28 0.28 0.27 1</emissive>
           </material>
         </visual>
         <visual name="bar1">
           <pose>0.0000 -0.7500 0 0 0 0</pose>
           <geometry><box><size>1.6000 0.1000 0.010</size></box></geometry>
           <material>
-            <ambient>0.90 0.90 0.88 1</ambient>
-            <diffuse>0.90 0.90 0.88 1</diffuse>
-            <emissive>0.27 0.27 0.26 1</emissive>
+            <ambient>0.92 0.92 0.90 1</ambient>
+            <diffuse>0.92 0.92 0.90 1</diffuse>
+            <emissive>0.28 0.28 0.27 1</emissive>
           </material>
         </visual>
         <visual name="bar2">
           <pose>-0.7500 0.0000 0 0 0 0</pose>
           <geometry><box><size>0.1000 1.4000 0.010</size></box></geometry>
           <material>
-            <ambient>0.90 0.90 0.88 1</ambient>
-            <diffuse>0.90 0.90 0.88 1</diffuse>
-            <emissive>0.27 0.27 0.26 1</emissive>
+            <ambient>0.92 0.92 0.90 1</ambient>
+            <diffuse>0.92 0.92 0.90 1</diffuse>
+            <emissive>0.28 0.28 0.27 1</emissive>
           </material>
         </visual>
         <visual name="bar3">
           <pose>0.7500 0.0000 0 0 0 0</pose>
           <geometry><box><size>0.1000 1.4000 0.010</size></box></geometry>
           <material>
-            <ambient>0.90 0.90 0.88 1</ambient>
-            <diffuse>0.90 0.90 0.88 1</diffuse>
-            <emissive>0.27 0.27 0.26 1</emissive>
+            <ambient>0.92 0.92 0.90 1</ambient>
+            <diffuse>0.92 0.92 0.90 1</diffuse>
+            <emissive>0.28 0.28 0.27 1</emissive>
           </material>
         </visual>
       </link>

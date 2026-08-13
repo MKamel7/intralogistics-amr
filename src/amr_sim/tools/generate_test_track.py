@@ -531,12 +531,16 @@ def build_world(spec, platform):
     # end. Marked floor is how a real site says where things belong, and it
     # makes the start pose and the drop points legible in a screenshot instead
     # of being coordinates in a yaml file.
-    yellow = (0.85, 0.68, 0.10)
-    white = (0.90, 0.90, 0.88)
+    green = (0.10, 0.80, 0.25)
+    white = (0.92, 0.92, 0.90)
     vals = spec['values']
-    home = 1.4 * max(vals['chassis_length'], vals['chassis_width'])
+    # GREEN, AND BIG ENOUGH TO READ FROM THE OVERVIEW CAMERA. This is the home
+    # position: where the vehicle starts and where it belongs when idle. Drawn
+    # around the spawn pose from the same two numbers, so the marking and the
+    # start point cannot drift apart.
+    home = 2.2 * max(vals['chassis_length'], vals['chassis_width'])
     models.append(floor_marking('mark_home', spawn[0], spawn[1],
-                                home, home, yellow))
+                                home, home, green, line=0.14))
 
     # THREE BAYS SPREAD DOWN THE BACK OF THE BUILDING, with something to avoid
     # between each pair. Stacked shoulder to shoulder they were one wide target

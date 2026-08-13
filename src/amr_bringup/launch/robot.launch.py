@@ -119,7 +119,11 @@ def generate_launch_description():
     def make_aim_camera(context):
         world = LaunchConfiguration('world').perform(context)
         if world.startswith('test_track'):
-            req = ('pose: {position: {x: 17.0, y: 1.0, z: 30.0}, '
+            # Centred on a 42 m building and high enough to hold it in frame.
+            # These numbers followed the building twice already, from 24 m to
+            # 34 to 42, which is the argument for keeping them next to a
+            # comment that says what they are for.
+            req = ('pose: {position: {x: 21.0, y: 0.0, z: 42.0}, '
                    'orientation: {x: -0.4545, y: 0.4545, '
                    'z: 0.5417, w: 0.5417}}')
         else:
