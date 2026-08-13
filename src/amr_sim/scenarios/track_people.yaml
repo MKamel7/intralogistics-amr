@@ -6,27 +6,27 @@ description: 'Pedestrians on the generated test track: one in the open bay where
   re-route is possible, one in the scored aisle where it is not'
 people:
 - name: walker_bay
-  x: 4.6
+  x: 7.2
   y: 5.80334912535061
   yaw: 3.14159
   wander:
     speed: 0.9
     range: 3.0
 - name: walker_aisle
-  x: 12.0
+  x: 17.0
   y: 5.80334912535061
   yaw: 0.0
   wander:
     speed: 0.7
     range: 2.5
 - name: walker_wide
-  x: 10.0
+  x: 12.0
   y: 9.35558187558435
   yaw: 3.14159
   wander:
     speed: 1.1
     range: 4.0
 - name: worker_standing
-  x: 3.0
-  y: 9.5
+  x: 2.0
+  y: 9.36
   yaw: 3.14159

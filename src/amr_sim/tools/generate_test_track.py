@@ -281,7 +281,7 @@ def box(name, x, y, z, sx, sy, sz, colour):
 """
 
 
-def clutter(spec, iy):
+def clutter(spec, iy, keep_clear=()):
     """Roof columns, staged pallets and a charger, on a grid that cannot trap.
 
     THE HARD RULE. Every gap this leaves, between two objects and between an
@@ -296,6 +296,16 @@ def clutter(spec, iy):
     when it was an empty rectangle, and it is the one a warehouse actually
     presents: you do not drive the middle of a bay, you drive between the
     columns.
+
+    KEEP_CLEAR is the spawn pose and both stations. The first version of this
+    placed a column line at exactly the spawn x, so the vehicle started INSIDE
+    a roof column: footprint x 4.095 to 4.905 against a column at 4.30 to 4.70.
+    It was visible in a screenshot before it was visible in a log, which is the
+    argument for looking at the screen.
+
+    Anything landing within a passing width of a point that has to be occupied
+    by the vehicle is dropped rather than nudged, because nudging it is how a
+    solved grid quietly stops being solved.
 
     Returns (name, x0, x1, y0, y1, height, colour).
     """
@@ -331,11 +341,35 @@ def clutter(spec, iy):
         out.append((f'pallet_w{i}', px, px + PALLET_X,
                     py - PALLET_Y / 2, py + PALLET_Y / 2, PALLET_H, timber))
 
-    # A CHARGER against the west wall, which is where one goes.
-    out.append(('charger', 0.30, 0.30 + CHARGER_X,
-                iy / 2.0 - CHARGER_Y / 2, iy / 2.0 + CHARGER_Y / 2,
-                CHARGER_H, signal))
-    return out
+    # NO PALLETS IN THE EAST BAY. They were tried and the clearance test threw
+    # them out: 2.100 m to the nearest column against a 2.202 m requirement,
+    # and the only other space is inside the cross aisle the route uses. The
+    # east apron is 5.6 m wide and already carries a column line and the
+    # dispatch station, so there is genuinely no room for more furniture that
+    # still leaves the vehicle a way past. The rule wins rather than the
+    # decoration.
+
+    # A CHARGER against the west wall, at the north end. It sat mid-wall and
+    # was dropped for being within a passing width of goods_in, which is the
+    # keep-clear rule working; moving it is the right answer rather than
+    # loosening the rule.
+    # FLUSH INTO THE NORTH WEST CORNER. Set 2.20 m short of the north wall it
+    # left a 0.797 m nook behind it, open from the east, which is a trap in
+    # miniature: the vehicle can drive in and not turn round. Against the
+    # corner there is nothing behind it to drive into.
+    out.append(('charger', 0.0, CHARGER_X,
+                iy - CHARGER_Y, iy, CHARGER_H, signal))
+
+    def clear_of_everything(item):
+        _, x0, x1, y0, y1, _, _ = item
+        for kx, ky in keep_clear:
+            dx = max(x0 - kx, kx - x1, 0.0)
+            dy = max(y0 - ky, ky - y1, 0.0)
+            if math.hypot(dx, dy) < gap:
+                return False
+        return True
+
+    return [i for i in out if clear_of_everything(i)]
 
 
 def build_world(spec, platform):
@@ -417,7 +451,11 @@ def build_world(spec, platform):
     stations = {n: (x, y, yaw) for n, (x, y, yaw) in stations_world.items()}
 
     # ---- warehouse furniture ---------------------------------------------
-    for name, x0, x1, y0, y1, h, colour in clutter(spec, iy):
+    # The spawn and both stations are places the vehicle must be able to stand,
+    # so nothing is placed near them.
+    keep_clear = [(spawn[0], spawn[1])] + [
+        (x, y) for x, y, _ in stations_world.values()]
+    for name, x0, x1, y0, y1, h, colour in clutter(spec, iy, keep_clear):
         models.append(box(name, (x0 + x1) / 2.0, (y0 + y1) / 2.0, h / 2.0,
                           x1 - x0, y1 - y0, h, colour))
 
@@ -431,7 +469,7 @@ def build_world(spec, platform):
         (blk_x0, blk_x1, door_hi, iy),
         (blk_x0, blk_x1, 0.0, door_lo),
     ] + [
-        (x0, x1, y0, y1) for _, x0, x1, y0, y1, _, _ in clutter(spec, iy)
+        (x0, x1, y0, y1) for _, x0, x1, y0, y1, _, _ in clutter(spec, iy, keep_clear)
     ]
 
     derived = {
@@ -457,6 +495,9 @@ def build_world(spec, platform):
 
     comment = '\n'.join(f'     {line}' for line in header)
     body = ''.join(models)
+
+    gx, gy = INTERIOR_X / 2.0, iy / 2.0
+    gs = max(INTERIOR_X, iy) + 20.0
 
     return f"""<?xml version="1.0"?>
 <!-- {comment.lstrip()}
@@ -498,14 +539,21 @@ def build_world(spec, platform):
       <cast_shadows>false</cast_shadows>
     </light>
 
+    <!-- CENTRED ON THE BUILDING AND SIZED TO COVER IT. It used to be a 60 by
+         60 m plane at the world origin, which covers x -30 to +30, and when
+         the building grew to 34 m long the east third of it had no floor
+         under it at all. The plane's COLLISION is infinite so nothing fell
+         through, which is why no log said anything; it was visible on screen
+         and nowhere else. -->
     <model name="ground_plane">
       <static>true</static>
+      <pose>{gx:.3f} {gy:.3f} 0 0 0 0</pose>
       <link name="link">
         <collision name="collision">
-          <geometry><plane><normal>0 0 1</normal><size>60 60</size></plane></geometry>
+          <geometry><plane><normal>0 0 1</normal><size>{gs:.1f} {gs:.1f}</size></plane></geometry>
         </collision>
         <visual name="visual">
-          <geometry><plane><normal>0 0 1</normal><size>60 60</size></plane></geometry>
+          <geometry><plane><normal>0 0 1</normal><size>{gs:.1f} {gs:.1f}</size></plane></geometry>
           <material>
             <ambient>0.32 0.33 0.32 1</ambient>
             <diffuse>0.36 0.37 0.36 1</diffuse>
@@ -557,7 +605,7 @@ def build_truth_map(derived, iy):
     return pgm, meta, (w, h)
 
 
-def build_scenario(derived):
+def build_scenario(derived, spec):
     """Pedestrians placed where the geometry decides the outcome.
 
     The two zones exist so the SAME behaviour produces different results:
@@ -572,6 +620,13 @@ def build_scenario(derived):
     a2_lo, a2_hi = derived['aisle_2_y']
     a2_mid = (a2_lo + a2_hi) / 2.0
     a1_lo, a1_hi = derived['aisle_1_y']
+    sx, sy, _ = derived['spawn']
+
+    # NOBODY SPAWNS ON THE VEHICLE. walker_bay was placed at x = 4.6 against a
+    # spawn at x = 4.5, which put a person 0.1 m from the robot before either
+    # had moved. It was obvious on screen and invisible in every log.
+    clear = rotation_width(spec) + PASSING_ALLOWANCE
+    bay_x = sx + clear + 0.5
 
     return {
         'name': 'track_people',
@@ -581,21 +636,24 @@ def build_scenario(derived):
         'people': [
             # P1. In the open bay, on the vehicle's line out of goods_in, with
             # room either side for it to pass once this person stops.
-            {'name': 'walker_bay', 'x': 4.6, 'y': a2_mid, 'yaw': 3.14159,
-             'wander': {'speed': 0.9, 'range': 3.0}},
+            {'name': 'walker_bay', 'x': round(bay_x, 2), 'y': a2_mid,
+             'yaw': 3.14159, 'wander': {'speed': 0.9, 'range': 3.0}},
             # P2. Inside the 1.000 m aisle. There is no gap here for a vehicle
             # of this size, so a vehicle that tries to squeeze past is wrong and
             # one that waits is right.
-            {'name': 'walker_aisle', 'x': 12.0, 'y': a2_mid, 'yaw': 0.0,
+            {'name': 'walker_aisle', 'x': round((RACK_X0 + RACK_X1) / 2.0, 2),
+             'y': a2_mid, 'yaw': 0.0,
              'wander': {'speed': 0.7, 'range': 2.5}},
             # A third on the wide aisle, so the run is not two set pieces with
             # nothing else moving.
-            {'name': 'walker_wide', 'x': 10.0, 'y': (a1_lo + a1_hi) / 2.0,
+            {'name': 'walker_wide', 'x': round(RACK_X0 + 3.0, 2),
+             'y': (a1_lo + a1_hi) / 2.0,
              'yaw': 3.14159, 'wander': {'speed': 1.1, 'range': 4.0}},
             # Stationary, for the same reason the AWS scenario has one: a person
             # who does not move is the case the motion test cannot tell from
             # structure, and leaving it out flatters the tracker.
-            {'name': 'worker_standing', 'x': 3.0, 'y': 9.5, 'yaw': 3.14159},
+            {'name': 'worker_standing', 'x': 2.0,
+             'y': round((a1_lo + a1_hi) / 2.0, 2), 'yaw': 3.14159},
         ],
     }
 
@@ -751,7 +809,7 @@ def main():
         '# GENERATED by amr_sim/tools/generate_test_track.py alongside the\n'
         '# world. Spawn points are placed against the zones, so P1 lands where a\n'
         '# re-route is possible and P2 where it is not. Do not hand-edit.\n'
-        + yaml.safe_dump(build_scenario(derived), sort_keys=False))
+        + yaml.safe_dump(build_scenario(derived, spec), sort_keys=False))
     print(f'wrote {scen}')
 
     for name, w, origin in zones(spec):

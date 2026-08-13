@@ -52,14 +52,21 @@
       <cast_shadows>false</cast_shadows>
     </light>
 
+    <!-- CENTRED ON THE BUILDING AND SIZED TO COVER IT. It used to be a 60 by
+         60 m plane at the world origin, which covers x -30 to +30, and when
+         the building grew to 34 m long the east third of it had no floor
+         under it at all. The plane's COLLISION is infinite so nothing fell
+         through, which is why no log said anything; it was visible on screen
+         and nowhere else. -->
     <model name="ground_plane">
       <static>true</static>
+      <pose>17.000 6.778 0 0 0 0</pose>
       <link name="link">
         <collision name="collision">
-          <geometry><plane><normal>0 0 1</normal><size>60 60</size></plane></geometry>
+          <geometry><plane><normal>0 0 1</normal><size>54.0 54.0</size></plane></geometry>
         </collision>
         <visual name="visual">
-          <geometry><plane><normal>0 0 1</normal><size>60 60</size></plane></geometry>
+          <geometry><plane><normal>0 0 1</normal><size>54.0 54.0</size></plane></geometry>
           <material>
             <ambient>0.32 0.33 0.32 1</ambient>
             <diffuse>0.36 0.37 0.36 1</diffuse>
@@ -244,38 +251,6 @@
         </visual>
       </link>
     </model>
-    <model name="column_w1">
-      <static>true</static>
-      <pose>4.5000 5.3772 1.5000 0 0 0</pose>
-      <link name="link">
-        <collision name="collision">
-          <geometry><box><size>0.4000 0.4000 3.0000</size></box></geometry>
-        </collision>
-        <visual name="visual">
-          <geometry><box><size>0.4000 0.4000 3.0000</size></box></geometry>
-          <material>
-            <ambient>0.62 0.61 0.58 1</ambient>
-            <diffuse>0.62 0.61 0.58 1</diffuse>
-          </material>
-        </visual>
-      </link>
-    </model>
-    <model name="column_w2">
-      <static>true</static>
-      <pose>4.5000 8.1795 1.5000 0 0 0</pose>
-      <link name="link">
-        <collision name="collision">
-          <geometry><box><size>0.4000 0.4000 3.0000</size></box></geometry>
-        </collision>
-        <visual name="visual">
-          <geometry><box><size>0.4000 0.4000 3.0000</size></box></geometry>
-          <material>
-            <ambient>0.62 0.61 0.58 1</ambient>
-            <diffuse>0.62 0.61 0.58 1</diffuse>
-          </material>
-        </visual>
-      </link>
-    </model>
     <model name="column_w3">
       <static>true</static>
       <pose>4.5000 10.9817 1.5000 0 0 0</pose>
@@ -324,38 +299,6 @@
         </visual>
       </link>
     </model>
-    <model name="column_e2">
-      <static>true</static>
-      <pose>30.5000 8.1795 1.5000 0 0 0</pose>
-      <link name="link">
-        <collision name="collision">
-          <geometry><box><size>0.4000 0.4000 3.0000</size></box></geometry>
-        </collision>
-        <visual name="visual">
-          <geometry><box><size>0.4000 0.4000 3.0000</size></box></geometry>
-          <material>
-            <ambient>0.62 0.61 0.58 1</ambient>
-            <diffuse>0.62 0.61 0.58 1</diffuse>
-          </material>
-        </visual>
-      </link>
-    </model>
-    <model name="column_e3">
-      <static>true</static>
-      <pose>30.5000 10.9817 1.5000 0 0 0</pose>
-      <link name="link">
-        <collision name="collision">
-          <geometry><box><size>0.4000 0.4000 3.0000</size></box></geometry>
-        </collision>
-        <visual name="visual">
-          <geometry><box><size>0.4000 0.4000 3.0000</size></box></geometry>
-          <material>
-            <ambient>0.62 0.61 0.58 1</ambient>
-            <diffuse>0.62 0.61 0.58 1</diffuse>
-          </material>
-        </visual>
-      </link>
-    </model>
     <model name="pallet_w0">
       <static>true</static>
       <pose>7.5022 3.3892 0.5250 0 0 0</pose>
@@ -390,7 +333,7 @@
     </model>
     <model name="charger">
       <static>true</static>
-      <pose>0.6000 6.7783 0.6000 0 0 0</pose>
+      <pose>0.3000 12.8567 0.6000 0 0 0</pose>
       <link name="link">
         <collision name="collision">
           <geometry><box><size>0.6000 1.4000 1.2000</size></box></geometry>

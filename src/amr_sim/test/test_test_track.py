@@ -178,14 +178,19 @@ def test_the_furniture_leaves_a_passing_width_everywhere(spec):
     that width rather than placed by eye. This asserts the solving worked.
     """
     iy = gen.interior_y(spec)
+    INTERIOR_X = gen.INTERIOR_X
     need = gen.rotation_width(spec) + gen.PASSING_ALLOWANCE
     items = gen.clutter(spec, iy)
     assert items, 'the warehouse has no furniture at all'
 
     for name, x0, x1, y0, y1, _, _ in items:
-        assert x0 >= need or x0 == pytest.approx(0.30, abs=0.01), (
-            f'{name} sits {x0:.3f} m from the west wall, less than the '
+        # Flush against a wall is fine; a narrow gap behind an object is not,
+        # because that is a nook the vehicle can enter and cannot turn in.
+        assert x0 >= need or x0 <= 1e-6, (
+            f'{name} leaves {x0:.3f} m to the west wall, less than the '
             f'{need:.3f} m a vehicle needs to get past it')
+        assert (INTERIOR_X - x1) >= need or x1 >= INTERIOR_X - 1e-6, (
+            f'{name} leaves {INTERIOR_X - x1:.3f} m to the east wall')
         assert (iy - y1) >= need or y1 >= iy - 1e-6, (
             f'{name} leaves {iy - y1:.3f} m to the north wall')
         assert y0 >= need or y0 <= 1e-6, (
@@ -315,6 +320,47 @@ def test_the_widest_aisle_does_allow_a_turn(spec, derived):
     assert (hi - lo) > diameter, (
         f'aisle 1 is {hi - lo:.4f} m against a {diameter:.4f} m diameter, so '
         f'there is nowhere on the track the vehicle can turn')
+
+
+def test_the_floor_covers_the_whole_building(spec):
+    """A plane sized independently of the building leaves part of it unfloored.
+
+    It was 60 by 60 m at the world origin, covering x -30 to +30, and when the
+    building grew to 34 m the east third had no floor under it. The plane's
+    COLLISION is infinite so nothing fell through and no log said a word. It
+    was visible on screen and nowhere else, which is the argument for looking.
+    """
+    import re
+    text = world_path().read_text()
+    block = text[text.index('name="ground_plane"'):]
+    pose = re.search(r'<pose>([-\d. ]+)</pose>', block).group(1).split()
+    size = re.search(r'<size>([\d. ]+)</size>', block).group(1).split()
+    gx, gy = float(pose[0]), float(pose[1])
+    half = float(size[0]) / 2.0
+    iy = gen.interior_y(spec)
+    assert gx - half <= 0.0 and gx + half >= gen.INTERIOR_X, (
+        f'the floor spans x {gx - half:.1f} to {gx + half:.1f} against a '
+        f'building 0 to {gen.INTERIOR_X}')
+    assert gy - half <= 0.0 and gy + half >= iy, (
+        f'the floor spans y {gy - half:.1f} to {gy + half:.1f} against a '
+        f'building 0 to {iy:.1f}')
+
+
+def test_nobody_spawns_on_the_vehicle(spec, derived):
+    """A pedestrian standing on the robot is not a scenario, it is a bug.
+
+    walker_bay was placed at x = 4.6 against a spawn at x = 4.5, so a person
+    stood 0.1 m from the vehicle before either had moved.
+    """
+    scen = yaml.safe_load(
+        (PKG / 'scenarios' / 'track_people.yaml').read_text())
+    sx, sy, _ = derived['spawn']
+    need = gen.rotation_width(spec) + gen.PASSING_ALLOWANCE
+    for person in scen['people']:
+        d = math.hypot(person['x'] - sx, person['y'] - sy)
+        assert d >= need, (
+            f'{person["name"]} spawns {d:.2f} m from the vehicle, inside the '
+            f'{need:.2f} m it needs to move at all')
 
 
 def test_station_approach_poses_are_generated(spec):
