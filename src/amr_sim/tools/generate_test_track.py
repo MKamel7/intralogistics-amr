@@ -360,25 +360,76 @@ def clutter(spec, iy, keep_clear=()):
     # regular pitch; the pitch here is whatever leaves a passing width between
     # them, rounded up so the arithmetic is not marginal.
     pitch = gap + COLUMN + 0.20
+
+    def conflicts(cx, cy):
+        """Would a column here crowd a pose, or leave an unusable nook?
+
+        The wall check is not an afterthought. Phasing the line to clear the
+        spawn pushed the end column to 0.974 m from the south wall, which is a
+        strip the vehicle can drive into and not turn in: the same fault as the
+        leftover under the racking, arrived at from a different direction.
+        """
+        if not (COLUMN / 2 >= cy - 1e-9 or cy - COLUMN / 2 >= gap):
+            return True                      # too close to the south wall
+        if not (cy + COLUMN / 2 >= iy - 1e-9 or iy - cy - COLUMN / 2 >= gap):
+            return True                      # too close to the north wall
+        for kx, ky in keep_clear:
+            dx = max(cx - COLUMN / 2 - kx, kx - cx - COLUMN / 2, 0.0)
+            dy = max(cy - COLUMN / 2 - ky, ky - cy - COLUMN / 2, 0.0)
+            if math.hypot(dx, dy) < gap:
+                return True
+        return False
+
     def line(x, tag):
+        """A full column line, PHASED rather than punched through.
+
+        Columns used to be laid on a fixed grid and any that crowded the spawn
+        or a station were dropped, which left visible holes in the line exactly
+        where the eye expects a column: a warehouse whose roof is unsupported
+        over the two places people stand. Shifting the whole line by a fraction
+        of its pitch keeps every column and moves them all off the poses that
+        have to stay clear, which is what a real building does when a column
+        would land somewhere inconvenient.
+        """
         n = max(1, int((iy - gap) // pitch))
         span = (n - 1) * pitch
-        y0 = (iy - span) / 2.0
+        base = (iy - span) / 2.0
+        best, best_bad = 0.0, None
+        for step in range(24):                     # a full pitch, in 24 steps
+            shift = (step / 24.0) * pitch - pitch / 2.0
+            bad = sum(conflicts(x, base + i * pitch + shift) for i in range(n))
+            if best_bad is None or bad < best_bad:
+                best, best_bad = shift, bad
+            if bad == 0:
+                break
         for i in range(n):
-            cy = y0 + i * pitch
+            cy = base + i * pitch + best
+            if conflicts(x, cy):
+                continue                            # only if no phase clears it
             out.append((f'column_{tag}{i}', x - COLUMN / 2, x + COLUMN / 2,
                         cy - COLUMN / 2, cy + COLUMN / 2, COLUMN_H, concrete))
 
-    # One line in the west staging bay, one in the east. Both are open floor
-    # the vehicle crosses on every cycle.
-    line(RACK_X0 / 2.0, 'w')
+    # One line in each staging bay, both on open floor the vehicle crosses
+    # every cycle. The west line is deliberately NOT at the middle of the bay:
+    # that put it through the spawn, so the column beside the home square could
+    # not be placed at any phase and the roof was unsupported over the one spot
+    # the vehicle always occupies. Set clear of the spawn instead, and the whole
+    # line survives.
+    line(RACK_X0 * 0.8, 'w')
     line(INTERIOR_X - (INTERIOR_X - RACK_X1) / 2.0 + 1.0, 'e')
 
     # STAGED PALLETS in the west bay, clear of the columns and of the route
     # between goods_in and the racking. Laid out as a pair, which is how they
     # arrive.
-    px = RACK_X0 / 2.0 + COLUMN / 2 + gap
-    for i, py in enumerate((iy * 0.25, iy * 0.75)):
+    # FLUSH TO THE WEST WALL. Stood 1.2 m off it they left a gap behind them
+    # the vehicle could enter and not turn in, and pallets get stacked
+    # against a wall in any case.
+    px = 0.0
+    # Clear of both walls by a passing width, and clear of goods_in, which
+    # sits on the same side of the bay. Placed low and high rather than at
+    # quarter points, because the quarter points fall exactly where the
+    # station is.
+    for i, py in enumerate((iy * 0.23, iy * 0.69)):
         out.append((f'pallet_w{i}', px, px + PALLET_X,
                     py - PALLET_Y / 2, py + PALLET_Y / 2, PALLET_H, timber))
 
@@ -503,11 +554,15 @@ def build_world(spec, platform):
     models.append(floor_marking('mark_home', spawn[0], spawn[1],
                                 home, home, yellow))
 
+    # THE MIDDLE BAY CONTAINS THE DELIVERY POSE. They were painted 1.6 m east
+    # of it, so the vehicle stopped next to the markings rather than in one and
+    # the bays were decoration on floor nothing used. A marked bay the vehicle
+    # never stands in is worse than no marking: it says the wrong thing.
     dx, dy = stations_world['dispatch'][0], stations_world['dispatch'][1]
     bay = 1.6
     for i in range(3):
         models.append(floor_marking(
-            f'mark_bay_{i + 1}', dx + 1.6, dy + (i - 1) * (bay + 0.4),
+            f'mark_bay_{i + 1}', dx, dy + (i - 1) * (bay + 0.4),
             bay, bay, white))
 
     # ---- warehouse furniture ---------------------------------------------
