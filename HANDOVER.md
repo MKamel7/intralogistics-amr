@@ -2,117 +2,74 @@
 
 ## Overnight session, 13 August 2026. Read this first
 
-**`control_latency` can now be measured.** `tools/run_stack.sh --run mission
---latency` attaches a passive probe that times the scan stamp that shows a
-protective violation against the command that acts on it, and reports p50, p95
-and the tail. It writes nothing: the p95 is a candidate for the spec, not a
-decision, because a tool that edited a platform spec from its own measurement
-would be one bad run away from shrinking every protective field in the project.
-Take 20 or more samples before changing anything.
+**Nothing is broken. 163 tests pass, ruff is clean, `gz sdf` validates the
+world, and the MiR250 on the AWS warehouse is untouched at 5 of 5 cycles.**
 
-**Start with `docs/findings.md`.** It is the short version of the
-validation record and the thing worth showing anyone.
+Start with `docs/findings.md`, the short version of the validation record. Then
+V-26, V-27 and V-28, which are the results this session produced.
 
-**The track already produced a result: V-26.** The MiR250 is 2.1 mm too
-large to rotate in the 1.000 m corridor its own datasheet claims, because
-MiR quote that figure with a dynamic footprint and this stack plans with a
-static one. That is a real finding about a published claim, arrived at by
-arithmetic, and it is exactly what the track was built to produce.
+### The test track is now a warehouse, and it is generated
 
-**Nothing is broken. 145 tests pass, ruff is clean, the MiR250 deliverable is
-untouched and was measured at 5 of 5 cycles the previous evening.**
+`tools/run_stack.sh --test-track --run survey_mission --cycles 5`
 
-What changed, in commit order:
+42.0 by 13.56 m, and the height is DERIVED from the zones it must hold rather
+than fixed, because a shell sized independently of its contents leaves a
+remainder and a remainder is either a corridor or a trap. It carries four
+racking rows, four equidistant roof columns, staged pallets, a corner charger, a
+green home square around the spawn and three white delivery bays spread down the
+back with a pallet between each pair.
 
-    9979bf0  stop claiming a fleet the code does not have
-    c908f9a  widen the CI fast gate to every generator, run on all branches
-    90f3e3e  generate a test track sized from the platform datasheet
-    705e177  wire the test track in, pair the keepout mask to the world
-    c5437bc  document both worlds in the README
-    f93937e  pair the stations file to the world as well
+Every width is derived. Each aisle is what the vehicle needs to turn round,
+which is twice the widest all-round protective field it can select, PLUS a
+pedestrian plus clearance so a person standing in a corridor is a detour rather
+than the end of the run. Floor markings are visual only: a marking with
+collision is a kerb the vehicle refuses to cross.
 
-### The naming was a real credibility problem and is fixed
+Six invariants are asserted rather than eyeballed, and each exists because it
+was violated at least once: every aisle turnable, no leftover strip, furniture
+clear of every wall, object and required pose, the floor covering the building,
+nobody spawning on the vehicle, and the world name matching the file stem.
 
-`src/amr_fleet` was an EMPTY DIRECTORY that the README advertised as "task
-allocation, traffic control, VDA 5050 client", and the README opened by
-describing a multi-robot fleet under a central traffic controller. There is one
-robot. The title, the opening and the package list now say so, and the fleet
-layer sits under Roadmap where the README's own rule puts unbuilt work.
+### What the two probes measured, and why it matters
 
-### The test track exists and loads
+Both attach to any run: `--latency` and `--classify`.
 
-`src/amr_sim/tools/generate_test_track.py` emits a world whose aisle widths are
-the corridor figures the datasheet publishes, read from `validation_targets`.
-`gz sdf` reports it valid, the stack brings up on it, and preflight passes 21 of
-21 checks. Run it with `tools/run_stack.sh --test-track`.
+    157 protective stops:  155 structure, 0 pedestrians
+    control_latency:       p50 76 ms, p95 328 ms, sd 82.8 ms
 
-**It has not yet completed a transport cycle**, and the last reason is not a
-fault at all. Six assets were bound to the AWS world rather than to whichever
-world is running; all six are now paired, and what remains is the documented
-workflow.
+Neither was the expected answer and both are in V-28. The stops are not the
+price of sharing a floor with people, they are the vehicle stopping for
+structure at half a metre that the costmap does not know about, 43 of them
+BEHIND it while driving forward. The latency estimate of 0.10 s is conservative
+at the median and out by 3.3 times at the p95, which at 1.0 m/s is 228 mm of
+protective field missing in one stop in twenty.
 
-THE TRACK NEEDS SURVEYING FIRST, and that is now one command:
+NOTHING HAS BEEN WRITTEN TO ANY SPEC on the strength of either. Both change the
+safety case and want a decision.
 
-    tools/run_stack.sh --test-track --run survey_mission --cycles 5
+### The next measurement, and it is narrow
 
-A cold mission fails before it starts, because `dispatch` is 19 m east through
-floor SLAM has never seen and `allow_unknown: false` means the vehicle plans
-only on surveyed floor:
+The stop classifier has cut the structure stops down to two candidates:
 
-    Goal Coordinates of(17.000000, 2.375000) was outside bounds
+  1. the self filter leaks at its corners. It rejects a 0.460 by 0.350 m
+     RECTANGLE, which is the wrong shape for scanners mounted at 45 degrees on
+     a vehicle whose circumscribed radius is 0.501 m. V-23 records this vehicle
+     observing its own structure at 0.440 m.
+  2. the rear field fires during forward motion.
 
-That is a deliberate decision, not a regression. The AWS world tolerates a cold
-mission because its stations sit inside what the opening scans cover; a 24 m
-track does not.
+Both are checkable and neither is tested. Start there rather than anywhere else.
 
-BUDGET AT LEAST 45 MINUTES FOR A SURVEY RUN ON THE TRACK. The last attempt was
-killed by a 1700 s harness timeout at 13.9 minutes, having reached round 7 of a
-possible 24 with about 166 m2 of roughly 230 m2 of free floor mapped. It was
-working, not stuck. `survey exited 1` in that log is an
-ExternalShutdownException from being killed, not a failure of the survey.
+### Still open
 
-The AWS world surveys faster because it is smaller and its stations are close
-to the spawn. Do not read the track's slower survey as a fault until it has
-been given the time.
-
-    world file        was already an argument, now checked before launch
-    keepout mask      was hardcoded; now selected by name, track ships its own
-    stations          was hardcoded; now passed, track generates its own
-    ground truth map  was hardcoded; now an argument, track generates its own
-    pedestrian scen.  was hardcoded; now an argument, track generates its own
-
-ALL FIVE ARE NOW PAIRED. The pattern is worth naming, because it is the same
-shape as the platform coupling found the day before: anything expressed in map
-coordinates belongs to a WORLD, and the launch has to pair them or the mismatch
-surfaces as a navigation failure rather than a configuration one. The log gave
-it away only because the driver happens to print its map bounds:
-
-    pedestrian_driver: routes checked against warehouse_truth.yaml
-                       (x[-7.5,7.5] y[-11.0,11.0])
-
-against a track that is x[0,24] y[0,12].
-
-### Also uncommitted and deliberately not evaluated
-
-The pedestrian stop-and-hold change in `src/amr_sim/amr_sim/pedestrian_driver.py`
-and `scenarios/walking_people.yaml` is written but NOT committed and NOT
-measured. Walkers stop dead at 3 m and hold their ground rather than avoiding
-the vehicle, which is what makes re-routing testable at all. It was held back on
-purpose: evaluating it on the AWS world would confound it with everything else,
-and the honest place to measure it is the track, where one zone can re-route and
-the other cannot.
-
-### Still open from the previous session
-
-The MP-400 sits at 0 of 5 with a correct configuration and the cause unknown.
-V-25 records four refuted hypotheses and the current leading candidate: the
-inflation radius and the protective fields are derived by two generators that do
-not know about each other, so the planner can route the smaller vehicle into
-gaps its own protective field cannot fit. Not tested.
+The MP-400 sits at 0 of 5 with a correct configuration. V-25 records five
+refuted hypotheses, including one refuted before it was implemented because the
+working platform disproved it.
 
 ---
 
-Written 2026-08-12. Read this first, then `docs/adr/` and `docs/validation.md`.
+The rest of this file is the previous handover, written 2026-08-12, kept
+because its plan and its warnings are still current where this session has not
+overwritten them.
 
 ## What works
 
