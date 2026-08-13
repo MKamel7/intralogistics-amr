@@ -291,7 +291,29 @@ class PedestrianDriver(Node):
                 return None
             w['phase'] = 'returning'
             return w['home']
-        w['phase'] = 'waiting'
+
+        # SPENT UNTIL THE VEHICLE LEAVES.
+        #
+        # Re-arming as soon as the walker got home meant it crossed again
+        # immediately, because the vehicle was still inside the trigger radius.
+        # Observed live: four round trips in 26 seconds, a person shuttling
+        # back and forth across an aisle while an AMR sat next to them.
+        #
+        # Three things wrong with that. Nobody behaves that way. The encounter
+        # stops being the unannounced event the local planner is supposed to
+        # cope with and becomes a metronome the controller can anticipate. And
+        # it manufactures a stream of cheap encounters that would inflate any
+        # count taken later.
+        #
+        # One crossing per approach. The vehicle has to leave and come back.
+        if w['phase'] == 'returning':
+            w['phase'] = 'spent'
+            return None
+        if robot is None:
+            return None
+        x, y, _ = w['pose']
+        if math.hypot(robot[0] - x, robot[1] - y) > w['trigger']:
+            w['phase'] = 'waiting'
         return None
 
     def _wander_goal(self, w):

@@ -81,14 +81,21 @@ def test_a_crossing_walker_steps_out_when_the_vehicle_arrives():
     assert w['phase'] == 'crossing'
 
 
-def test_a_crossing_walker_returns_and_can_cross_again():
+def test_a_crossing_walker_returns_home_and_then_waits_out_the_vehicle():
+    """Crosses, goes home, and is spent until the vehicle leaves.
+
+    This previously asserted the walker went straight back to `waiting`, which
+    is the behaviour that produced the pacing seen live: four round trips in
+    26 seconds while the vehicle sat inside the trigger radius. The old
+    assertion described the bug, so it was changed rather than kept.
+    """
     d = Driver(robot=(3.0, 0.0, 0.0))
     w = {'kind': 'cross', 'pose': (0.0, 4.0, 0.0), 'home': (0.0, 0.0),
          'far': (0.0, 4.0), 'trigger': 6.0, 'resets': True, 'phase': 'crossing'}
     assert PedestrianDriver._cross_goal(d, w) == (0.0, 0.0)
     assert w['phase'] == 'returning'
     assert PedestrianDriver._cross_goal(d, w) is None
-    assert w['phase'] == 'waiting', 'it must be able to cross again'
+    assert w['phase'] == 'spent', 'it must not immediately cross again'
 
 
 def test_a_one_shot_crossing_stays_put_afterwards():
@@ -158,3 +165,36 @@ def test_every_generated_scenario_only_uses_known_behaviours():
             assert not unknown, (
                 f'{f.name}: {person["name"]} carries {sorted(unknown)}, which '
                 f'no behaviour in the driver reads, so it will never move')
+
+
+def cross_walker(phase='waiting'):
+    return {'kind': 'cross', 'pose': (0.0, 0.0, 0.0), 'home': (0.0, 0.0),
+            'far': (0.0, 4.0), 'trigger': 6.0, 'resets': True, 'phase': phase}
+
+
+def test_it_does_not_cross_again_while_the_vehicle_is_still_there():
+    """Observed live: four round trips in 26 seconds.
+
+    The walker re-armed as soon as it got home, and the vehicle was still
+    inside the trigger radius, so it shuttled back and forth across the aisle.
+    That is not a crossing, it is a metronome, and it manufactures cheap
+    encounters that would inflate any later count.
+    """
+    d = Driver(robot=(2.0, 0.0, 0.0))          # vehicle parked well inside 6 m
+    w = cross_walker('returning')
+    assert PedestrianDriver._cross_goal(d, w) is None
+    assert w['phase'] == 'spent'
+    for _ in range(50):
+        assert PedestrianDriver._cross_goal(d, w) is None, (
+            'a second crossing started while the vehicle had not left')
+        assert w['phase'] == 'spent'
+
+
+def test_it_re_arms_once_the_vehicle_has_gone():
+    """One crossing per approach, not one per run."""
+    w = cross_walker('spent')
+    far = Driver(robot=(40.0, 0.0, 0.0))
+    assert PedestrianDriver._cross_goal(far, w) is None
+    assert w['phase'] == 'waiting', 'it must be ready for the next approach'
+    near = Driver(robot=(3.0, 0.0, 0.0))
+    assert PedestrianDriver._cross_goal(near, w) == (0.0, 4.0)
