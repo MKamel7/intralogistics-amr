@@ -171,19 +171,37 @@ class SlipProbe(Node):
             return
 
         ratio = self.truth_path / self.odom_path
+        err = abs(1.0 - ratio)
         print()
-        print(f'  RATIO truth/odom = {ratio:.3f}')
-        if ratio < 0.7:
-            print('  The wheels are turning further than the vehicle travels.')
-            print('  That is slip, and a vehicle held against something shows')
-            print('  it first. Look at where it is, not at the planner.')
-        elif ratio > 1.3:
-            print('  The vehicle travels further than the wheels report, so it')
-            print('  is being pushed, or the wheel radius in the description is')
-            print('  smaller than the one in the world.')
-        else:
-            print('  Odometry is consistent with ground truth over this window.')
+        print(f'  RATIO truth/odom = {ratio:.3f}   ({err * 100:.1f} % error)')
+
+        # THE BANDS HERE WERE ONCE 0.7 TO 1.3, AND THAT WAS THE BUG.
+        # A measured ratio of 0.744 printed "odometry is consistent with
+        # ground truth", because 0.744 sits inside 0.7 to 1.3. It was a 34
+        # percent scale error caused by a wheel radius of 0.100 m configured
+        # on a vehicle whose wheels are 0.075 m, and it was corrupting every
+        # SLAM update. The measurement was right and the verdict written on
+        # it was wrong, which is the more dangerous half.
+        #
+        # Odometry feeding scan matching has to be good to a few percent.
+        # Anything looser is not a tolerance, it is a way of never failing.
+        if err <= 0.02:
+            print('  Odometry agrees with ground truth to within 2 percent.')
             print('  Whatever else is wrong, it is not the wheels.')
+        else:
+            scale = 1.0 / ratio if ratio else float('inf')
+            if err <= 0.05:
+                print('  SMALL BUT REAL. Under 5 percent, which turning and')
+                print('  caster scrub can account for, so this is not proof of')
+                print('  a wrong constant. It is worth a second window.')
+            else:
+                print('  WRONG. This is far past anything slip explains.')
+            print(f'  The wheels report {scale:.3f} times the distance travelled.')
+            print('  For a differential drive that is wheel_radius or')
+            print('  wheel_separation in the controller config not matching the')
+            print('  vehicle. Compare them against the platform spec before')
+            print('  looking at the planner or the mapper, because an odometry')
+            print('  scale error shows up as neither.')
         print('=' * 70)
 
 

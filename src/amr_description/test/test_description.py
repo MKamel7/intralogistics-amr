@@ -31,15 +31,32 @@ pytestmark = pytest.mark.skipif(
     shutil.which('xacro') is None, reason='xacro not on PATH')
 
 
-@pytest.fixture(scope='module')
-def spec():
-    return yaml.safe_load(SPEC.read_text())
+PLATFORMS = sorted(p.stem for p in (PKG / 'config' / 'platforms').glob('*.yaml'))
 
 
-@pytest.fixture(scope='module')
-def urdf():
+@pytest.fixture(params=PLATFORMS)
+def platform(request):
+    """Every platform with a spec, not just the first one written.
+
+    This fixture used to be a bare loader for mir250_class.yaml, and the urdf
+    fixture below built the description with platform:=mir250_class. That made
+    every check in this file a check on one vehicle. The controller drift gate
+    below therefore compared the MiR250 config against the MiR250 spec and
+    passed for months while the MP-400 ran on a wheel radius 33 percent too
+    large. See V-33.
+    """
+    return request.param
+
+
+@pytest.fixture
+def spec(platform):
+    return yaml.safe_load((PKG / 'config' / 'platforms' / f'{platform}.yaml').read_text())
+
+
+@pytest.fixture
+def urdf(platform):
     out = subprocess.run(
-        ['xacro', str(XACRO), 'platform:=mir250_class'],
+        ['xacro', str(XACRO), f'platform:={platform}'],
         capture_output=True, text=True, check=True)
     assert not out.stderr.strip(), (
         f'xacro emitted warnings, which must not be ignored:\n{out.stderr}')
@@ -97,7 +114,7 @@ def test_root_link_is_unique_and_named(urdf):
         f'expected base_link to be the only root, found {roots}')
 
 
-def test_odometry_frame_is_the_root_link(urdf):
+def test_odometry_frame_is_the_root_link(urdf, platform):
     """The odometry publisher's base frame must be the description's root.
 
     This is the invariant that was violated: the description carried a
@@ -105,7 +122,8 @@ def test_odometry_frame_is_the_root_link(urdf):
     odom -> base_footprint. That frame then had two parents, one static and one
     dynamic, and the TF tree was malformed with no warning from anything.
     """
-    cfg = yaml.safe_load((PKG / 'config' / 'controllers.yaml').read_text())
+    cfg = yaml.safe_load(
+        (PKG / 'config' / f'controllers.{platform}.yaml').read_text())
     base = cfg['diff_drive_controller']['ros__parameters']['base_frame_id']
     children = {j.find('child').get('link') for j in urdf.findall('joint')}
     assert base not in children, (
@@ -267,14 +285,15 @@ def test_wheel_command_limit_follows_the_platform_top_speed(urdf, spec):
             f'({expected:.2f} rad/s)')
 
 
-def test_controllers_yaml_matches_the_platform_spec(spec):
+def test_controllers_yaml_matches_the_platform_spec(spec, platform):
     """The controller config duplicates kinematics that live in the spec.
 
     controller_manager reads plain YAML and cannot resolve the spec itself, so
     the values are duplicated on purpose. This is the gate that stops the two
     drifting apart, which would show up as odometry error nobody could explain.
     """
-    cfg = yaml.safe_load((PKG / 'config' / 'controllers.yaml').read_text())
+    cfg = yaml.safe_load(
+        (PKG / 'config' / f'controllers.{platform}.yaml').read_text())
     dd = cfg['diff_drive_controller']['ros__parameters']
     v = spec['values']
 
@@ -322,3 +341,44 @@ def test_depth_cloud_is_stamped_with_the_link_frame_not_the_optical_frame(urdf):
         rpy = joints[name].find('origin').get('rpy').split()
         assert abs(float(rpy[0]) + math.pi / 2) < 1e-6, name
         assert abs(float(rpy[2]) + math.pi / 2) < 1e-6, name
+
+
+def test_no_shared_controller_config_exists():
+    """There must be no un-suffixed controllers.yaml.
+
+    A single controllers.yaml loaded by every platform is what gave the MP-400
+    the MiR250's wheel radius. If one reappears, the xacro's
+    controllers.$(arg platform).yaml would still resolve correctly, so nothing
+    would break and nothing would warn; it would simply sit there as the
+    obvious file to edit, and the next person to change a wheel size would
+    change it there. V-33.
+    """
+    stray = PKG / 'config' / 'controllers.yaml'
+    assert not stray.exists(), (
+        'config/controllers.yaml is back. Controller configs are generated per '
+        'platform by tools/generate_controllers.py; delete this file and '
+        'regenerate.')
+
+
+def test_every_platform_has_a_generated_controller_config(platform):
+    """A platform with a spec and no controller config cannot be launched."""
+    f = PKG / 'config' / f'controllers.{platform}.yaml'
+    assert f.exists(), (
+        f'no controllers.{platform}.yaml; run '
+        f'tools/generate_controllers.py --all')
+    assert 'GENERATED' in f.read_text().split('\n')[0], (
+        'the generated file must say so on its first line, or it will be '
+        'hand edited')
+
+
+def test_the_controller_config_is_reachable_from_the_description(urdf, platform):
+    """The description must name the per platform file, not a shared one.
+
+    This is the check that would have caught the original fault directly: the
+    plugin parameters path is what actually decides which wheel geometry the
+    controller integrates odometry with.
+    """
+    text = ET.tostring(urdf, encoding='unicode')
+    assert f'controllers.{platform}.yaml' in text, (
+        f'the description for {platform} does not reference '
+        f'controllers.{platform}.yaml')

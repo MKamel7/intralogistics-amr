@@ -1,0 +1,97 @@
+# GENERATED from this template by tools/generate_controllers.py.
+# Do not edit the generated file: change the spec or this template.
+#
+# ros2_control controller configuration for the mir250_class platform.
+#
+# WHY THIS IS GENERATED NOW. It was a single hand written file carrying MiR250
+# literals, loaded by every platform, because ros2_control reads plain YAML and
+# cannot resolve the platform spec itself. A drift test existed and was correct
+# and passed, because it compared the MiR250 file against the MiR250 spec and
+# was never pointed at the second platform.
+#
+# What that cost is recorded in V-33. The MP-400 ran with wheel_radius 0.100
+# against a true 0.075, so its odometry over reported distance by 33 percent,
+# and wheel_separation 0.450 against a true 0.529, so its heading rate was
+# wrong by 18 percent. SLAM fought that on every update and the map came out
+# sheared. Nothing reported a fault; the vehicle simply never arrived.
+
+controller_manager:
+  ros__parameters:
+    update_rate: 100  # Hz
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    diff_drive_controller:
+      type: diff_drive_controller/DiffDriveController
+
+joint_state_broadcaster:
+  ros__parameters:
+    use_local_topics: false
+
+diff_drive_controller:
+  ros__parameters:
+    left_wheel_names: [drive_left_wheel_joint]
+    right_wheel_names: [drive_right_wheel_joint]
+
+    # From mir250_class: wheel_separation 0.4500 m,
+    # drive_wheel_radius 0.1000 m. These two are the whole reason this
+    # file is generated. An error in either is invisible: the vehicle drives,
+    # the odometry is smooth and continuous, and only the map is wrong.
+    wheel_separation: 0.4500
+    wheel_radius: 0.1000
+
+    # Multipliers stay at 1.0. They exist to absorb a mismatch between the
+    # modelled and the real machine, and using them to paper over a wrong
+    # radius is how odometry silently drifts.
+    wheel_separation_multiplier: 1.0
+    left_wheel_radius_multiplier: 1.0
+    right_wheel_radius_multiplier: 1.0
+
+    publish_rate: 50.0
+    odom_frame_id: odom
+    # MUST be the description's root link. Naming a non-root link here gives
+    # that frame two parents (the odometry publisher and robot_state_publisher)
+    # and silently malforms the TF tree.
+    base_frame_id: base_link
+    # Odometry from wheel encoders alone is optimistic about heading. The
+    # covariance says so, and an EKF fuses it with the IMU in a later phase.
+    pose_covariance_diagonal: [0.001, 0.001, 1e6, 1e6, 1e6, 0.03]
+    twist_covariance_diagonal: [0.001, 1e6, 1e6, 1e6, 1e6, 0.03]
+
+    open_loop: false
+    position_feedback: true
+    enable_odom_tf: true
+
+    cmd_vel_timeout: 0.5
+    # No use_stamped_vel here: diff_drive_controller 4.x dropped it and the
+    # command interface is geometry_msgs/TwistStamped unconditionally. Leaving
+    # the old parameter in place would read as if it still selected something.
+
+    # Limits from the platform spec. The acceleration figure is the published
+    # value AT MAXIMUM PAYLOAD, so it is the conservative case and the right
+    # one to enforce; an unloaded robot simply never reaches its limit.
+    #
+    # OPEN QUESTION, deliberately not changed here. min_velocity is the
+    # negated top speed, which is what this file has always enforced, but the
+    # spec also carries max_reverse_speed and it is lower on both platforms
+    # (0.3 m/s against 2.0 and 1.5). So this permits reversing faster than the
+    # vehicle is rated to reverse. It is left alone because this change exists
+    # to fix the wheel geometry, and moving a second limit in the same edit is
+    # how a measurement stops being attributable. Recorded in V-33.
+    linear.x.has_velocity_limits: true
+    linear.x.has_acceleration_limits: true
+    linear.x.max_velocity: 2.000
+    linear.x.min_velocity: -2.000
+    linear.x.max_acceleration: 0.300
+    linear.x.min_acceleration: -0.300
+
+    # Angular acceleration is NOT in the platform spec for either vehicle, so
+    # it stays a literal rather than being invented from the linear figure.
+    # Deriving it would be numerology dressed as provenance.
+    angular.z.has_velocity_limits: true
+    angular.z.has_acceleration_limits: true
+    angular.z.max_velocity: 1.500
+    angular.z.min_velocity: -1.500
+    angular.z.max_acceleration: 1.0
+    angular.z.min_acceleration: -1.0

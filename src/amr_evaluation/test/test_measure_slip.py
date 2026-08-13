@@ -66,3 +66,28 @@ def test_never_writes_a_spec():
     t = text()
     for bad in ('.write_text(', 'yaml.dump', 'open(', 'w+'):
         assert bad not in t, f'the probe must not write anything ({bad})'
+
+
+def test_the_acceptance_band_is_tight_enough_to_fail():
+    """The bands were 0.7 to 1.3 and that is why this tool lied.
+
+    It measured a ratio of 0.744, which was a 34 percent odometry scale error
+    corrupting every SLAM update, and printed "odometry is consistent with
+    ground truth" because 0.744 falls inside 0.7 to 1.3. A tolerance that wide
+    is not a tolerance, it is a guarantee of passing.
+    """
+    t = text()
+    assert 'ratio < 0.7' not in t, (
+        'the 0.7 lower band is what reported a 34 percent error as consistent')
+    assert 'ratio > 1.3' not in t, 'the 1.3 upper band is equally permissive'
+    assert 'err <= 0.02' in t, (
+        'odometry feeding scan matching must agree to a few percent')
+
+
+def test_it_names_the_constant_to_check_rather_than_the_symptom():
+    """A scale error presents as a mapping problem. Four hypotheses in this
+    project went to SLAM tuning before anyone compared the wheel radius."""
+    t = text()
+    assert 'wheel_radius' in t and 'wheel_separation' in t, (
+        'the verdict must point at the controller constants')
+    assert 'platform spec' in t

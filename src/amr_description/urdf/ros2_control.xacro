@@ -73,7 +73,11 @@
       <gazebo>
         <plugin filename="gz_ros2_control-system"
                 name="gz_ros2_control::GazeboSimROS2ControlPlugin">
-          <parameters>$(find amr_description)/config/controllers.yaml</parameters>
+          <!-- Per platform. This was config/controllers.yaml, one file of
+               MiR250 literals loaded by every vehicle, which gave the MP-400
+               a wheel radius 33 percent too large and a track 18 percent too
+               narrow. See V-33. -->
+          <parameters>$(find amr_description)/config/controllers.$(arg platform).yaml</parameters>
           <xacro:unless value="${ns == ''}">
             <ros><namespace>${ns}</namespace></ros>
           </xacro:unless>

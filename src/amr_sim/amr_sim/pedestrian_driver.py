@@ -227,9 +227,28 @@ class PedestrianDriver(Node):
         return None
 
     def _nearest_clear(self, x, y, limit=3.0):
-        """Closest point with full clearance, searched outward in rings."""
+        """Closest point with full clearance, searched outward in rings.
+
+        THE FIRST RING IS BEYOND goal_tolerance ON PURPOSE.
+
+        This searched from one ring at twice the grid resolution, so it
+        returned the first clear point it found, typically about 0.10 m away.
+        goal_tolerance is 0.30 m. A recovery goal closer than the arrival
+        tolerance is satisfied the instant it is set: the walker is judged to
+        have arrived without being commanded anything, clears its goal, picks
+        again on the next tick, finds itself still obstructed, and recovers to
+        the same point. Forever.
+
+        Measured: every pedestrian in this project stood still in every run
+        ever recorded. One run logged 19050 recovery warnings across exactly
+        four positions, one per walker, while reporting that the vehicle
+        completed its cycles among moving people. Commanded velocity was
+        0.0, 0.0 throughout. Recorded in V-32.
+
+        A recovery goal must be somewhere the walker has to travel to.
+        """
         step = self.grid.res * 2
-        r = step
+        r = max(step, self.goal_tolerance + step)
         while r <= limit:
             n = max(8, int(2 * math.pi * r / step))
             for k in range(n):
