@@ -70,7 +70,31 @@ bt_navigator:
     # last goal's recovery. It then fails to acknowledge the new goal in time
     # and the cycle dies after 9 seconds without the vehicle moving. Measured
     # twice, at 8 s and 9 s, with the identical signature both times.
-    default_server_timeout: 30
+    # HOW LONG A BEHAVIOUR TREE NODE WAITS FOR A SERVER TO ACCEPT A GOAL.
+    #
+    # 30 ms was the value here and it is the direct cause of two cycles in
+    # three failing. The behaviour tree asks controller_server to accept a
+    # follow_path goal and gives it 30 ms to answer. MPPI runs 2000 samples
+    # over 56 steps with consider_footprint on a single threaded executor, and
+    # its worst iteration was measured at 152 ms in one run and 380 ms in
+    # another. A handshake that lands inside one of those cannot be answered,
+    # so the node times out and the goal aborts:
+    #
+    #   Timed out while waiting for action server to acknowledge goal request
+    #   for follow_path
+    #
+    # Every failed cycle in V-35 maps to one of those lines, and there were no
+    # planner failures at all.
+    #
+    # THE TIMEOUT EXISTS TO DETECT A DEAD SERVER, NOT A BUSY ONE. A controller
+    # that is mid solve is working. 1000 ms is Nav2's own convention for
+    # waiting on a service and clears the worst measured iteration by a factor
+    # of 2.6, so a genuinely dead server is still caught quickly while a slow
+    # one is not shot for it.
+    #
+    # This does NOT excuse the control loop missing its rate. That is a real
+    # cost problem, it degrades path quality, and it is tracked separately.
+    default_server_timeout: 1000
     # The stock trees. A bespoke tree is a thing to write when there is a
     # bespoke behaviour to put in it, and right now there is not; writing one
     # early only guarantees it drifts out of step with the upstream nodes.

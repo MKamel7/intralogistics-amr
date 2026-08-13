@@ -322,3 +322,32 @@ def test_the_ground_truth_map_never_reaches_the_navigation_stack(platform_name):
             continue          # the comments discuss the rule, and must
         assert '/ground_truth' not in stripped, (
             f'the navigation configuration consumes ground truth: {line!r}')
+
+
+# The worst controller iteration measured on this machine, in milliseconds.
+# 152 ms in one run and 380 ms in another, both with MPPI at 2000 samples over
+# 56 steps with consider_footprint. Raise this if the controller is made more
+# expensive, and re-measure rather than guessing.
+WORST_CONTROL_ITERATION_MS = 380
+
+
+def test_the_bt_server_timeout_clears_the_worst_control_iteration(cfg):
+    """A busy server must not be mistaken for a dead one.
+
+    This was 30 ms. The behaviour tree gives controller_server that long to
+    accept a follow_path goal, and MPPI's worst iteration is an order of
+    magnitude longer, so a handshake landing inside one aborts the goal:
+
+        Timed out while waiting for action server to acknowledge goal request
+
+    Two cycles in three failed on exactly that line, with zero planner
+    failures. See V-35 and V-37.
+    """
+    t = cfg['bt_navigator']['ros__parameters']['default_server_timeout']
+    assert t > WORST_CONTROL_ITERATION_MS, (
+        f'default_server_timeout is {t} ms against a worst measured control '
+        f'iteration of {WORST_CONTROL_ITERATION_MS} ms, so a controller that '
+        f'is merely busy will have its goals aborted')
+    assert t >= 2 * WORST_CONTROL_ITERATION_MS, (
+        f'{t} ms leaves less than a factor of two over the worst measured '
+        f'iteration, which is not margin on a machine whose load varies')

@@ -91,6 +91,7 @@ class ContactProbe(Node):
         self.near_miss = self.declare_parameter('near_miss', 0.30).value
 
         self.min_clear = {}
+        self.min_bearing = {}
         self.contacts = {}
         self.near_misses = {}
         self.samples = 0
@@ -132,6 +133,13 @@ class ContactProbe(Node):
             prev = self.min_clear.get(name)
             if prev is None or gap < prev:
                 self.min_clear[name] = gap
+                # WHERE, not just how close. A person 89 mm from the footprint
+                # with no protective stop is a different fault depending on
+                # bearing: dead astern is a known blind zone between two corner
+                # scanners, dead ahead is the safety layer failing at the one
+                # thing it exists for. Without this the two are
+                # indistinguishable and the argument goes in circles.
+                self.min_bearing[name] = math.degrees(math.atan2(py, px))
             if gap <= 0.0:
                 # Rising edge only. A person standing inside the vehicle for
                 # three seconds is one contact, not sixty.
@@ -166,7 +174,12 @@ class ContactProbe(Node):
         print(f'  CONTACTS: {total}')
         for name in sorted(self.min_clear):
             n = self.contacts.get(name, 0)
+            b = self.min_bearing.get(name)
+            side = ('ahead' if abs(b) <= 45 else
+                    'astern' if abs(b) >= 135 else
+                    'port' if b > 0 else 'starboard')
             print(f'    {name:18s} min clearance {self.min_clear[name]:+7.3f} m'
+                  f'   at {b:+6.0f} deg ({side})'
                   f'   contacts {n}   near misses {self.near_misses.get(name, 0)}')
         gaps = [g for g in self.min_clear.values()]
         if gaps:
