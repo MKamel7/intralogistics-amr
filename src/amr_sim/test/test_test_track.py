@@ -72,7 +72,18 @@ def test_the_world_is_valid_sdf():
     """Malformed SDF fails at Gazebo start, which reads as a launch problem."""
     root = ET.parse(world_path()).getroot()
     world = root.find('world')
-    assert world is not None and world.get('name') == 'test_track'
+    assert world is not None
+    # THE WORLD NAME MUST EQUAL THE FILE STEM. Gazebo topics are built from the
+    # internal name and the launch derives them from the file name, so a
+    # mismatch points every /world/<name>/... topic at nothing. It cost every
+    # pedestrian: the pose feed subscribed to a topic that did not exist, no
+    # walker ever received a pose, and none of them moved. Subscribing to a
+    # topic nobody publishes is legal, so nothing errored.
+    assert world.get('name') == world_path().stem, (
+        f'world is named {world.get("name")!r} in a file called '
+        f'{world_path().name}; every topic derived from the file name will '
+        f'point at nothing')
+
     names = [m.get('name') for m in world.findall('model')]
     assert 'ground_plane' in names
     assert len({n for n in names}) == len(names), 'duplicate model names'
@@ -320,6 +331,38 @@ def test_the_widest_aisle_does_allow_a_turn(spec, derived):
     assert (hi - lo) > diameter, (
         f'aisle 1 is {hi - lo:.4f} m against a {diameter:.4f} m diameter, so '
         f'there is nowhere on the track the vehicle can turn')
+
+
+def test_floor_markings_have_no_collision(spec):
+    """Painted floor must be paint, not a kerb.
+
+    A marking with collision geometry is not a marking, it is a wall: the
+    scanner would see it, the costmap would mark it, and the vehicle would
+    refuse to drive onto its own home square. Four visual slabs, no collision,
+    and nothing in the physics or the sensors knows they are there.
+    """
+    root = ET.parse(world_path()).getroot()
+    world = root.find('world')
+    marks = [m for m in world.findall('model')
+             if m.get('name', '').startswith('mark_')]
+    assert len(marks) >= 4, 'the home square and three delivery bays are gone'
+    for m in marks:
+        link = m.find('link')
+        assert link.findall('visual'), f'{m.get("name")} draws nothing'
+        assert not link.findall('collision'), (
+            f'{m.get("name")} has collision geometry, so it is a kerb rather '
+            f'than a painted line and the vehicle will refuse to cross it')
+
+
+def test_markings_are_not_in_the_truth_map(spec, derived):
+    """Paint is not an obstacle, so the scoring oracle must not contain it."""
+    marks = list(derived['solids'])
+    sx, sy, _ = derived['spawn']
+    # The home square is centred on the spawn; if paint had leaked into the
+    # solids list the spawn itself would read as occupied.
+    for x0, x1, y0, y1 in marks:
+        assert not (x0 <= sx <= x1 and y0 <= sy <= y1), (
+            'something solid covers the spawn pose')
 
 
 def test_the_floor_covers_the_whole_building(spec):

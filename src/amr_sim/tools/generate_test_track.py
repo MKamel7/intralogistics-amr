@@ -254,6 +254,47 @@ def layout(spec):
     return {name: (lo, hi) for name, lo, hi in rows}
 
 
+def floor_marking(name, cx, cy, sx, sy, colour, line=0.10):
+    """A painted rectangle on the floor. VISUAL ONLY, no collision.
+
+    Warehouse floors are marked: a home position for the vehicle, hatched bays
+    for staging, lanes for foot traffic. It is how a real site tells people and
+    machines where things belong, and it is the cheapest thing that makes a
+    simulated floor look like a working one.
+
+    IT MUST NOT HAVE COLLISION. A painted line the vehicle cannot drive over is
+    not a marking, it is a wall, and the scanner would see it as one. These are
+    four thin visual slabs forming a hollow rectangle, 5 mm proud so they do
+    not z-fight with the ground plane, and nothing in the physics or the
+    sensors knows they are there.
+    """
+    r, g, b = colour
+    hx, hy = sx / 2.0, sy / 2.0
+    bars = [
+        (cx, cy + hy - line / 2, sx, line),        # north edge
+        (cx, cy - hy + line / 2, sx, line),        # south edge
+        (cx - hx + line / 2, cy, line, sy - 2 * line),   # west edge
+        (cx + hx - line / 2, cy, line, sy - 2 * line),   # east edge
+    ]
+    visuals = ''.join(f"""        <visual name="bar{i}">
+          <pose>{bx - cx:.4f} {by - cy:.4f} 0 0 0 0</pose>
+          <geometry><box><size>{w:.4f} {h:.4f} 0.010</size></box></geometry>
+          <material>
+            <ambient>{r:.2f} {g:.2f} {b:.2f} 1</ambient>
+            <diffuse>{r:.2f} {g:.2f} {b:.2f} 1</diffuse>
+            <emissive>{r * 0.3:.2f} {g * 0.3:.2f} {b * 0.3:.2f} 1</emissive>
+          </material>
+        </visual>
+""" for i, (bx, by, w, h) in enumerate(bars))
+    return f"""    <model name="{name}">
+      <static>true</static>
+      <pose>{cx:.4f} {cy:.4f} 0.005 0 0 0</pose>
+      <link name="link">
+{visuals}      </link>
+    </model>
+"""
+
+
 def box(name, x, y, z, sx, sy, sz, colour):
     """A static collision-and-visual box. Everything here is a box on purpose.
 
@@ -450,6 +491,25 @@ def build_world(spec, platform):
     }
     stations = {n: (x, y, yaw) for n, (x, y, yaw) in stations_world.items()}
 
+    # ---- floor markings, painted not built --------------------------------
+    # The home square under the spawn, and three delivery bays at the dispatch
+    # end. Marked floor is how a real site says where things belong, and it
+    # makes the start pose and the drop points legible in a screenshot instead
+    # of being coordinates in a yaml file.
+    yellow = (0.85, 0.68, 0.10)
+    white = (0.90, 0.90, 0.88)
+    vals = spec['values']
+    home = 1.4 * max(vals['chassis_length'], vals['chassis_width'])
+    models.append(floor_marking('mark_home', spawn[0], spawn[1],
+                                home, home, yellow))
+
+    dx, dy = stations_world['dispatch'][0], stations_world['dispatch'][1]
+    bay = 1.6
+    for i in range(3):
+        models.append(floor_marking(
+            f'mark_bay_{i + 1}', dx + 1.6, dy + (i - 1) * (bay + 0.4),
+            bay, bay, white))
+
     # ---- warehouse furniture ---------------------------------------------
     # The spawn and both stations are places the vehicle must be able to stand,
     # so nothing is placed near them.
@@ -503,7 +563,16 @@ def build_world(spec, platform):
 <!-- {comment.lstrip()}
 -->
 <sdf version="1.10">
-  <world name="test_track">
+  <!-- THE WORLD NAME MUST EQUAL THE FILE STEM. Gazebo topics are built from
+       the world's INTERNAL name, and the launch derives them from the FILE
+       name, so the two disagreeing means every /world/<name>/... topic is
+       wrong. It was "test_track" in a file called test_track.<platform>.sdf,
+       so the ground truth pose feed subscribed to a topic that did not exist:
+       no poses reached the pedestrian driver and not one walker ever moved.
+       Nothing errored, because subscribing to a topic nobody publishes is a
+       legal thing to do. warehouse.sdf gets this right by having a one word
+       name. -->
+  <world name="test_track.{platform}">
 
     <physics name="default" type="ignored">
       <max_step_size>0.004</max_step_size>
