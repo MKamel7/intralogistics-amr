@@ -66,6 +66,21 @@ from amr_sim.occupancy import load_map
 SCENARIOS = Path(__file__).resolve().parent.parent / 'scenarios'
 
 
+# EVERY BEHAVIOUR KEY A SCENARIO MAY CARRY, in one place.
+#
+# This list is the contract between three programs: the generator writes these
+# keys, people.launch.py decides who needs a cmd_vel bridge by looking for
+# them, and this driver moves whoever has one. When they disagree the failure
+# is silent and total: models spawn, the driver runs, nothing is bridged, and
+# the crowd stands still with no error anywhere.
+#
+# That has now happened twice. Once when `path` became `wander` and the launch
+# still matched `path`, and again when `route` and `cross` were added here and
+# the launch was not updated. Both times the scenario looked full and nobody
+# moved. `path` is retained because old scenarios still use it.
+BEHAVIOUR_KEYS = ('wander', 'route', 'cross', 'path')
+
+
 class PedestrianDriver(Node):
     def __init__(self):
         super().__init__('pedestrian_driver')
@@ -162,8 +177,7 @@ class PedestrianDriver(Node):
         # behaviour that does NOT yield, for the reason recorded in _tick.
         self.walkers = {}
         for person in spec.get('people', []):
-            kind = next((k for k in ('wander', 'route', 'cross')
-                         if person.get(k)), None)
+            kind = next((k for k in BEHAVIOUR_KEYS if person.get(k)), None)
             if kind is None:
                 continue          # a stationary worker, correctly, does nothing
             cfg = person[kind]

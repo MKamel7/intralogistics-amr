@@ -2352,3 +2352,89 @@ frequency, or to accept that a busy server is not a dead one and lengthen the
 liveness timeout. Each is a different trade and none of them should be picked
 by argument. The measurement that decides it is loop time against `batch_size`,
 which has not been taken.
+
+---
+
+## V-36. Phase 6 works, and Phase 2 has its first numbers
+
+**Every pedestrian behaviour the plan asks for now happens, measured against
+ground truth rather than looked at:**
+
+    walker_route     13.62 m     fixed waypoints, walked end to end
+    walker_wide      13.01 m     wander
+    walker_aisle      9.44 m     wander
+    walker_bay        4.87 m     wander
+    walker_cross      0.73 m     4 crossings, closest approach 1.50 m
+    worker_standing   0.00 m     stationary, correctly
+
+The crossing figure is the interesting one. The protective field reaches
+1.43 m, so a person passing at 1.50 m is an encounter the local planner has to
+answer without it collapsing into a protective stop, which is the case the
+whole MPPI choice rests on and the one no scenario here had ever produced.
+
+### The same fault, a third and fourth time
+
+`route` and `cross` were implemented, unit tested, generated into the scenario,
+and did not move. `people.launch.py` decides who needs a cmd_vel bridge from a
+hand written key list:
+
+    walkers = [q for q in spec['people'] if q.get('wander') or q.get('path')]
+
+The comment directly above that line documents the identical failure happening
+once before, when `path` became `wander`: "the bridge and the driver were never
+launched at all, so the figures stood still with no error anywhere to say why."
+It was read while writing the new behaviours and walked into anyway, because
+the fix recorded there was a wider list rather than a shared definition.
+
+Then a fourth copy turned up in `score_tracks.py`, which classified people with
+`p.get('path')` alone and duly reported "0 walking, 6 stationary" for a
+scenario in which five of six people walked up to 13.6 m. Only the header used
+it, so no metric was wrong, but a header saying nobody moves is how a reader
+concludes the tracker was scored on a static world.
+
+`BEHAVIOUR_KEYS` now lives in the driver and the other three import it.
+
+### The measurement that would have been published as a tracker result
+
+First scored window:
+
+    precision 0.000   recall 0.000   (tp 0, fp 28, fn 360)
+
+fn 360 is six people times sixty frames. The vehicle was at (25.6, 8.9) with
+every person between 15 and 24 m away behind racking, against an observed scan
+range of about 17 m. Nothing was wrong with the tracker. Nobody was visible.
+
+`score()` counted every unmatched person in every frame regardless of whether
+the sensor could see them, which makes recall a measure of how far apart the
+scenario spreads people. It now takes a range gate and reports how many frames
+had anybody within it. **Occlusion is still not modelled**, so a person in
+range but behind a rack counts as a miss and recall remains a lower bound. That
+wants a ray cast against the truth map before any figure here goes in a results
+table.
+
+### The first Phase 2 result
+
+120 frames, all with somebody within 10 m:
+
+| | all confirmed tracks | moving tracks only |
+|---|---|---|
+| precision | 0.553 | **0.615** |
+| recall | 0.988 | 0.988 |
+| false positives | 479 | **371** |
+| id switches | 0 | 0 |
+
+Localisation p50 10.3 cm, p95 36.2 cm. Five of the six people carried exactly
+one identity each.
+
+**The velocity classifier removes 108 false positives and costs no recall at
+all.** That is the question `score_tracks.py` was written to answer, and the
+answer is yes: precision rises by 11 percent relative while recall stays at
+0.988.
+
+Precision of 0.55 is the honest headline though. Nearly half of all confirmed
+tracks are structure rather than people, which is the leg detector meeting
+rack uprights, and it is exactly the problem the plan's Phase 2 exists to
+attack. This is the baseline that work now has to beat.
+
+None of these numbers could have been taken yesterday, because nothing in the
+building moved.

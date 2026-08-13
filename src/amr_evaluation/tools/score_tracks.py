@@ -25,6 +25,8 @@ from pathlib import Path
 
 import rclpy
 import yaml
+
+from amr_sim.pedestrian_driver import BEHAVIOUR_KEYS
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from tf2_msgs.msg import TFMessage
@@ -80,13 +82,35 @@ def to_base_link(x, y, robot):
     return c * dx - s * dy, s * dx + c * dy
 
 
-def score(frames, tolerance, moving_only):
+def score(frames, tolerance, moving_only, max_range):
+    """Precision and recall over people the sensor could actually see.
+
+    THE RANGE GATE IS NOT A CONVENIENCE. Without it every person in the
+    building counts as a miss in every frame, including people behind racking
+    twenty metres away, and recall becomes a measure of how far apart the
+    scenario spreads people rather than of anything the tracker does.
+
+    Measured: a window with the vehicle at (25.6, 8.9) and all six people
+    between 15 and 24 m away scored precision 0.000 and recall 0.000 with
+    fn 360, which is six people times sixty frames. Nothing was wrong with the
+    tracker; nobody was visible. That number would have been published as a
+    tracker result.
+
+    Occlusion is NOT modelled. A person within range but behind a rack still
+    counts as a miss, so recall reported here remains a lower bound. Fixing
+    that needs a ray cast against the truth map and is worth doing before any
+    figure from this tool goes in a results table.
+    """
     tp = fp = fn = 0
     errors = []
     ids_per_truth = {}
+    in_range_frames = 0
     for entries, truth, robot in frames:
         active = [e for e in entries if (e[2] if moving_only else True)]
-        remaining = {n: to_base_link(p[0], p[1], robot) for n, p in truth.items()}
+        remaining = {n: to_base_link(p[0], p[1], robot) for n, p in truth.items()
+                     if math.dist(p, robot[:2]) <= max_range}
+        if remaining:
+            in_range_frames += 1
         for tx, ty, _moving, tid in active:
             best, best_d = None, tolerance
             for name, (gx, gy) in remaining.items():
@@ -105,7 +129,7 @@ def score(frames, tolerance, moving_only):
     recall = tp / (tp + fn) if (tp + fn) else 0.0
     switches = sum(max(0, len(v) - 1) for v in ids_per_truth.values())
     return {
-        'tp': tp, 'fp': fp, 'fn': fn,
+        'tp': tp, 'fp': fp, 'fn': fn, 'in_range_frames': in_range_frames,
         'precision': precision, 'recall': recall,
         'errors': sorted(errors), 'id_switches': switches,
         'ids_per_truth': {k: len(v) for k, v in ids_per_truth.items()},
@@ -117,11 +141,26 @@ def main():
     ap.add_argument('--scenario', default='walking_people')
     ap.add_argument('--frames', type=int, default=60)
     ap.add_argument('--tolerance', type=float, default=0.50)
+    # The scanner's usable range for a person. Beyond this a miss says nothing
+    # about the tracker, so people further away are excluded from the score
+    # rather than counted against it.
+    ap.add_argument('--max-range', type=float, default=10.0,
+                    help='only score people within this range of the vehicle')
     args = ap.parse_args()
 
     spec = yaml.safe_load((SCENARIOS / f'{args.scenario}.yaml').read_text())
     names = [p['name'] for p in spec['people']]
-    walkers = {p['name'] for p in spec['people'] if p.get('path')}
+    # FROM THE DRIVER'S KEY LIST, not a name repeated here. This read
+    # `p.get('path')` alone, which is the key from the fixed-lane era, so it
+    # reported "0 walking" for every scenario written since. It printed that
+    # against a scenario in which five of six people walked up to 13.6 m.
+    #
+    # Only the header used it, so the metrics below were never wrong, but a
+    # header claiming nobody moves is how a reader concludes the tracker was
+    # scored on a static world. Fourth place in this project to keep its own
+    # copy of this list; see BEHAVIOUR_KEYS.
+    walkers = {p['name'] for p in spec['people']
+               if any(p.get(k) for k in BEHAVIOUR_KEYS)}
 
     rclpy.init()
     node = Scorer(names)
@@ -141,7 +180,7 @@ def main():
 
     for label, moving_only in (('all confirmed tracks', False),
                                ('moving tracks only', True)):
-        r = score(node.frames, args.tolerance, moving_only)
+        r = score(node.frames, args.tolerance, moving_only, args.max_range)
         print(f'  {label}')
         print(f'    precision {r["precision"]:.3f}   recall {r["recall"]:.3f}   '
               f'(tp {r["tp"]}, fp {r["fp"]}, fn {r["fn"]})')
@@ -151,6 +190,8 @@ def main():
                   f'p95 {e[int(0.95 * (len(e) - 1))] * 100:.1f} cm')
         print(f'    id switches {r["id_switches"]}   '
               f'ids per person {r["ids_per_truth"]}')
+        print(f'    scored on {r["in_range_frames"]} of {len(node.frames)} frames '
+              f'that had somebody within {args.max_range:.0f} m')
         print()
 
     print('  note: the stationary worker is in the scenario on purpose. The motion')

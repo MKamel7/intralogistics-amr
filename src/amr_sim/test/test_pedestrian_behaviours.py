@@ -113,3 +113,48 @@ def test_the_crossing_distance_is_worth_crossing():
     change breaks silently."""
     home, far = (0.0, 0.0), (0.0, 4.0)
     assert math.dist(home, far) > 1.0
+
+
+def test_the_launch_bridges_every_behaviour_the_driver_understands():
+    """The contract between three programs, asserted in one place.
+
+    The generator writes behaviour keys, people.launch.py decides who gets a
+    cmd_vel bridge by looking for them, and the driver moves whoever has one.
+    When they disagree nothing errors: the models spawn, the driver runs,
+    no bridge is created, and the entire crowd stands still.
+
+    That has happened twice. Once when `path` became `wander`, and again when
+    `route` and `cross` were added to the driver and the launch still named
+    only two keys. Both times a scenario that looked full produced nobody
+    moving.
+    """
+    from pathlib import Path
+
+    from amr_sim.pedestrian_driver import BEHAVIOUR_KEYS
+    launch = (Path(__file__).resolve().parents[1]
+              / 'launch' / 'people.launch.py').read_text()
+    assert 'BEHAVIOUR_KEYS' in launch, (
+        'the launch must take the keys from the driver rather than repeat '
+        'them, or the two will drift again')
+    assert "q.get('wander') or q.get('path')" not in launch, (
+        'a hand written key list here is the exact fault this guards')
+    for kind in ('wander', 'route', 'cross'):
+        assert kind in BEHAVIOUR_KEYS, f'{kind} is implemented but not declared'
+
+
+def test_every_generated_scenario_only_uses_known_behaviours():
+    """A scenario key the driver does not know is a person who never moves."""
+    from pathlib import Path
+
+    import yaml
+
+    from amr_sim.pedestrian_driver import BEHAVIOUR_KEYS
+    scen_dir = Path(__file__).resolve().parents[1] / 'scenarios'
+    reserved = {'name', 'x', 'y', 'yaw'}
+    for f in scen_dir.glob('*.yaml'):
+        spec = yaml.safe_load(f.read_text())
+        for person in spec.get('people', []):
+            unknown = set(person) - reserved - set(BEHAVIOUR_KEYS)
+            assert not unknown, (
+                f'{f.name}: {person["name"]} carries {sorted(unknown)}, which '
+                f'no behaviour in the driver reads, so it will never move')

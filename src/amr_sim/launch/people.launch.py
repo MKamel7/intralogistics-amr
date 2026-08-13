@@ -12,6 +12,8 @@ comparable between runs.
 
 import yaml
 
+from amr_sim.pedestrian_driver import BEHAVIOUR_KEYS
+
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.substitutions import (LaunchConfiguration, PathJoinSubstitution,
@@ -52,12 +54,16 @@ def spawn_people(context, *_, **__):
         package='amr_sim', executable='truth_map_publisher', output='screen',
         parameters=[{'use_sim_time': True, 'map_file': truth_map}]))
 
-    # Anyone who moves needs a cmd_vel bridge and a driver. The key used to be
-    # `path`, from the fixed-lane era, and after the switch to `wander` this
-    # test matched nobody: the bridge and the driver were never launched at all,
-    # so the figures stood still with no error anywhere to say why. Match on
-    # either, so a scenario file cannot silently produce a dead crowd.
-    walkers = [q for q in spec.get('people', []) if q.get('wander') or q.get('path')]
+    # Anyone who moves needs a cmd_vel bridge and a driver.
+    #
+    # THE KEYS COME FROM THE DRIVER, not from a list repeated here. This test
+    # has now been wrong twice, and both times the symptom was identical and
+    # silent: models spawn, the driver runs, no bridge is created, and the
+    # whole crowd stands still with no error anywhere to say why. First when
+    # `path` became `wander`, then when `route` and `cross` were added and this
+    # line still named only two keys.
+    walkers = [q for q in spec.get('people', [])
+               if any(q.get(k) for k in BEHAVIOUR_KEYS)]
     if walkers:
         # One bridge entry per walker, ROS to Gazebo, feeding the VelocityControl
         # plugin the person model carries.
