@@ -93,9 +93,10 @@ def test_every_aisle_is_derived_from_the_vehicle(spec, derived):
                       ('doorway_y', 'doorway')):
         lo, hi = derived[key]
         assert hi - lo == pytest.approx(widths[name], abs=1e-6)
-    assert widths['aisle_2'] == pytest.approx(turn, abs=1e-9), (
-        'the scored aisle must be exactly the turning width, so the track '
-        'still tests the narrowest corridor the vehicle can work in')
+    assert widths['aisle_2'] == pytest.approx(
+        turn + gen.PASSING_ALLOWANCE, abs=1e-9), (
+        'the scored aisle must be the turning width plus room to pass a '
+        'person, which is the rule this track is sized to')
 
 
 def test_the_cross_aisle_is_wide_enough_to_turn_in(spec, derived):
@@ -200,24 +201,25 @@ def test_the_open_bay_can_actually_hold_a_reroute(spec, derived):
         f'passing a {person} m person, so P1 cannot demonstrate a re-route')
 
 
-def test_the_scored_aisle_is_tight_but_passable(spec, derived):
-    """P2 is now a TIGHT re-route rather than a forced wait.
+def test_every_aisle_can_hold_a_reroute_around_a_person(spec, derived):
+    """THE RULE THIS TRACK IS SIZED TO. A person in an aisle is a detour.
 
-    That is a decision, not a drift. The track was asked to make every
-    manoeuvre possible for the vehicle, so the forced-wait case moved to the
-    AWS world, where a 0.64 m corridor makes it unavoidable. Here the scored
-    aisle has to be wide enough to pass a person and narrow enough that doing
-    so is not trivial, or the pedestrian scenario proves nothing either way.
+    Every aisle carries the width the vehicle needs to turn PLUS a pedestrian
+    plus clearance, so somebody standing in a corridor is something the planner
+    routes around rather than something that ends the run. Turning width alone
+    let the vehicle work an empty aisle and left nothing spare the moment
+    anyone was in it.
+
+    The forced-wait case has not been lost, it has moved: the AWS warehouse has
+    a 25th percentile corridor of 0.64 m, where waiting is unavoidable.
     """
-    v = spec['values']
-    width = 2.0 * v['scanner_mount_y']
-    lo, hi = derived['aisle_2_y']
-    person = 0.50
-    assert (hi - lo) > width + person, (
-        'the scored aisle cannot pass a person at all, so the vehicle is '
-        'trapped rather than tested')
-    assert (hi - lo) < width + person + 0.60, (
-        'the scored aisle is so wide that passing a person is trivial')
+    turn = gen.rotation_width(spec)
+    need = turn + gen.PASSING_ALLOWANCE
+    for key in ('aisle_1_y', 'aisle_2_y', 'pinch_y', 'doorway_y'):
+        lo, hi = derived[key]
+        assert (hi - lo) >= need - 1e-9, (
+            f'{key} is {hi - lo:.3f} m against {need:.3f} m needed to turn and '
+            f'still get past a person standing in it')
 
 
 def test_every_aisle_can_be_turned_round_in(spec, derived):

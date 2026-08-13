@@ -4,11 +4,11 @@
      Do not hand-edit: change the spec or the generator.
      
      Zone widths and where each number comes from:
-       aisle_1    1.802 m   derived: turning width + 0.30 m
-       aisle_2    1.502 m   derived: the narrowest aisle it can turn in
-       pinch      1.602 m   derived: turning width + 0.10 m
-       cross      1.702 m   derived: turning width + 0.20 m, a junction
-       doorway    1.502 m   derived: turning width, straight through
+       aisle_1    2.502 m   derived: turning width + 0.70 m to pass a person + 0.30 m
+       aisle_2    2.202 m   derived: turning width + 0.70 m to pass a person
+       pinch      2.302 m   derived: turning width + 0.70 m to pass a person + 0.10 m
+       cross      2.402 m   derived: turning width + 0.70 m to pass a person + 0.20 m, a junction
+       doorway    2.202 m   derived: turning width + 0.70 m to pass a person, straight through
        open_bay   2.300 m   measured: AWS p75, V-22
        claim: corridor_default 1.350 m   published, NOT tested here
        claim: corridor_dynamic 1.000 m   published, NOT MET, V-26
@@ -86,7 +86,7 @@
     </model>
     <model name="wall_north">
       <static>true</static>
-      <pose>12.0000 12.1000 1.5000 0 0 0</pose>
+      <pose>12.0000 13.6567 1.5000 0 0 0</pose>
       <link name="link">
         <collision name="collision">
           <geometry><box><size>24.4000 0.2000 3.0000</size></box></geometry>
@@ -102,13 +102,13 @@
     </model>
     <model name="wall_west">
       <static>true</static>
-      <pose>-0.1000 6.0000 1.5000 0 0 0</pose>
+      <pose>-0.1000 6.7783 1.5000 0 0 0</pose>
       <link name="link">
         <collision name="collision">
-          <geometry><box><size>0.2000 12.0000 3.0000</size></box></geometry>
+          <geometry><box><size>0.2000 13.5567 3.0000</size></box></geometry>
         </collision>
         <visual name="visual">
-          <geometry><box><size>0.2000 12.0000 3.0000</size></box></geometry>
+          <geometry><box><size>0.2000 13.5567 3.0000</size></box></geometry>
           <material>
             <ambient>0.55 0.56 0.54 1</ambient>
             <diffuse>0.55 0.56 0.54 1</diffuse>
@@ -118,13 +118,13 @@
     </model>
     <model name="wall_east">
       <static>true</static>
-      <pose>24.1000 6.0000 1.5000 0 0 0</pose>
+      <pose>24.1000 6.7783 1.5000 0 0 0</pose>
       <link name="link">
         <collision name="collision">
-          <geometry><box><size>0.2000 12.0000 3.0000</size></box></geometry>
+          <geometry><box><size>0.2000 13.5567 3.0000</size></box></geometry>
         </collision>
         <visual name="visual">
-          <geometry><box><size>0.2000 12.0000 3.0000</size></box></geometry>
+          <geometry><box><size>0.2000 13.5567 3.0000</size></box></geometry>
           <material>
             <ambient>0.55 0.56 0.54 1</ambient>
             <diffuse>0.55 0.56 0.54 1</diffuse>
@@ -134,7 +134,7 @@
     </model>
     <model name="rack_a">
       <static>true</static>
-      <pose>12.0000 9.6500 1.1000 0 0 0</pose>
+      <pose>12.0000 11.2067 1.1000 0 0 0</pose>
       <link name="link">
         <collision name="collision">
           <geometry><box><size>10.0000 1.2000 2.2000</size></box></geometry>
@@ -150,7 +150,7 @@
     </model>
     <model name="rack_b">
       <static>true</static>
-      <pose>12.0000 6.6478 1.1000 0 0 0</pose>
+      <pose>12.0000 7.5045 1.1000 0 0 0</pose>
       <link name="link">
         <collision name="collision">
           <geometry><box><size>10.0000 1.2000 2.2000</size></box></geometry>
@@ -166,7 +166,7 @@
     </model>
     <model name="rack_c">
       <static>true</static>
-      <pose>12.0000 3.9455 1.1000 0 0 0</pose>
+      <pose>12.0000 4.1022 1.1000 0 0 0</pose>
       <link name="link">
         <collision name="collision">
           <geometry><box><size>10.0000 1.2000 2.2000</size></box></geometry>
@@ -182,13 +182,13 @@
     </model>
     <model name="rack_d">
       <static>true</static>
-      <pose>12.0000 0.8717 1.1000 0 0 0</pose>
+      <pose>12.0000 0.6000 1.1000 0 0 0</pose>
       <link name="link">
         <collision name="collision">
-          <geometry><box><size>10.0000 1.7433 2.2000</size></box></geometry>
+          <geometry><box><size>10.0000 1.2000 2.2000</size></box></geometry>
         </collision>
         <visual name="visual">
-          <geometry><box><size>10.0000 1.7433 2.2000</size></box></geometry>
+          <geometry><box><size>10.0000 1.2000 2.2000</size></box></geometry>
           <material>
             <ambient>0.42 0.45 0.50 1</ambient>
             <diffuse>0.42 0.45 0.50 1</diffuse>
@@ -198,7 +198,7 @@
     </model>
     <model name="door_block_north">
       <static>true</static>
-      <pose>19.2022 10.4500 1.5000 0 0 0</pose>
+      <pose>19.9022 12.0067 1.5000 0 0 0</pose>
       <link name="link">
         <collision name="collision">
           <geometry><box><size>1.0000 3.1000 3.0000</size></box></geometry>
@@ -214,13 +214,13 @@
     </model>
     <model name="door_block_south">
       <static>true</static>
-      <pose>19.2022 3.6989 1.5000 0 0 0</pose>
+      <pose>19.9022 4.1272 1.5000 0 0 0</pose>
       <link name="link">
         <collision name="collision">
-          <geometry><box><size>1.0000 7.3978 3.0000</size></box></geometry>
+          <geometry><box><size>1.0000 8.2545 3.0000</size></box></geometry>
         </collision>
         <visual name="visual">
-          <geometry><box><size>1.0000 7.3978 3.0000</size></box></geometry>
+          <geometry><box><size>1.0000 8.2545 3.0000</size></box></geometry>
           <material>
             <ambient>0.55 0.56 0.54 1</ambient>
             <diffuse>0.55 0.56 0.54 1</diffuse>

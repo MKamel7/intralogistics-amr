@@ -62,7 +62,12 @@ SPEC_DIR = (Path(__file__).resolve().parents[2]
 # The shell is a plain rectangle. Its size is a consequence of the zones that
 # have to fit inside it, not a number with meaning of its own.
 INTERIOR_X = 24.0          # m
-INTERIOR_Y = 12.0          # m
+# INTERIOR_Y IS DERIVED, see interior_y(). Fixing it meant that widening the
+# aisles pushed the racking down until 0.543 m was left against the south wall,
+# which is narrower than the vehicle: it drove in from the open bay and wedged.
+# Sizing the shell from the zones it has to hold means there is never anything
+# left over to drive into.
+NORTH_PASSAGE = 1.75       # m, a cross passage along the north wall
 WALL_T = 0.20              # m
 WALL_H = 3.00              # m
 
@@ -73,10 +78,22 @@ RACK_X1 = 17.0             # m, and ends here
 
 # The measured figures from V-22, carried so the designed world keeps the real
 # building's difficulty. NOT from any datasheet, and labelled accordingly.
-# Beyond the width the vehicle strictly needs to turn. Small on purpose: the
-# scored aisle should be the narrowest one it can actually work in, not a
-# comfortable one, or the track stops testing anything.
+# Beyond the width the vehicle strictly needs to turn.
 TURN_MARGIN = 0.10         # m
+
+# ROOM TO GET PAST A PERSON WHO IS STANDING IN THE AISLE.
+#
+# Every aisle carries this on top of the width the vehicle needs for itself, so
+# a pedestrian who stops in a corridor is something the robot can plan around
+# rather than something that ends the run. Turning width alone let the vehicle
+# work an empty aisle and left nothing spare the moment somebody was in it.
+#
+# No derivation here on purpose: it is the width of a person plus a margin, and
+# saying so plainly is more honest than dressing a body width up as a
+# calculation.
+PEDESTRIAN_WIDTH = 0.50    # m, a person standing
+PASSING_CLEARANCE = 0.20   # m, so passing is not a squeeze
+PASSING_ALLOWANCE = PEDESTRIAN_WIDTH + PASSING_CLEARANCE
 
 PINCH_WIDTH = 1.340        # m, median corridor of the AWS warehouse
 OPEN_BAY_MIN = 2.300       # m, 75th percentile of the same
@@ -155,20 +172,34 @@ def zones(spec):
     """
     t = spec['validation_targets']
     turn = rotation_width(spec)
+    pas = PASSING_ALLOWANCE
+    why = f'turning width + {pas:.2f} m to pass a person'
     return [
-        # name        width                origin
-        ('aisle_1',   turn + 0.30,         'derived: turning width + 0.30 m'),
-        ('aisle_2',   turn,                'derived: the narrowest aisle it can turn in'),
-        ('pinch',     turn + 0.10,         'derived: turning width + 0.10 m'),
-        ('cross',     turn + 0.20,         'derived: turning width + 0.20 m, a junction'),
-        ('doorway',   turn,                'derived: turning width, straight through'),
-        ('open_bay',  OPEN_BAY_MIN,        'measured: AWS p75, V-22'),
+        # name        width                 origin
+        ('aisle_1',   turn + pas + 0.30,    f'derived: {why} + 0.30 m'),
+        ('aisle_2',   turn + pas,           f'derived: {why}'),
+        ('pinch',     turn + pas + 0.10,    f'derived: {why} + 0.10 m'),
+        ('cross',     turn + pas + 0.20,    f'derived: {why} + 0.20 m, a junction'),
+        ('doorway',   turn + pas,           f'derived: {why}, straight through'),
+        ('open_bay',  OPEN_BAY_MIN,         'measured: AWS p75, V-22'),
         # Carried, not tested. See the docstring and V-26 / V-27.
         ('claim: corridor_default', t['corridor_width_default'], 'published, NOT tested here'),
         ('claim: corridor_dynamic', t['corridor_width_dynamic'], 'published, NOT MET, V-26'),
         ('claim: corner_90',        t['corridor_width_90_turn'], 'published, NOT MET, V-27'),
         ('claim: doorway',          t['doorway_width_default'],  'published, NOT tested here'),
     ]
+
+
+def interior_y(spec):
+    """Building height, as the sum of what has to fit in it.
+
+    A shell sized independently of its contents leaves a remainder, and a
+    remainder is either a corridor or a trap depending on a number nobody
+    chose. This makes it exactly zero.
+    """
+    w = {name: width for name, width, _ in zones(spec)}
+    aisles = w['aisle_1'] + w['aisle_2'] + w['pinch']
+    return NORTH_PASSAGE + 4 * RACK_DEPTH + aisles
 
 
 def layout(spec):
@@ -181,7 +212,7 @@ def layout(spec):
     w = {name: width for name, width, _ in zones(spec)}
     a1, a2, a3 = w['aisle_1'], w['aisle_2'], w['pinch']
 
-    top = INTERIOR_Y - 1.75          # leave a cross-passage along the north wall
+    top = interior_y(spec) - NORTH_PASSAGE
     rows = []
     y = top
     for name, w in (('rack_a', RACK_DEPTH), ('aisle_1', a1),
@@ -237,6 +268,7 @@ def box(name, x, y, z, sx, sy, sz, colour):
 
 
 def build_world(spec, platform):
+    iy = interior_y(spec)
     lay = layout(spec)
     t = spec['validation_targets']
     w = {name: width for name, width, _ in zones(spec)}
@@ -248,15 +280,15 @@ def build_world(spec, platform):
     steel = (0.42, 0.45, 0.50)
 
     # ---- shell ------------------------------------------------------------
-    hx, hy = INTERIOR_X / 2.0, INTERIOR_Y / 2.0
+    hx, hy = INTERIOR_X / 2.0, iy / 2.0
     models.append(box('wall_south', hx, -WALL_T / 2, WALL_H / 2,
                       INTERIOR_X + 2 * WALL_T, WALL_T, WALL_H, grey))
-    models.append(box('wall_north', hx, INTERIOR_Y + WALL_T / 2, WALL_H / 2,
+    models.append(box('wall_north', hx, iy + WALL_T / 2, WALL_H / 2,
                       INTERIOR_X + 2 * WALL_T, WALL_T, WALL_H, grey))
     models.append(box('wall_west', -WALL_T / 2, hy, WALL_H / 2,
-                      WALL_T, INTERIOR_Y, WALL_H, grey))
+                      WALL_T, iy, WALL_H, grey))
     models.append(box('wall_east', INTERIOR_X + WALL_T / 2, hy, WALL_H / 2,
-                      WALL_T, INTERIOR_Y, WALL_H, grey))
+                      WALL_T, iy, WALL_H, grey))
 
     # ---- racking rows -----------------------------------------------------
     rack_len = RACK_X1 - RACK_X0
@@ -298,8 +330,8 @@ def build_world(spec, platform):
     door_hi = door_lo + door_w
     blk_x0, blk_x1 = cross_x1, cross_x1 + 1.0
     models.append(box('door_block_north', (blk_x0 + blk_x1) / 2.0,
-                      (door_hi + INTERIOR_Y) / 2.0, WALL_H / 2.0,
-                      blk_x1 - blk_x0, INTERIOR_Y - door_hi, WALL_H, grey))
+                      (door_hi + iy) / 2.0, WALL_H / 2.0,
+                      blk_x1 - blk_x0, iy - door_hi, WALL_H, grey))
     models.append(box('door_block_south', (blk_x0 + blk_x1) / 2.0,
                       door_lo / 2.0, WALL_H / 2.0,
                       blk_x1 - blk_x0, door_lo, WALL_H, grey))
@@ -320,7 +352,7 @@ def build_world(spec, platform):
         (RACK_X0, RACK_X1, lay[n][0], lay[n][1])
         for n in ('rack_a', 'rack_b', 'rack_c', 'rack_d')
     ] + [
-        (blk_x0, blk_x1, door_hi, INTERIOR_Y),
+        (blk_x0, blk_x1, door_hi, iy),
         (blk_x0, blk_x1, 0.0, door_lo),
     ]
 
@@ -409,7 +441,7 @@ def build_world(spec, platform):
 """, derived
 
 
-def build_truth_map(derived):
+def build_truth_map(derived, iy):
     """Rasterise the track into a ground truth occupancy map.
 
     NOT reconstructed from the SDF. `build_ground_truth_map.py` exists for the
@@ -424,7 +456,7 @@ def build_truth_map(derived):
     """
     res = MASK_RES
     w = int(round(INTERIOR_X / res))
-    h = int(round(INTERIOR_Y / res))
+    h = int(round(iy / res))
     grid = bytearray([254]) * (w * h)        # 254 = free in the map_server sense
 
     for x0, x1, y0, y1 in derived['solids']:
@@ -494,7 +526,7 @@ MASK_RES = 0.05            # m/cell, matches the SLAM map
 MASK_PAD = 6.0             # m of margin around the building on every side
 
 
-def build_keepout_mask():
+def build_keepout_mask(iy):
     """An ALL-FREE keepout mask, and the emptiness is the point.
 
     The keepout filter exists because the AWS warehouse's racking is see-through
@@ -519,7 +551,7 @@ def build_keepout_mask():
     padding means the vehicle is never near that edge.
     """
     w = int(round((INTERIOR_X + 2 * MASK_PAD) / MASK_RES))
-    h = int(round((INTERIOR_Y + 2 * MASK_PAD) / MASK_RES))
+    h = int(round((iy + 2 * MASK_PAD) / MASK_RES))
     # PGM P5, one byte per cell, 255 = free under the `scale` mode below.
     pgm = b'P5\n' + f'{w} {h}\n255\n'.encode() + bytes([255]) * (w * h)
     meta = {
@@ -613,7 +645,8 @@ def main():
     print(f'wrote {st}')
 
     maps = Path(__file__).resolve().parents[2] / 'amr_navigation' / 'maps'
-    pgm, meta, (mw, mh) = build_keepout_mask()
+    iy = interior_y(spec)
+    pgm, meta, (mw, mh) = build_keepout_mask(iy)
     (maps / 'keepout_mask_test_track.pgm').write_bytes(pgm)
     (maps / 'keepout_mask_test_track.yaml').write_text(
         '# GENERATED by amr_sim/tools/generate_test_track.py.\n'
@@ -625,7 +658,7 @@ def main():
         + yaml.safe_dump(meta, sort_keys=False))
     print(f'wrote {maps / "keepout_mask_test_track.yaml"}  ({mw} x {mh} cells, all free)')
 
-    tpgm, tmeta, (tw, th) = build_truth_map(derived)
+    tpgm, tmeta, (tw, th) = build_truth_map(derived, iy)
     (PKG / 'maps' / 'test_track_truth.pgm').write_bytes(tpgm)
     (PKG / 'maps' / 'test_track_truth.yaml').write_text(
         '# GENERATED by amr_sim/tools/generate_test_track.py from the same zone\n'
