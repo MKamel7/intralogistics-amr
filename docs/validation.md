@@ -1845,6 +1845,65 @@ finding that has survived two runs and a geometry change.
 
 ---
 
+## V-30. The track works, and neither open question got answered
+
+**3 of 3 transport cycles, 0 seconds held up, mean 0.40 m/s.** The generated
+warehouse is drivable end to end, repeatedly, with pedestrians moving in it and
+the vehicle parking inside a marked delivery bay. That is the track's exit gate
+met, from 0 of 5 and wedged in a corner at the start of the same session.
+
+| cycle | time | distance | protective stops | held up |
+|---|---|---|---|---|
+| 1 | 95 s | 45.9 m | 3 | 0 s |
+| 2 | 209 s | 79.1 m | 3 | 0 s |
+| 3 | 211 s | 78.8 m | 0 | 0 s |
+
+Six protective stops across three cycles and NONE of them cost time. They fired
+and cleared, which is a safety layer working rather than obstructing.
+
+### The rear field question could not be answered, because it did not happen
+
+The classifier was extended to record which polygon fired and what the vehicle
+was commanded at the moment of each stop, specifically to settle whether the
+seventeen rear stops in V-29 were a spot turn sweeping its own rear, which is
+correct, or the reverse band live during forward motion, which is a fault.
+
+    ahead 6, to the side 1, behind 0
+
+Zero rear stops, so the new code never ran. The instrumentation is in place and
+will answer it the moment they recur.
+
+What can be said WITHOUT measuring: the run with seventeen rear stops had two
+failed cycles and the recoveries that go with them, and this run completed all
+three cleanly and had none. That is consistent with rear stops being situational,
+the vehicle reversing during a recovery where stopping IS correct, rather than
+a systematic selection fault. It is consistent with it. It is not evidence for
+it, and the distinction is the whole reason the instrumentation was added.
+
+### control_latency needs a longer run, not another opinion
+
+| run | samples | p50 | p95 |
+|---|---|---|---|
+| congested, narrow aisles | 103 | 76 ms | 328 ms |
+| wide aisles, 1 of 3 | 18 | 78 ms | 116 ms |
+| wide aisles, 3 of 3 | 7 | 120 ms | 140 ms |
+
+Three runs, three answers. The medians span 76 to 120 ms around an estimate of
+100 ms, and the p95 spans 116 to 328 ms. The two small samples are exactly the
+n=1 problem this project already wrote a tool to avoid, and the tool says so
+itself when the count is under twenty.
+
+**The estimate is not vindicated and it is not refuted.** What the three runs do
+establish is that the tail is load dependent, which means any figure taken from
+a single run describes that run's congestion as much as the stack. A protective
+field sized from one of these would be sized from an accident.
+
+The correct next step is `tools/experiment.py --runs 10` against a fixed
+configuration, which exists precisely for this and has not yet been pointed at
+the question it was built for.
+
+---
+
 ## Known limitations of the model
 
 Recorded here rather than discovered later. None of these are bugs; they are places where the model
