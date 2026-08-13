@@ -2054,3 +2054,79 @@ It was also written against `PoseArray` first and corrected to
 `tf2_msgs/TFMessage` only because `ros2 topic info` was checked before running
 it. That is the same fault that cost thirty four protective stops of latency
 data in V-28, caught this time before it produced a result instead of after.
+
+---
+
+## V-32. Every pedestrian has been standing still, in every run
+
+**Three walkers moved 0.00 m over twelve seconds while the vehicle moved
+6.47 m in the same window.** Found by sampling model poses during a run rather
+than by any test, and it has been true of every run this project has recorded.
+
+    walker_wide      6.72, 9.47 ->  6.72, 9.47   moved 0.00 m
+    walker_aisle    22.78, 6.50 -> 22.78, 6.50   moved 0.00 m
+    walker_bay      11.06, 5.16 -> 11.06, 5.16   moved 0.00 m
+    amr             13.38, 9.32 -> 19.85, 9.42   moved 6.47 m
+
+The commanded velocity is `x: 0.0, z: 0.0`, continuously.
+
+### A recovery that cannot recover
+
+`pedestrian_driver._pick_goal` has a recovery path for a walker that starts in
+a cell without clearance, because such a walker can never satisfy the straight
+line segment test: the segment begins underneath it. The recovery sends it to
+`_nearest_clear`, the closest point with full clearance.
+
+`goal_tolerance` is 0.30 m. `_nearest_clear` searches outward from a first ring
+at twice the grid resolution and returns the first clear point it finds, which
+in practice is about 0.10 m away.
+
+A goal 0.10 m away is **already inside the 0.30 m arrival tolerance**. The
+walker is judged to have arrived the instant the goal is set, so it is
+commanded nothing, clears its goal, picks again on the next tick, finds itself
+still obstructed, and recovers to the same point. Forever.
+
+    spawn at (11.06, 5.16) has less than 0.45 m clearance, stepping out to (11.13, 5.23)
+    spawn at (11.06, 5.16) has less than 0.45 m clearance, stepping out to (11.13, 5.23)
+
+Identical coordinates, roughly once a second, for the length of the run.
+
+### What it invalidates
+
+**V-30 says the track was driven "with pedestrians moving in it". That is
+withdrawn.** That run logged 19050 of these warnings across exactly four
+distinct positions, one per walker, which is the signature of four walkers
+stuck where they spawned. The 3 of 3 transport result stands, because it is a
+measurement of the vehicle completing cycles; what does not stand is any claim
+that it did so among moving people. The six protective stops in that run were
+against static obstacles.
+
+Every dynamic obstacle claim in this project is affected. Nothing has ever
+walked in front of this vehicle.
+
+### Why it was invisible
+
+The warning was present the whole time and said exactly what was wrong. It was
+read as a startup nuisance, because it is worded as a spawn placement
+complaint, and a scenario that places somebody slightly badly is unremarkable.
+Nothing connected the recovery message to the absence of motion, because
+nothing was measuring motion. There are twenty three tests on the generated
+track, covering aisle widths, floor coverage, furniture clearance and spawn
+separation, and not one of them asks whether a pedestrian ever moves.
+
+The screen did not catch this one either: a stationary human model in a
+simulator looks exactly like a human model waiting to move.
+
+### Not fixed yet, deliberately
+
+A five run experiment on the V-31 divergence was in flight when this was found.
+The workspace uses `--symlink-install`, so editing the driver or regenerating a
+world takes effect on the next run immediately, which would change the
+configuration between run 2 and run 5 of a repeatability measurement. V-31 was
+itself measured with the walkers frozen, so the experiment is reproducing the
+conditions it is meant to reproduce.
+
+The fix is to make `_nearest_clear` return a point beyond `goal_tolerance`, so
+that an escape goal is one the walker actually has to travel to, together with
+a test that a walker placed in an obstructed cell reaches clearance rather than
+oscillating. Both land after the experiment reports.
