@@ -165,6 +165,43 @@ def test_no_strip_is_too_narrow_for_the_vehicle_to_use(spec, derived):
         f'{turn:.3f} m turning requirement; the vehicle can enter it and stop')
 
 
+def test_the_furniture_leaves_a_passing_width_everywhere(spec):
+    """Obstacles in open floor must be something to route around, not a maze.
+
+    A warehouse is not an empty box with shelves down one side: roof columns
+    stand in the open floor and pallets get staged where there is room. Adding
+    them is what gives the open bay anything to plan around at all.
+
+    It is also the easiest way to reintroduce the fault that cost two runs. So
+    every gap the furniture leaves, between two objects and between an object
+    and a wall, must be at least the passing width, and the grid is solved from
+    that width rather than placed by eye. This asserts the solving worked.
+    """
+    iy = gen.interior_y(spec)
+    need = gen.rotation_width(spec) + gen.PASSING_ALLOWANCE
+    items = gen.clutter(spec, iy)
+    assert items, 'the warehouse has no furniture at all'
+
+    for name, x0, x1, y0, y1, _, _ in items:
+        assert x0 >= need or x0 == pytest.approx(0.30, abs=0.01), (
+            f'{name} sits {x0:.3f} m from the west wall, less than the '
+            f'{need:.3f} m a vehicle needs to get past it')
+        assert (iy - y1) >= need or y1 >= iy - 1e-6, (
+            f'{name} leaves {iy - y1:.3f} m to the north wall')
+        assert y0 >= need or y0 <= 1e-6, (
+            f'{name} leaves {y0:.3f} m to the south wall')
+
+    # Every pair either overlaps in one axis and is clear in the other, or is
+    # clear in both. A pair that is close in both axes is a pinch point.
+    for i, a in enumerate(items):
+        for b in items[i + 1:]:
+            gap_x = max(b[1] - a[2], a[1] - b[2])
+            gap_y = max(b[3] - a[4], a[3] - b[4])
+            assert max(gap_x, gap_y) >= need - 1e-6, (
+                f'{a[0]} and {b[0]} leave {max(gap_x, gap_y):.3f} m between '
+                f'them against a {need:.3f} m passing width')
+
+
 def test_zones_do_not_overlap_or_leave_gaps(derived):
     """Rows are solved from the top down, so an error shows up as an overlap."""
     bands = sorted([derived['aisle_1_y'], derived['aisle_2_y'],

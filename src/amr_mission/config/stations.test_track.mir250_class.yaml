@@ -15,11 +15,11 @@ stations:
   - 5.803
   note: map frame, relative to the spawn pose recorded below
 - name: dispatch
-  x: 17.0
+  x: 27.0
   y: 3.552
   yaw: 0.0
   world_xy:
-  - 21.5
+  - 31.5
   - 9.356
   note: map frame, relative to the spawn pose recorded below
 route:

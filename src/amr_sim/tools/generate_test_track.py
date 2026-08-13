@@ -61,7 +61,7 @@ SPEC_DIR = (Path(__file__).resolve().parents[2]
 # ---- fixed building geometry ---------------------------------------------
 # The shell is a plain rectangle. Its size is a consequence of the zones that
 # have to fit inside it, not a number with meaning of its own.
-INTERIOR_X = 24.0          # m
+INTERIOR_X = 34.0          # m, wide enough for a real staging bay either end
 # INTERIOR_Y IS DERIVED, see interior_y(). Fixing it meant that widening the
 # aisles pushed the racking down until 0.543 m was left against the south wall,
 # which is narrower than the vehicle: it drove in from the open bay and wedged.
@@ -73,8 +73,22 @@ WALL_H = 3.00              # m
 
 RACK_DEPTH = 1.20          # m, standard pallet depth
 RACK_HEIGHT = 2.20         # m
-RACK_X0 = 7.0              # m, racking field starts here
-RACK_X1 = 17.0             # m, and ends here
+RACK_X0 = 9.0              # m, racking field starts here
+RACK_X1 = 25.0             # m, and ends here
+
+# ---- warehouse furniture -------------------------------------------------
+# A warehouse is not an empty box with shelves down one side. Roof columns
+# stand in the open floor, pallets get staged where there is room, and a
+# charger sits against a wall. Without them the open bay is a car park and the
+# vehicle never has to plan around anything in the one place it has space to.
+COLUMN = 0.40              # m, square section of a roof column
+COLUMN_H = 3.00            # m
+PALLET_X = 1.20            # m, EUR pallet long side
+PALLET_Y = 0.80            # m
+PALLET_H = 1.05            # m, pallet plus a stacked load
+CHARGER_X = 0.60           # m
+CHARGER_Y = 1.40           # m
+CHARGER_H = 1.20           # m
 
 # The measured figures from V-22, carried so the designed world keeps the real
 # building's difficulty. NOT from any datasheet, and labelled accordingly.
@@ -267,6 +281,63 @@ def box(name, x, y, z, sx, sy, sz, colour):
 """
 
 
+def clutter(spec, iy):
+    """Roof columns, staged pallets and a charger, on a grid that cannot trap.
+
+    THE HARD RULE. Every gap this leaves, between two objects and between an
+    object and a wall, is at least the passing width: what the vehicle needs to
+    turn round PLUS room to get past a person standing there. Nothing here is
+    placed by eye. The grid is solved from that width, so adding furniture
+    cannot reintroduce the fault that cost two runs, a space the vehicle can
+    enter and cannot leave.
+
+    That is also what makes the clutter worth having. An obstacle the planner
+    must route around in open floor is the case the open bay could not produce
+    when it was an empty rectangle, and it is the one a warehouse actually
+    presents: you do not drive the middle of a bay, you drive between the
+    columns.
+
+    Returns (name, x0, x1, y0, y1, height, colour).
+    """
+    gap = rotation_width(spec) + PASSING_ALLOWANCE
+    concrete = (0.62, 0.61, 0.58)
+    timber = (0.55, 0.41, 0.24)
+    signal = (0.85, 0.62, 0.15)
+    out = []
+
+    # ROOF COLUMNS on a solved grid. Columns march down a warehouse on a
+    # regular pitch; the pitch here is whatever leaves a passing width between
+    # them, rounded up so the arithmetic is not marginal.
+    pitch = gap + COLUMN + 0.20
+    def line(x, tag):
+        n = max(1, int((iy - gap) // pitch))
+        span = (n - 1) * pitch
+        y0 = (iy - span) / 2.0
+        for i in range(n):
+            cy = y0 + i * pitch
+            out.append((f'column_{tag}{i}', x - COLUMN / 2, x + COLUMN / 2,
+                        cy - COLUMN / 2, cy + COLUMN / 2, COLUMN_H, concrete))
+
+    # One line in the west staging bay, one in the east. Both are open floor
+    # the vehicle crosses on every cycle.
+    line(RACK_X0 / 2.0, 'w')
+    line(INTERIOR_X - (INTERIOR_X - RACK_X1) / 2.0 + 1.0, 'e')
+
+    # STAGED PALLETS in the west bay, clear of the columns and of the route
+    # between goods_in and the racking. Laid out as a pair, which is how they
+    # arrive.
+    px = RACK_X0 / 2.0 + COLUMN / 2 + gap
+    for i, py in enumerate((iy * 0.25, iy * 0.75)):
+        out.append((f'pallet_w{i}', px, px + PALLET_X,
+                    py - PALLET_Y / 2, py + PALLET_Y / 2, PALLET_H, timber))
+
+    # A CHARGER against the west wall, which is where one goes.
+    out.append(('charger', 0.30, 0.30 + CHARGER_X,
+                iy / 2.0 - CHARGER_Y / 2, iy / 2.0 + CHARGER_Y / 2,
+                CHARGER_H, signal))
+    return out
+
+
 def build_world(spec, platform):
     iy = interior_y(spec)
     lay = layout(spec)
@@ -345,6 +416,11 @@ def build_world(spec, platform):
     }
     stations = {n: (x, y, yaw) for n, (x, y, yaw) in stations_world.items()}
 
+    # ---- warehouse furniture ---------------------------------------------
+    for name, x0, x1, y0, y1, h, colour in clutter(spec, iy):
+        models.append(box(name, (x0 + x1) / 2.0, (y0 + y1) / 2.0, h / 2.0,
+                          x1 - x0, y1 - y0, h, colour))
+
     # Every solid rectangle, in world coordinates, for the ground truth map and
     # the pedestrian scenario. Collected here rather than re-parsed from the SDF
     # so the map cannot disagree with the world it describes.
@@ -354,6 +430,8 @@ def build_world(spec, platform):
     ] + [
         (blk_x0, blk_x1, door_hi, iy),
         (blk_x0, blk_x1, 0.0, door_lo),
+    ] + [
+        (x0, x1, y0, y1) for _, x0, x1, y0, y1, _, _ in clutter(spec, iy)
     ]
 
     derived = {
