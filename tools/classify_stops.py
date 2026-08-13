@@ -42,6 +42,7 @@ from collections import Counter
 import rclpy
 from rclpy.executors import ExternalShutdownException
 import tf2_ros
+from geometry_msgs.msg import TwistStamped
 from nav2_msgs.msg import CollisionMonitorState
 from rclpy.node import Node
 from rclpy.parameter import Parameter
@@ -72,6 +73,16 @@ class StopClassifier(Node):
         self.create_subscription(TFMessage, '/ground_truth/poses', self._poses, 20)
         self.create_subscription(CollisionMonitorState,
                                  '/collision_monitor_state', self._state, 20)
+        # WHAT THE VEHICLE WAS DOING when the field fired. A stop for something
+        # behind is correct if the vehicle was turning on the spot, because a
+        # spot turn sweeps the rear, and wrong if it was driving forward. The
+        # summary could not tell those apart.
+        self.cmd_vx = 0.0
+        self.cmd_wz = 0.0
+        self.create_subscription(
+            TwistStamped, '/cmd_vel_raw',
+            lambda m: (setattr(self, 'cmd_vx', m.twist.linear.x),
+                       setattr(self, 'cmd_wz', m.twist.angular.z)), 20)
         self.tf = tf2_ros.Buffer()
         tf2_ros.TransformListener(self.tf, self)
 
@@ -116,10 +127,17 @@ class StopClassifier(Node):
     def _state(self, msg):
         action = ACTION.get(msg.action_type, 'unknown')
         if action == 'stop' and self.action != 'stop':
-            self.classify()
+            # WHICH FIELD FIRED, recorded because the summary could not tell a
+            # rear field live during forward motion from an all-round rotation
+            # field doing its job. Seventeen of forty five stops were for
+            # something behind while driving forward and the summary could only
+            # say "the field is being too generous", which is a guess. The
+            # polygon name says which band the monitor actually selected, and
+            # the commanded twist says what the vehicle was doing at the time.
+            self.classify(msg.polygon_name)
         self.action = action
 
-    def classify(self):
+    def classify(self, polygon=''):
         if self.scan is None or self.robot is None:
             self.verdicts['no data'] += 1
             return
@@ -158,7 +176,8 @@ class StopClassifier(Node):
                    default=(1e9, None))
         kind = 'person' if near[0] <= self.person_radius else 'structure'
         self.verdicts[kind] += 1
-        self.detail.append((kind, r, bearing, near[1], near[0]))
+        self.detail.append((kind, r, bearing, near[1], near[0],
+                            polygon, self.cmd_vx, self.cmd_wz))
 
         # Was the thing that stopped us already in the costmap?
         for which in ('global', 'local'):
@@ -232,6 +251,23 @@ class StopClassifier(Node):
             side = sum(1 for b in bearings if 60 <= abs(b) < 120)
             rear = sum(1 for b in bearings if abs(b) >= 120)
             print(f'    ahead {fwd}, to the side {side}, behind {rear}')
+            if rear:
+                # Behind, split by what the vehicle was doing and which band
+                # the monitor had selected. Turning on the spot sweeps the rear
+                # and a stop there is correct; driving forward it is not.
+                turning = sum(1 for d in self.detail
+                              if d[0] == 'structure' and abs(d[2]) > 90.0
+                              and abs(d[7]) > 0.10)
+                straight = rear - turning
+                print(f'      of those, {turning} while turning on the spot '
+                      f'(correct: a spot turn sweeps the rear)')
+                print(f'      and {straight} while NOT turning, which is the '
+                      f'rear field live during forward motion')
+                bands = Counter(d[5] for d in self.detail
+                                if d[0] == 'structure' and abs(d[2]) > 90.0
+                                and d[5])
+                for band, n in bands.most_common(4):
+                    print(f'      band {band}: {n}')
             print('    a stop for something BEHIND while driving forward is the '
                   'field being too generous, not an obstacle')
         if self.costmap_says:
