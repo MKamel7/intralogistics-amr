@@ -2505,3 +2505,69 @@ Tuning the planner while the controller owns the overhead is how a week gets
 spent making things worse. Re-routing around a person is legitimate overhead
 and should raise the planner term; the controller term is the one no obstacle
 excuses.
+
+---
+
+## V-38. 3 of 3 on the MP-400, and the paths were never inefficient
+
+**3 of 3 transport cycles, 0 protective stops, 2 seconds held up across the
+whole mission.** The first time this platform has completed a mission, from
+0 of 5 wedged, through 0 of 3 with every goal aborted in 12 ms, through 1 of 3
+twice, to this.
+
+| cycle | time | distance | protective stops | held up |
+|---|---|---|---|---|
+| 1 | 117 s | 61.1 m | 0 | 2 s |
+| 2 | 210 s | 77.3 m | 0 | 0 s |
+| 3 | 213 s | 78.8 m | 0 | 0 s |
+
+The only change since the previous run was `default_server_timeout`, 30 ms to
+1000 ms. Nothing in the planner, the controller, the map or the vehicle moved.
+
+### The path overhead was a symptom, and my expectation about it was wrong
+
+An operator watching described "weird paths", and the arithmetic supported it:
+58.3 m driven on a journey whose straight line is 39 m, a factor of 1.49.
+`tools/measure_path_efficiency.py` was written to decide whether that belonged
+to the planner or the controller, because the two imply opposite fixes.
+
+    planner overhead    median 1.18   worst 1.19
+    controller overhead median 0.94   worst 0.96
+
+**The controller drives LESS than its own plan.** 0.94 is not a vehicle
+wandering; it is one cutting corners smoothly rather than tracking a polyline
+vertex to vertex, which is what MPPI is for. The expectation going in was that
+the controller owned the overhead, because the control loop missed its 20 Hz
+target 63 times in one run. That expectation was wrong, and the 63 misses
+turn out not to matter for path quality at all.
+
+The planner's 1.18 is the honest cost of routing around racking and people. The
+straight line passes through a rack; it was never available.
+
+At cycle level, against a 74.0 m straight line round trip, cycles 2 and 3 drove
+77.3 m and 78.8 m: **1.04 and 1.06**. The paths are efficient.
+
+So what produced 1.49 was not planning. It was goals being aborted mid journey
+by V-37's handshake, after which the mission re-issued the goal and the vehicle
+set off again from wherever it had stopped. Distance accumulated across
+abandoned approaches and was then compared against a single straight line.
+
+**The lesson is about attribution rather than tuning.** "Make the paths
+efficient" was a reasonable reading of a real number, and acting on it directly
+would have meant tuning inflation, the keepout mask or the MPPI critics, all of
+which were already correct. The fault was one integer in the behaviour tree
+configuration. The measurement that separated planner from controller cost
+about twenty minutes and prevented a week.
+
+### What is still open
+
+**The 89 mm near miss from V-36 is not explained.** A person came within 89 mm
+of the footprint with the collision monitor active and no protective stop. This
+run recorded 0 protective stops across three cycles as well. That is either a
+scanner blind zone or a safety layer that is not covering what it should, and
+the bearing at closest approach is the datum that separates them.
+
+**The control loop still misses its rate.** It costs nothing in path quality,
+which V-38 establishes, but a controller running at 6.6 Hz against a 20 Hz
+target is not something to leave undocumented just because its symptom turned
+out to be elsewhere.
