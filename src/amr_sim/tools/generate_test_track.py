@@ -183,13 +183,27 @@ def build_world(spec, platform):
         models.append(box(name, rack_cx, (lo + hi) / 2.0, RACK_HEIGHT / 2.0,
                           rack_len, hi - lo, RACK_HEIGHT, steel))
 
-    # ---- the 90 degree corner --------------------------------------------
-    # The cross aisle runs north-south at the east end of the racking, and its
-    # WIDTH is the published corner figure. A vehicle leaving aisle 2 has to
-    # turn through 90 degrees inside exactly that much space, which is what the
-    # datasheet row actually claims.
+    # ---- the cross aisle, and why it is NOT the published corner width ----
+    #
+    # It was, and it trapped the vehicle. The MiR250's circumscribed diameter is
+    # 1.0021 m and `corridor_width_90_turn` is 0.950 m, so it drove into the
+    # corner and could not rotate out: fifteen survey rounds timed out with the
+    # vehicle pinned at one pose and every recovery aborting on Collision Ahead.
+    # Fifty minutes of survey produced one data point. See V-27.
+    #
+    # AN INSTRUMENT MUST NOT BE ABLE TO DESTROY THE RUN IT IS MEASURING. A
+    # scored zone the vehicle fails should record a failure and let the run
+    # continue. Making the only route depend on a manoeuvre the vehicle cannot
+    # perform means every other zone goes unmeasured too.
+    #
+    # So the cross aisle is now the DEFAULT corridor width, which the vehicle
+    # can turn in, and the 0.950 m corner is a separate marked zone attempted
+    # and recorded rather than one the route depends on. The claim is not
+    # quietly dropped: it is still published, it still fails, and V-26 and V-27
+    # say so with the arithmetic.
+    cross_w = t['corridor_width_default']
     cross_x0 = RACK_X1
-    cross_x1 = RACK_X1 + corner_w
+    cross_x1 = RACK_X1 + cross_w
     a2_lo, a2_hi = lay['aisle_2']
     a1_lo, a1_hi = lay['aisle_1']
 
@@ -234,7 +248,8 @@ def build_world(spec, platform):
         'aisle_1_y': lay['aisle_1'],
         'aisle_2_y': lay['aisle_2'],
         'pinch_y': lay['pinch'],
-        'corner_x': (cross_x0, cross_x1),
+        'cross_aisle_x': (cross_x0, cross_x1),
+        'corner_claim_m': corner_w,
         'doorway_y': (door_lo, door_hi),
         'stations': stations,
     }

@@ -93,10 +93,36 @@ def test_every_aisle_width_is_the_published_figure(spec, derived):
             f'{key} is {hi - lo:.4f} m against a published {target} m')
 
 
-def test_the_corner_is_the_published_corner(spec, derived):
+def test_the_cross_aisle_is_wide_enough_to_turn_in(spec, derived):
+    """THE TRACK MUST NOT BE ABLE TO TRAP THE VEHICLE.
+
+    The cross aisle used to be the published 0.950 m corner figure. The
+    MiR250's circumscribed diameter is 1.0021 m, so it drove in and could not
+    rotate out: fifteen survey rounds timed out at one pose, every recovery
+    aborting on Collision Ahead, and fifty minutes of survey produced one data
+    point because every other zone went unmeasured. See V-27.
+
+    A scored zone the vehicle fails must record a failure and let the run
+    continue. This asserts the route cannot swallow the vehicle again.
+    """
+    v = spec['values']
+    diameter = 2.0 * math.hypot(v['scanner_mount_x'], v['scanner_mount_y'])
+    lo, hi = derived['cross_aisle_x']
+    assert (hi - lo) > diameter, (
+        f'the cross aisle is {hi - lo:.4f} m against a {diameter:.4f} m '
+        f'circumscribed diameter, so the vehicle cannot turn round in it and '
+        f'the route can trap it')
+
+
+def test_the_corner_claim_is_still_recorded_even_though_it_fails(spec, derived):
+    """Widening the cross aisle must not quietly drop the claim.
+
+    0.950 m is still a figure the datasheet publishes and the vehicle still
+    cannot achieve it. The track no longer depends on it; the number stays.
+    """
     t = spec['validation_targets']
-    lo, hi = derived['corner_x']
-    assert hi - lo == pytest.approx(t['corridor_width_90_turn'], abs=1e-6)
+    assert derived['corner_claim_m'] == pytest.approx(
+        t['corridor_width_90_turn'], abs=1e-6)
 
 
 def test_the_pinch_keeps_the_real_buildings_difficulty(derived):

@@ -1629,6 +1629,64 @@ of work. Do not quietly widen the aisle.
 
 ---
 
+## V-27. The track trapped the vehicle, and that is two findings not one
+
+The survey was given a proper budget and ran 50 minutes. It mapped 203.2 m2,
+then stopped mapping entirely: fifteen rounds timed out at 180 s each, map
+growth 203.2 to 203.2, the vehicle pinned at one pose while every recovery
+aborted with `Collision Ahead - Exiting DriveOnHeading`.
+
+    stuck at map (12.89, -2.13) = world (17.39, 3.87)
+    cross aisle spans x 17.00 to 17.95, width 0.950 m
+
+It drove into the 90 degree corner and could not turn around.
+
+    circumscribed diameter   1.0021 m
+    corner width             0.9500 m
+    deficit                 -0.0521 m
+
+### Finding one: the corner claim fails the same way the corridor claim does
+
+`corridor_width_90_turn` is 0.950 m and MiR quote it "with default footprint and
+SICK safety configuration and MUTED PROTECTIVE FIELDS". This stack runs full
+protective fields with a static footprint, so the vehicle is 52 mm too wide to
+rotate there.
+
+That is the second of the four published corridor figures the track has shown to
+be unachievable as configured, and both fail for the same reason: the claim
+assumes a capability the stack does not implement. V-26 was the dynamic
+footprint; this is muted fields.
+
+Two of four, with the arithmetic, is a far better result than a cycle count.
+
+### Finding two: the instrument was able to destroy the run
+
+This one is about the track and it is my error. The transport route requires the
+corner, so a vehicle that cannot turn there does not merely fail that zone, it
+becomes trapped and every other zone goes unmeasured. Fifty minutes of survey
+produced one data point because the vehicle spent forty of them wedged.
+
+**An instrument must not be able to destroy the run it is measuring.** A scored
+zone that the vehicle fails should record a failure and let the run continue,
+not swallow the vehicle. The 0.950 m corner as a mandatory bottleneck on the
+only route is a design fault in the track, not in the robot.
+
+The fix is to make the corner OPTIONAL: the cross aisle becomes a width the
+vehicle can turn in, so the cycle can complete and the other three claims can be
+scored, and the 0.950 m corner becomes a zone that is attempted and recorded
+rather than one the route depends on. Do not simply widen it and say nothing:
+the 0.950 m figure is still a published claim and still fails.
+
+### What was NOT the problem
+
+Not the frame, not the stations, not the keepout mask, not the pedestrians, and
+not the survey. All of those were fixed earlier in the session and all of them
+worked: bringup clean, preflight 21 of 21, 203.2 m2 of roughly 230 m2 mapped
+before the vehicle reached the corner. The stack did what it should. The
+geometry it was given was impossible.
+
+---
+
 ## Known limitations of the model
 
 Recorded here rather than discovered later. None of these are bugs; they are places where the model
