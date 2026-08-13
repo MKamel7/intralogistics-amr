@@ -69,3 +69,21 @@ def test_it_never_writes_anything():
             assert t.count('open(') == 1, 'only the stations file may be opened'
             continue
         assert bad not in t, f'the probe must not write ({bad})'
+
+
+def test_the_verdict_accounts_for_the_vehicle_body():
+    """A bay contains a body, not a point.
+
+    The first version compared the localisation error against the bay half
+    extent alone and reported "parks INSIDE" at 0.495 m, when the vehicle's
+    own half extent and the goal tolerance push the worst case reach to
+    0.995 m against a 0.80 m edge. Correct measurement, wrong verdict, which
+    is exactly the mistake measure_slip.py made with its acceptance band.
+    """
+    t = text()
+    assert 'half_extent' in t, 'the vehicle body must enter the comparison'
+    assert 'goal_tolerance' in t, 'the goal tolerance must enter the comparison'
+    assert 'OVERHANGS' in t
+    assert 'worst < 0.80' not in t, (
+        'comparing the bare localisation error against the bay edge ignores '
+        'the vehicle that has to fit inside it')

@@ -86,6 +86,11 @@ class LocalisationProbe(Node):
         self.duration = self.declare_parameter('duration_s', 300.0).value
         self.vehicle_frame = self.declare_parameter('vehicle_frame', 'amr').value
         stations = self.declare_parameter('stations_file', '').value
+        # Geometry the verdict depends on, declared rather than hard coded so a
+        # different bay or a different vehicle cannot silently invalidate it.
+        self.goal_tolerance = self.declare_parameter('goal_tolerance', 0.20).value
+        self.half_extent = self.declare_parameter('half_extent', 0.30).value
+        self.bay_width = self.declare_parameter('bay_width', 1.60).value
         self.spawn = self._spawn_from(stations)
 
         self.buf = tf2_ros.Buffer()
@@ -210,15 +215,31 @@ class LocalisationProbe(Node):
         else:
             print('  the vehicle never stopped, so there is no parked figure')
         print()
-        # 0.80 m is the half extent of a 1.6 m delivery bay marking, which is
-        # the concrete thing this number decides.
+        # What this number actually decides is whether the VEHICLE sits inside
+        # a painted bay. The first version compared the localisation error
+        # against the bay half extent alone and reported "parks INSIDE" at
+        # 0.495 m. Wrong comparison: a bay contains a body, not a point, so the
+        # goal tolerance and the vehicle's own half extent both belong in it.
+        # Correct measurement, wrong verdict, which is the same mistake
+        # measure_slip.py made with its acceptance band.
         worst = self._stats(self.parked_errors)[1] if self.parked_errors else p95
-        print('  A delivery bay marking is 1.6 m across, so its edge is 0.80 m')
-        print(f'  from the centre. At p95 {worst:.3f} m the vehicle parks '
-              f'{"INSIDE" if worst < 0.80 else "OUTSIDE"} it.')
-        if worst >= 0.80:
-            print('  The goal and the marking coincide and the goal tolerance is')
-            print('  0.20 m, so this is the whole explanation for stopping short.')
+        reach = worst + self.goal_tolerance + self.half_extent
+        edge = self.bay_width / 2.0
+        print(f'  A bay marking is {self.bay_width:.2f} m across, edge {edge:.2f} m '
+              f'from centre.')
+        print(f'  localisation p95 {worst:.3f} + goal tolerance '
+              f'{self.goal_tolerance:.3f} + vehicle half extent '
+              f'{self.half_extent:.3f}')
+        print(f'  = {reach:.3f} m worst case reach from the bay centre.')
+        if reach < edge:
+            print('  The vehicle body sits INSIDE the painted square.')
+        else:
+            print(f'  The vehicle body OVERHANGS the line by up to '
+                  f'{reach - edge:.3f} m.')
+            print('  The goal pose and the marking coincide exactly, so this is')
+            print('  the whole explanation for parking over the paint rather')
+            print('  than in the box. Tightening the goal tolerance does not fix')
+            print('  it; the localisation error is the dominant term.')
         print('=' * 70)
 
 

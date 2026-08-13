@@ -2235,3 +2235,120 @@ yet evidence of nothing. It wants a straight line window.
 permits reversing faster than either vehicle is rated to reverse. Left alone
 here on purpose: this change exists to fix wheel geometry, and moving a second
 limit in the same edit is how a measurement stops being attributable.
+
+---
+
+## V-34. It parks over the paint, and the reason is 0.495 m of localisation error
+
+**Measured localisation error 0.495 m**, against a delivery bay whose edge is
+0.80 m from its centre.
+
+The question was why the vehicle stopped outside a painted bay. The three
+obvious answers are all wrong:
+
+* the `dispatch` goal is world (39.5, 6.482) and `mark_bay_2` is centred on
+  (39.5000, 6.4824), so they coincide to 0.4 mm,
+* the bay is 1.6 m across, so its edge is 0.80 m out,
+* `xy_goal_tolerance` is 0.20 m.
+
+A vehicle that satisfies its own goal cannot land outside that square. It
+stopped where it BELIEVED the bay was.
+
+    localisation p95   0.495 m
+    goal tolerance     0.200 m
+    vehicle half extent 0.300 m
+    worst case reach   0.995 m   against a 0.80 m edge
+
+So the body overhangs the line by up to 0.195 m. The centre is inside and the
+vehicle is not. **Tightening the goal tolerance would not fix it**, because the
+localisation error is more than twice the tolerance and dominates the sum.
+
+### The verdict was wrong before the arithmetic was
+
+The first version of `measure_localisation.py` compared the bare 0.495 m
+against the 0.80 m edge and printed "the vehicle parks INSIDE it". Correct
+measurement, wrong verdict, because a bay contains a body rather than a point.
+That is the second time in one session a probe here measured correctly and then
+said the wrong thing about it, after `measure_slip.py` accepted a 34 percent
+odometry error as consistent. Both are now fixed and both have a test asserting
+the old comparison cannot come back.
+
+The pattern is worth naming: **writing the measurement is the easy half.**
+Deciding what counts as passing is where the judgement lives, and it is not
+covered by any test that only checks the number.
+
+### Caveat, stated rather than buried
+
+This 0.495 m was measured at the vehicle's idle pose at (25.93, 8.39), which is
+where the run ended, not at the bay at the moment of delivery. It is the
+magnitude of the error, not the error at that specific goal. The probe reports
+the parked figure separately for exactly this reason, and pointing it at a run
+that reaches dispatch is the outstanding measurement.
+
+---
+
+## V-35. The remaining failure is the controller not answering in time
+
+**1 of 3 cycles, reproduced twice with the same shape**: cycle 2 completes,
+cycles 1 and 3 fail to reach `goods_in`. Zero planner failures in both runs.
+
+Every failed cycle maps to one line:
+
+    Timed out while waiting for action server to acknowledge goal request
+    for follow_path
+
+`bt_navigator` asks `controller_server` to accept a goal and gives up waiting.
+The timeouts at 19:37:02 and 19:39:15 line up exactly with the two failed
+cycles, and two more occurred during the survey, so this is not specific to
+transport.
+
+### Why the controller cannot answer
+
+    24 control loop rate misses
+    worst observed loop rate 2.63 Hz, against a 20 Hz target
+
+380 ms for an iteration that is budgeted 50 ms, a 7.6 times overrun. While the
+executor is inside one of those, a goal request is not being serviced.
+
+### The comparison that matters
+
+|  | MiR250, 3 of 3 | MP-400, 1 of 3 |
+|---|---|---|
+| loop rate misses | 28 | 24 |
+| worst loop rate | 6.41 Hz | **2.63 Hz** |
+| acknowledge timeouts | **0** | 4 |
+
+Both platforms overrun about as OFTEN. The difference is entirely in how BADLY
+the worst case overruns, and only the worse one crosses the timeout. So "the
+machine is loaded" is not the explanation on its own: the same machine ran the
+MiR250 to 3 of 3 with a similar miss count.
+
+### What it is not
+
+**Not a stalled simulator.** Real time factor was sampled every 25 s across the
+whole run and held at 1.04 from start to finish, while load peaked at 25.4 on
+12 cores. An earlier run DID stall, with simulated time frozen at 764 s, and
+the collision monitor was declared down 73 s later. That ordering is worth
+recording because it reads backwards: the monitor did not fail and stall the
+simulator, the simulator stalled and the monitor stopped heartbeating on
+simulated time, so the lifecycle manager shot a healthy node. Taking that log
+line at face value would have cost an evening. The stall is intermittent and
+did not recur.
+
+**Not the planner, and not the map.** Zero planning failures now, against 279
+before the wheel geometry was fixed.
+
+### The decision this leaves, unresolved on purpose
+
+MPPI runs `batch_size` 2000 by `time_steps` 56 at 20 Hz with
+`consider_footprint: true`. That last one is expensive and it is also a
+**measured decision**, not a default: the vehicle is not round, a circular
+approximation either forbids legal gaps or permits corner clips, and the
+footprint padding was driven to zero precisely because MPPI considers the real
+polygon. It is not something to switch off to buy loop time.
+
+The honest options are to reduce sampling density, to lower the control
+frequency, or to accept that a busy server is not a dead one and lengthen the
+liveness timeout. Each is a different trade and none of them should be picked
+by argument. The measurement that decides it is loop time against `batch_size`,
+which has not been taken.
