@@ -228,19 +228,23 @@ if [ $PF -ne 0 ]; then
 fi
 
 if [ "$TRACK" = true ]; then
-  python3 -u tools/track_goal.py --ros-args -p duration_s:=400.0 \
+  # ALL THE PROBES OUTLIVE A SURVEY. At 400 s these expired partway through
+  # exploration and heard nothing of the mission that followed, which reads as
+  # a quiet run rather than as a probe that had stopped listening. The latency
+  # probe was caught doing exactly that: 600 s window, mission started at 1400.
+  python3 -u tools/track_goal.py --ros-args -p duration_s:=2400.0 \
           > "$RUN/goal.log" 2>&1 &
   TRK=$!
 fi
 
 if [ "$TFTRACK" = true ]; then
-  python3 -u tools/track_map_odom.py --ros-args -p duration_s:=600.0 \
+  python3 -u tools/track_map_odom.py --ros-args -p duration_s:=2400.0 \
           > "$RUN/map_odom.log" 2>&1 &
   TFT=$!
 fi
 
 if [ "$CLASSIFY" = true ]; then
-  python3 tools/classify_stops.py --ros-args -p duration_s:=400.0 \
+  python3 -u tools/classify_stops.py --ros-args -p duration_s:=2400.0 \
           > "$RUN/stops.log" 2>&1 &
   CLS=$!
 fi
