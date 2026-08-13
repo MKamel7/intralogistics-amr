@@ -1687,6 +1687,88 @@ geometry it was given was impossible.
 
 ---
 
+## V-28. Both probes worked at once, and neither result was the expected one
+
+The stop classifier and the latency probe ran against the same mission for the
+first time. Each contradicted something that had been asserted about this
+system, one of them by me earlier the same night.
+
+### The protective stops are not the price of sharing a floor with people
+
+    157 protective stops classified
+      structure             155    98.7 %
+      nothing in the scan     2     1.3 %
+      pedestrians             0        0 %
+
+Not one stop was attributed to a person. The cycle that spent 224 of 261
+seconds held up was not being held up by the pedestrians it shares the building
+with. It was stopping for the building, and for itself.
+
+That is a direct correction of what this file said a few hours earlier, which
+was that the held-up time was what sharing a floor with people costs. It is
+not. The pedestrian model was only fixed late in the session, and by then the
+number had already been explained by a cause nobody had measured.
+
+### What it is stopping for
+
+    range 0.44 to 0.90 m, median 0.53 m
+    ahead 111, to the side 1, BEHIND 43
+
+Forty three protective stops for something BEHIND the vehicle while it was
+driving forward. The classifier's own note is the right reading: a stop for
+something behind, while moving away from it, is the field being too generous
+rather than an obstacle being present.
+
+And the costmap mostly did not know:
+
+    global costmap: FREE, did not know      126
+    global costmap: lethal or inscribed      28
+    local costmap:  outside the costmap      91
+
+So the scanner is returning something at about half a metre that the costmap
+does not contain. On this platform the self filter rejects a rectangle of
+0.460 by 0.350 m, the circumscribed radius is 0.501 m, and V-23 records the
+vehicle being measured observing its own structure at 0.440 m. Returns at
+0.44 to 0.90 m sit exactly where the vehicle's own pods are, just outside the
+filter's corners.
+
+**NOT TESTED, and it is the obvious next measurement.** Either the self filter
+is leaking at the corners, where a rectangle is the wrong shape for a vehicle
+whose scanners sit at 45 degrees, or the rear field is firing during forward
+motion. The classifier has narrowed it to those two and both are checkable.
+
+### The latency estimate is right at the median and badly wrong in the tail
+
+First measured `control_latency`, 103 samples:
+
+    p50    76.0 ms
+    p95   328.0 ms
+    max   440.0 ms
+    min     4.0 ms
+    sd     82.8 ms
+
+The platform spec carries 0.10 s, labelled NOT YET MEASURED, and feeds it into
+every protective field through the ISO 13855 shape. At the median the estimate
+is conservative: 100 ms against a measured 76 ms.
+
+At the 95th percentile it is out by a factor of 3.3. At the commissioned 1.0 m/s
+a latency of 0.328 s instead of 0.100 s is 228 mm of extra travel before the
+stop command lands, and the protective field behind that calculation is short by
+that much in one stop in twenty.
+
+**A protective field must be sized for the tail, not the median.** The honest
+reading is that the estimate was not wrong so much as answering the wrong
+question, and the 82.8 ms standard deviation is the finding: a system whose
+sensor-to-command time varies by that much is being scheduled, not designed. The
+fix is more likely in the stack than in the number.
+
+**NOT ACTED ON.** Nothing has been written to any spec. Raising
+`control_latency` to the p95 would widen every protective field on both
+platforms, which is a real change to the safety case and wants a second run and
+a decision, not an overnight edit.
+
+---
+
 ## Known limitations of the model
 
 Recorded here rather than discovered later. None of these are bugs; they are places where the model
