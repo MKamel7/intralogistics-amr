@@ -1946,3 +1946,111 @@ produce identical figures.
 The simulation benchmark repeats to within a few percent on the expensive configurations. The cheap
 ones vary by around 8 percent, because their per-step cost is a small difference between two larger
 wall times, so those are quoted to two significant digits.
+
+---
+
+## V-31. The MP-400 does not move because Nav2 thinks it is inside a wall
+
+**0 of 3 cycles, 0.0 m driven, 0 protective stops, every goal aborted 12 to
+25 ms after it was sent.** The first run of this platform on a track generated
+from its own spec, and the first time its failure has a measured cause rather
+than an inferred one.
+
+The planner says it in one line:
+
+    GridBased plugin failed to plan from (3.80, -5.49) to (-2.00, 0.00):
+    "Start occupied"
+
+The goal is not the problem. `goods_in` is map (-2.00, 0.00), which is world
+(2.50, 5.507), comfortably inside a building spanning x 0 to 42 and y 0 to
+12.96. The **start** is the problem: the planner rejects the vehicle's own cell
+as lethal and therefore never considers the goal at all.
+
+### The vehicle is not where the stack believes it is
+
+|  | x | y | yaw |
+|---|---|---|---|
+| ground truth, world | 10.337 | 5.157 | -28.8 deg |
+| Nav2 believes, world | 8.296 | 0.018 | -90.9 deg |
+
+**Position error 5.53 m, heading error 62 degrees.** The believed position sits
+0.018 m from the south wall, which is why the cell is occupied. Nothing is
+wrong with the vehicle; SLAM has put it inside a wall and the planner is
+correctly refusing to plan out of solid matter.
+
+The map confirms it. A 42 by 12.96 m building should appear as two long
+parallel walls. What SLAM produced is a blob with walls at conflicting angles
+smeared radially out of it, which is scan matching that has diverged rather
+than a map with drift in it.
+
+### Four explanations checked and refuted
+
+Each of these had a mechanism and would have been believed on its own.
+
+**Wheel slip, refuted.** The obvious reading of a stationary vehicle is one
+held against something with its wheels turning. Over 110 s of the mission,
+5470 odometry samples and 5689 ground truth samples both integrate to 0.00 m,
+largest odometry step 0.0 mm. The vehicle is not slipping, it is not being
+commanded anywhere.
+
+**Odometry corruption, refuted.** 575 consecutive samples, maximum step 7.2 mm
+at 50 Hz, no discontinuities. The wheels report smoothly and honestly.
+
+**The SLAM lifecycle bond failure, refuted, and this is the instructive one.**
+The log carries `Server slam_toolbox was unable to be reached after 4.00s by
+bond` and `Failed to bring up all requested nodes. Aborting bringup`, two
+seconds into bringup, together with 112 drive commands discarded as up to
+1.03 s stale. A starved node processing scans against stale transforms is a
+complete and satisfying account of a diverged map. It is also present in the
+run that worked:
+
+| | MiR250, 3 of 3 | MP-400, 0 of 3 |
+|---|---|---|
+| slam bond failures | 1 | 1 |
+| aborting bringup | 1 | 1 |
+| stale command drops | 134 | 112 |
+
+The successful run had **more** stale drops. Both numbers are background
+conditions of this machine, not the difference between working and not, and
+crediting them would have been the V-25 mistake again: two variables moved and
+only one was being watched.
+
+**The sensor and the merge, refuted by measurement rather than by argument.**
+The scanner block is byte for byte identical across the two platforms, 1618
+samples at 0.17 degrees to 10.0 m, so it cannot be what separates them. The
+merged scan was then validated against the real building from the real pose:
+of 1886 finite beams, **zero** report a range beyond the wall in their
+direction, and zero fall inside the chassis radius. A beam cannot see through a
+wall, so the merge geometry is sound.
+
+### What is not yet known
+
+Why it diverges here and not on the MiR250 track. Both are 42 m long with the
+same rack pattern; this one is 0.60 m shallower with aisles 0.20 m narrower,
+both consequences of a smaller vehicle. The scanner mounts are `estimated` on
+**both** platforms, so that shared weakness cannot be the differentiator
+either.
+
+And this is n=1. The five previous MP-400 hypotheses were each refuted after
+being believed, and the one thing this project has paid for repeatedly is
+concluding from a single run. What V-31 establishes is the failure mechanism,
+which was previously unknown and wrongly assumed to be clearance; it does not
+establish the cause of the divergence.
+
+The next step is `tools/experiment.py --runs 5` on this platform, to find out
+whether the divergence is reliable before spending anything on explaining it.
+
+### The instrument this produced
+
+`tools/measure_slip.py` compares wheel odometry against `/ground_truth/poses`
+over one window and reports the ratio. It exists because the single-shot
+version of the same comparison, `gz model -p` beside `ros2 topic echo --once`,
+gave a ratio of 0.0 on one pair of samples and an apparent 6 m odometry jump on
+another, on a vehicle whose odometry was in fact continuous to 7.2 mm. Two
+reads taken at different instants, each with its own latency, produce confident
+nonsense. Both series are now integrated over the same window.
+
+It was also written against `PoseArray` first and corrected to
+`tf2_msgs/TFMessage` only because `ros2 topic info` was checked before running
+it. That is the same fault that cost thirty four protective stops of latency
+data in V-28, caught this time before it produced a result instead of after.
