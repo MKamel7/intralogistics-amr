@@ -7,21 +7,21 @@ description: 'Pedestrians on the generated test track: one in the open bay where
 people:
 - name: walker_bay
   x: 4.6
-  y: 6.000000000000001
+  y: 5.296650874649389
   yaw: 3.14159
   wander:
     speed: 0.9
     range: 3.0
 - name: walker_aisle
   x: 12.0
-  y: 6.000000000000001
+  y: 5.296650874649389
   yaw: 0.0
   wander:
     speed: 0.7
     range: 2.5
 - name: walker_wide
   x: 10.0
-  y: 8.375
+  y: 8.14888362488313
   yaw: 3.14159
   wander:
     speed: 1.1

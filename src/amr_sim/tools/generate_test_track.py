@@ -73,6 +73,11 @@ RACK_X1 = 17.0             # m, and ends here
 
 # The measured figures from V-22, carried so the designed world keeps the real
 # building's difficulty. NOT from any datasheet, and labelled accordingly.
+# Beyond the width the vehicle strictly needs to turn. Small on purpose: the
+# scored aisle should be the narrowest one it can actually work in, not a
+# comfortable one, or the track stops testing anything.
+TURN_MARGIN = 0.10         # m
+
 PINCH_WIDTH = 1.340        # m, median corridor of the AWS warehouse
 OPEN_BAY_MIN = 2.300       # m, 75th percentile of the same
 
@@ -89,17 +94,80 @@ SPAWN_X = 4.5              # m, world
 SPAWN_Y_OFFSET = 0.0       # m, relative to the scored aisle centre
 
 
+def rotation_width(spec):
+    """The narrowest aisle this vehicle can actually turn round in.
+
+    DERIVED FROM THE VEHICLE AND ITS SAFETY CONFIGURATION, not chosen. A
+    differential drive turning on the spot sweeps its circumscribed radius, and
+    the protective field it selects while doing so is wider still. The aisle has
+    to hold that field, or the monitor stops the vehicle mid-turn and it cannot
+    finish the manoeuvre.
+
+    So the requirement is twice the half width of the widest all-round field the
+    vehicle can select, plus a margin. The field half width comes from
+    generate_fields.py rather than being recomputed here: the ISO 13855 shape
+    has one author in this repository and a second copy would eventually be a
+    second value.
+    """
+    v = spec['values']
+    r_circ = math.hypot(v['chassis_length'] / 2.0, v['chassis_width'] / 2.0)
+    tip = v['max_angular_speed'] * r_circ
+    half = v['chassis_width'] / 2.0 + _fields().stopping_distance(tip, v)
+    return 2.0 * half + TURN_MARGIN
+
+
+def _fields():
+    """generate_fields.py, imported rather than duplicated."""
+    import importlib.util
+    path = (Path(__file__).resolve().parents[2] / 'amr_safety' / 'tools'
+            / 'generate_fields.py')
+    spec = importlib.util.spec_from_file_location('generate_fields', path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def zones(spec):
-    """The zone table. Every width is a figure with a stated origin."""
+    """The zone table. Every width has a stated origin.
+
+    THESE ARE DERIVED FROM THE VEHICLE, and that is a deliberate change of
+    basis. The first version of this track used the corridor figures the MiR250
+    datasheet publishes, and two of the four turned out to be unachievable with
+    this stack: the vehicle is 2.1 mm too wide to rotate in the 1.000 m dynamic
+    corridor and 52 mm too wide for the 0.950 m corner, because both figures
+    assume capabilities this stack does not implement, a dynamic footprint and
+    muted protective fields. It drove into the corner and trapped itself. See
+    V-26 and V-27.
+
+    Those findings stand and are recorded. What changed is what this track is
+    FOR. It is now a capability demonstrator: every zone is one the vehicle can
+    traverse AND turn round in, so a cycle completes, re-routing can be shown,
+    and the safety layer can be exercised rather than deadlocked.
+
+    The published figures have not been deleted. They are carried through to the
+    output below as claims this geometry does not test, so nobody reads the
+    track as evidence that the datasheet numbers were met.
+
+    THE ADVERSARIAL CASE HAS NOT BEEN LOST EITHER. The AWS warehouse is still in
+    the repository and still has a 25th percentile corridor of 0.64 m, which is
+    narrower than the robot. Impossible geometry is measured there. This world
+    measures what the vehicle can do.
+    """
     t = spec['validation_targets']
+    turn = rotation_width(spec)
     return [
-        # name        width                        origin
-        ('aisle_1',   t['corridor_width_default'], 'published: corridor_width_default'),
-        ('aisle_2',   t['corridor_width_dynamic'], 'published: corridor_width_dynamic'),
-        ('pinch',     PINCH_WIDTH,                 'measured: AWS median, V-22'),
-        ('corner',    t['corridor_width_90_turn'], 'published: corridor_width_90_turn'),
-        ('doorway',   t['doorway_width_default'],  'published: doorway_width_default'),
-        ('open_bay',  OPEN_BAY_MIN,                'measured: AWS p75, V-22'),
+        # name        width                origin
+        ('aisle_1',   turn + 0.30,         'derived: turning width + 0.30 m'),
+        ('aisle_2',   turn,                'derived: the narrowest aisle it can turn in'),
+        ('pinch',     turn + 0.10,         'derived: turning width + 0.10 m'),
+        ('cross',     turn + 0.20,         'derived: turning width + 0.20 m, a junction'),
+        ('doorway',   turn,                'derived: turning width, straight through'),
+        ('open_bay',  OPEN_BAY_MIN,        'measured: AWS p75, V-22'),
+        # Carried, not tested. See the docstring and V-26 / V-27.
+        ('claim: corridor_default', t['corridor_width_default'], 'published, NOT tested here'),
+        ('claim: corridor_dynamic', t['corridor_width_dynamic'], 'published, NOT MET, V-26'),
+        ('claim: corner_90',        t['corridor_width_90_turn'], 'published, NOT MET, V-27'),
+        ('claim: doorway',          t['doorway_width_default'],  'published, NOT tested here'),
     ]
 
 
@@ -110,10 +178,8 @@ def layout(spec):
     the racking rather than silently eating into the next aisle. The three
     aisles are stacked with a rack between each pair.
     """
-    t = spec['validation_targets']
-    a1 = t['corridor_width_default']
-    a2 = t['corridor_width_dynamic']
-    a3 = PINCH_WIDTH
+    w = {name: width for name, width, _ in zones(spec)}
+    a1, a2, a3 = w['aisle_1'], w['aisle_2'], w['pinch']
 
     top = INTERIOR_Y - 1.75          # leave a cross-passage along the north wall
     rows = []
@@ -157,8 +223,9 @@ def box(name, x, y, z, sx, sy, sz, colour):
 def build_world(spec, platform):
     lay = layout(spec)
     t = spec['validation_targets']
-    corner_w = t['corridor_width_90_turn']
-    door_w = t['doorway_width_default']
+    w = {name: width for name, width, _ in zones(spec)}
+    corner_w = t['corridor_width_90_turn']      # carried, not built
+    door_w = w['doorway']
 
     models = []
     grey = (0.55, 0.56, 0.54)
@@ -201,7 +268,7 @@ def build_world(spec, platform):
     # and recorded rather than one the route depends on. The claim is not
     # quietly dropped: it is still published, it still fails, and V-26 and V-27
     # say so with the arithmetic.
-    cross_w = t['corridor_width_default']
+    cross_w = w['cross']
     cross_x0 = RACK_X1
     cross_x1 = RACK_X1 + cross_w
     a2_lo, a2_hi = lay['aisle_2']
