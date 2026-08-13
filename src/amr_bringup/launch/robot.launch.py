@@ -108,17 +108,34 @@ def generate_launch_description():
     # it replaces Gazebo's entire default layout, so every panel comes back
     # undocked and floating over the viewport. The move_to service leaves the
     # standard layout alone and only moves the camera.
-    aim_camera = TimerAction(
-        period=12.0,
-        condition=IfCondition(LaunchConfiguration('gui')),
-        actions=[ExecuteProcess(
+    # THE OPENING VIEW, and it is per world because the two are nowhere near
+    # each other. This pose was set for the AWS warehouse, which straddles the
+    # origin. The generated test track runs x 0 to 34, so the same camera
+    # pointed at the outside of its south wall: a grey box, which is what
+    # someone opening the demo saw.
+    #
+    # A view is a preference rather than behaviour, so choosing it by world
+    # name is proportionate. Nothing downstream depends on it.
+    def make_aim_camera(context):
+        world = LaunchConfiguration('world').perform(context)
+        if world.startswith('test_track'):
+            req = ('pose: {position: {x: 17.0, y: 1.0, z: 30.0}, '
+                   'orientation: {x: -0.4545, y: 0.4545, '
+                   'z: 0.5417, w: 0.5417}}')
+        else:
+            req = ('pose: {position: {x: -1.2, y: -5.6, z: 3.2}, '
+                   'orientation: {x: -0.155, y: 0.239, z: 0.564, w: 0.775}}')
+        return [ExecuteProcess(
             cmd=['gz', 'service', '-s', '/gui/move_to/pose',
                  '--reqtype', 'gz.msgs.GUICamera',
                  '--reptype', 'gz.msgs.Boolean',
-                 '--timeout', '3000',
-                 '--req', 'pose: {position: {x: -1.2, y: -5.6, z: 3.2}, '
-                          'orientation: {x: -0.155, y: 0.239, z: 0.564, w: 0.775}}'],
-            output='screen')])
+                 '--timeout', '3000', '--req', req],
+            output='screen')]
+
+    aim_camera = TimerAction(
+        period=12.0,
+        condition=IfCondition(LaunchConfiguration('gui')),
+        actions=[OpaqueFunction(function=make_aim_camera)])
 
     rsp = Node(
         package='robot_state_publisher',
