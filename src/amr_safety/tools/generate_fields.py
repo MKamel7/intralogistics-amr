@@ -65,6 +65,59 @@ def as_param(points):
     return '[' + ', '.join(f'[{out(x):.4f}, {out(y):.4f}]' for x, y in points) + ']'
 
 
+# THE SENSOR CANNOT SEE INTO ITS OWN BLIND ZONE, so a field inside it is not a
+# field. The scan merger deletes every return within the chassis half extent
+# plus `self_filter_margin`, so the vehicle does not detect its own body. That
+# filter and these polygons were derived independently and never compared.
+#
+# Measured on the MP-400 before this floor existed: the blind zone is
+# 0.3550 by 0.3395 m, every forward stop field was 0.3446 m half width, and the
+# resulting lateral coverage was 5.1 mm. `stop_reverse` was 60 mm SHORTER than
+# the filter is long, so reversing had no longitudinal coverage at all, and
+# reversing is what the survey does most. A pedestrian reached 197 mm inside
+# the footprint with the monitor active and no protective stop. See V-39.
+#
+# 50 mm is the floor because at these radii it is about 47 scan bins of arc and
+# half a leg diameter of radial depth, so a person entering the band produces
+# the two returns `min_points` requires. Below that the field is decorative.
+MIN_DETECTABLE_BAND = 0.050
+
+
+def clear_of_blind_zone(spec):
+    """The smallest half extents a field may have and still be observable.
+
+    Returns (min_half_length, min_half_width). Applied as a FLOOR rather than
+    an offset: a field already well outside the blind zone is left exactly as
+    ISO 13855 sized it, and only the ones the sensor cannot see into are grown.
+    """
+    v = spec['values']
+    margin = v['self_filter_margin']
+    return (v['chassis_length'] / 2.0 + margin + MIN_DETECTABLE_BAND,
+            v['chassis_width'] / 2.0 + margin + MIN_DETECTABLE_BAND)
+
+
+def observable(points, spec):
+    """Grow a rectangle just enough that the scan can see into it.
+
+    The polygons here are all axis aligned rectangles, so this works on their
+    extents directly. It never shrinks anything.
+    """
+    min_hl, min_hw = clear_of_blind_zone(spec)
+    xs = [x for x, _ in points]
+    ys = [y for _, y in points]
+    x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
+    # Grow only the sides that are inside the blind zone, and only outward.
+    if x1 < min_hl:
+        x1 = min_hl
+    if x0 > -min_hl:
+        x0 = -min_hl
+    if y1 < min_hw:
+        y1 = min_hw
+    if y0 > -min_hw:
+        y0 = -min_hw
+    return [(x1, y1), (x1, y0), (x0, y0), (x0, y1)]
+
+
 def field_polygon(reach, half_width, half_length):
     """A rectangle ahead of the vehicle, squared off at its own footprint.
 
@@ -167,7 +220,8 @@ def main():
         vmin = 0.05 if i == 0 else bands[i - 1]
         name = f'stop_{int(vmax * 100):03d}'
         stop_polys[name] = {
-            'points': field_polygon(reach, half_width, half_length),
+            'points': observable(
+                field_polygon(reach, half_width, half_length), spec),
             'linear_min': vmin, 'linear_max': vmax,
         }
         # The warning field must give the vehicle room to slow to the next band
@@ -176,7 +230,9 @@ def main():
         # decelerating. Doubling would be arbitrary; this is derived.
         decel_dist = (vmax * vmax - (vmin * vmin)) / (2.0 * v['emergency_decel'])
         warn_polys[f'warn_{int(vmax * 100):03d}'] = {
-            'points': field_polygon(reach + decel_dist + 0.30, half_width, half_length),
+            'points': observable(
+                field_polygon(reach + decel_dist + 0.30, half_width,
+                              half_length), spec),
             'linear_min': vmin, 'linear_max': vmax,
         }
         lines.append(
@@ -190,11 +246,14 @@ def main():
     rev_reach = stopping_distance(v_rev, v)
     rev_decel = v_rev * v_rev / (2.0 * v['emergency_decel'])
     stop_polys['stop_reverse'] = {
-        'points': rear_polygon(rev_reach, half_width, half_length),
+        'points': observable(
+            rear_polygon(rev_reach, half_width, half_length), spec),
         'linear_min': -v_rev, 'linear_max': 0.0,
     }
     warn_polys['warn_reverse'] = {
-        'points': rear_polygon(rev_reach + rev_decel + 0.30, half_width, half_length),
+        'points': observable(
+            rear_polygon(rev_reach + rev_decel + 0.30, half_width,
+                         half_length), spec),
         'linear_min': -v_rev, 'linear_max': 0.0,
     }
     lines.append(
@@ -280,7 +339,8 @@ def main():
         v_tip = w_ref * r_circ
         reach = stopping_distance(v_tip, v)
         stop_polys[f'stop_{label}'] = {
-            'points': all_round_polygon(reach, half_width_raw, half_length),
+            'points': observable(
+                all_round_polygon(reach, half_width_raw, half_length), spec),
             # Linear range is a hair either side of zero rather than exactly
             # zero, because a band of zero width can be missed by a floating
             # point comparison, which would put us back to a silent monitor.
@@ -288,7 +348,9 @@ def main():
             'theta_min': tmin, 'theta_max': tmax,
         }
         warn_polys[f'warn_{label}'] = {
-            'points': all_round_polygon(reach + 0.20, half_width_raw, half_length),
+            'points': observable(
+                all_round_polygon(reach + 0.20, half_width_raw,
+                                  half_length), spec),
             'linear_min': -0.05, 'linear_max': 0.05,
             'theta_min': tmin, 'theta_max': tmax,
         }

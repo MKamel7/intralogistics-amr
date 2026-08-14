@@ -438,10 +438,19 @@ def test_rotation_fields_do_not_double_count_the_supplement(platform, cfg):
     for name, poly in _rotation_bands(cfg, 'protective').items():
         w_ref = max(abs(poly['theta_min']), abs(poly['theta_max']))
         expected = half_width_raw + gen.stopping_distance(w_ref * r_circ, platform)
+        # A field is also floored so the scan can see into it, V-39. The two
+        # rules compose as a maximum: ISO sizes the field, and the floor
+        # raises it only where the self filter would have blanked it. This
+        # still catches a doubly applied supplement, which lands well above
+        # both.
+        floor = (platform['chassis_width'] / 2.0
+                 + platform['self_filter_margin'] + gen.MIN_DETECTABLE_BAND)
+        target = max(expected, floor)
         widest = max(abs(y) for _, y in _points(poly))
-        assert widest == pytest.approx(expected, abs=2e-4), (
-            f'{name} is {widest:.4f} m half width, expected {expected:.4f} m; '
-            f'the supplement is being applied twice')
+        assert widest == pytest.approx(target, abs=2e-4), (
+            f'{name} is {widest:.4f} m half width, expected '
+            f'{target:.4f} m (ISO {expected:.4f}, observability floor '
+            f'{floor:.4f}); the supplement may be being applied twice')
 
 
 def test_the_warning_field_limits_speed_rather_than_scaling_it(platform, cfg):
@@ -470,17 +479,6 @@ def test_the_warning_field_limits_speed_rather_than_scaling_it(platform, cfg):
     assert fits, 'the warning speed cap falls outside every protective band'
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    'V-39, OPEN DEFECT ON BOTH PLATFORMS. Recorded as xfail rather than '
-    'silenced, and strict, so the moment the fields are fixed this XPASSes '
-    'and fails the build until the marker is removed. It is not fixed here '
-    'because the two available fixes both change safety geometry and deserve '
-    'an explicit decision: shrink self_filter_margin from 0.060 m, which '
-    'risks the vehicle seeing its own body, or floor every polygon at the '
-    'blind zone plus a usable band, which enlarges the at rest field by about '
-    '36 mm and may make the vehicle stop constantly in a 2.005 m aisle. The '
-    'second is safe-direction and is the likely answer, but it must be '
-    'measured against the 3 of 3 result rather than assumed.'))
 def test_the_protective_fields_are_not_inside_the_self_filter(platform, platform_name):
     """The blind zone must not consume the field it sits inside.
 
