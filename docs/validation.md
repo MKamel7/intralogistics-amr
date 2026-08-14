@@ -2571,3 +2571,80 @@ the bearing at closest approach is the datum that separates them.
 which V-38 establishes, but a controller running at 6.6 Hz against a 20 Hz
 target is not something to leave undocumented just because its symptom turned
 out to be elsewhere.
+
+---
+
+## V-39. The self filter deletes the protective field
+
+**The vehicle drove into a person and did not stop.**
+
+    CONTACTS: 1
+    walker_aisle   min clearance -0.197 m   at +42 deg (ahead)   near misses 247
+
+197 mm inside the footprint, 42 degrees off the bow, during a mission that
+reported **3 of 3 cycles and 0 protective stops**. The clean result and the
+contact are the same run.
+
+### Why nothing fired
+
+Every scan return within **0.3550 by 0.3395 m of base_link is deleted** by the
+scan merger's footprint filter, which exists so the vehicle does not see its
+own body. That is chassis half extent plus a `self_filter_margin` of 0.060 m,
+and it is correctly generated per platform.
+
+The protective polygons are generated separately, from ISO 13855 stopping
+distances. Nothing relates the two. Laid side by side:
+
+| polygon | half width y | detectable band |
+|---|---|---|
+| self filter blind zone | 0.3395 | |
+| `stop_030` to `stop_150`, every forward field | 0.3446 | **5.1 mm** |
+| `stop_reverse` | 0.3446 | 5.1 mm, and its 0.2950 half length is entirely inside the filter |
+| `stop_rot_0`, at rest | 0.3540 | 14.5 mm |
+| `stop_rot_3`, fastest rotation | 0.6025 | 263 mm |
+
+**The lateral coverage of every forward protective field is 5.1 mm thick.** An
+obstacle whose returns fall inside the blind zone is deleted before the monitor
+runs, so the monitor cannot stop for it. The vehicle is blind to anything it is
+already touching, which is the one case the field exists to prevent.
+
+`stop_reverse` is worse: its half length of 0.2950 m is smaller than the
+filter's 0.3550 m, so the reverse protective field has no longitudinal
+coverage at all. Reversing is exactly what the survey does most.
+
+### What is established and what is not
+
+**Established, by arithmetic on the generated files:** the blind zone
+dimensions, the polygon dimensions, and the overlap. These are two generated
+configurations that were never compared, and the comparison takes one script.
+
+**Established, by measurement:** a person reached 197 mm inside the footprint
+at +42 degrees with the monitor `active [3]` and no stop, and 247 samples
+inside the near miss threshold.
+
+**Not established:** the precise instant the person's returns were lost. That
+needs the scan recorded alongside the truth pose through an approach, which is
+the next measurement. It is plausible the person was detectable further out and
+the vehicle simply had nowhere to go in a 2.005 m aisle, then lost them as they
+closed. The contact is real either way; the mechanism has one confirmed half.
+
+### Why no test caught it
+
+There are tests that the fields follow ISO 13855, and tests that the self
+filter matches the chassis. Both pass. Neither knows the other exists.
+
+**This is the fifth instance of one shape in this project**, after
+`controllers.yaml`, `track_people.yaml`, and the behaviour key list duplicated
+in two places: a value derived correctly in one file and used, unconsidered, by
+another. The difference is that the previous four cost cycles and this one
+costs a person.
+
+### The wider point about the result
+
+V-38 reported 3 of 3 cycles with 0 protective stops as a clean run, and it was
+not. Zero protective stops was read as the safety layer having nothing to do.
+It should have been read as a question: a vehicle that drives 217 m through a
+building containing six people and never once slows for anybody is not
+obviously safe, it is possibly not looking. The contact probe is what turned
+that from a comfortable number into a finding, and it only exists because an
+operator watching the screen saw a pedestrian walk through the robot.

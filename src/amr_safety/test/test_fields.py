@@ -19,6 +19,13 @@ SPEC_DIR = (Path(__file__).resolve().parents[2]
             / 'amr_description' / 'config' / 'platforms')
 
 
+# A protective field must clear the self filter blind zone by at least this
+# much in some axis, or the returns it depends on are deleted before the
+# collision monitor runs. 50 mm is one scan bin at the ranges involved,
+# not a safety margin; it is the floor below which the field is decorative.
+MIN_DETECTABLE_BAND = 0.050
+
+
 def cfg_path(name):
     return PKG / 'config' / f'collision_monitor.{name}.yaml'
 
@@ -461,3 +468,54 @@ def test_the_warning_field_limits_speed_rather_than_scaling_it(platform, cfg):
             if not _is_rotation(n) and p['linear_min'] <= warning['linear_limit']
             <= p['linear_max']]
     assert fits, 'the warning speed cap falls outside every protective band'
+
+
+@pytest.mark.xfail(strict=True, reason=(
+    'V-39, OPEN DEFECT ON BOTH PLATFORMS. Recorded as xfail rather than '
+    'silenced, and strict, so the moment the fields are fixed this XPASSes '
+    'and fails the build until the marker is removed. It is not fixed here '
+    'because the two available fixes both change safety geometry and deserve '
+    'an explicit decision: shrink self_filter_margin from 0.060 m, which '
+    'risks the vehicle seeing its own body, or floor every polygon at the '
+    'blind zone plus a usable band, which enlarges the at rest field by about '
+    '36 mm and may make the vehicle stop constantly in a 2.005 m aisle. The '
+    'second is safe-direction and is the likely answer, but it must be '
+    'measured against the 3 of 3 result rather than assumed.'))
+def test_the_protective_fields_are_not_inside_the_self_filter(platform, platform_name):
+    """The blind zone must not consume the field it sits inside.
+
+    The scan merger deletes every return within the chassis plus
+    self_filter_margin, so the vehicle does not see its own body. The
+    protective polygons are generated separately from ISO 13855 stopping
+    distances, and nothing related the two.
+
+    Measured on the MP-400: the filter blanks 0.3550 by 0.3395 m while every
+    forward stop polygon is 0.3446 m half width, leaving 5.1 mm of lateral
+    coverage, and stop_reverse is shorter than the filter is long. A person
+    reached 197 mm inside the footprint at +42 degrees with the monitor active
+    and no stop. See V-39.
+
+    A protective field the sensor cannot see into is not a protective field.
+    """
+    import re
+    v = platform
+    fx = v['chassis_length'] / 2.0 + v['self_filter_margin']
+    fy = v['chassis_width'] / 2.0 + v['self_filter_margin']
+
+    text = cfg_path(platform_name).read_text()
+    thin = []
+    for m in re.finditer(
+            r'^\s{6}(\w+):\s*\n(?:.*\n)*?\s+points:\s*\'\[\[([-\d.]+), ([-\d.]+)\]',
+            text, re.M):
+        name, hx, hy = m.group(1), float(m.group(2)), float(m.group(3))
+        if not name.startswith(('stop', 'warn')):
+            continue
+        # A field must extend meaningfully beyond the blind zone in at least
+        # one axis, or nothing inside it can ever be seen.
+        if (hx - fx) < MIN_DETECTABLE_BAND and (hy - fy) < MIN_DETECTABLE_BAND:
+            thin.append(f'{name}: {(hx - fx) * 1000:.1f} mm x, '
+                        f'{(hy - fy) * 1000:.1f} mm y')
+    assert not thin, (
+        'these protective fields lie inside the self filter blind zone of '
+        f'{fx:.4f} x {fy:.4f} m, so the scan they rely on has already been '
+        'deleted:\n  ' + '\n  '.join(thin))
