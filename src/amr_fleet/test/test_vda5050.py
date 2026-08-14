@@ -129,3 +129,63 @@ def test_messages_serialise_compactly(header):
     s = v.dumps(v.state(header))
     assert ', ' not in s and '": ' not in s
     assert json.loads(s)['operatingMode'] == 'AUTOMATIC'
+
+
+# ---- the bridge, checked as text -----------------------------------------
+#
+# The node needs ROS and a broker, so what is asserted here is the set of
+# properties that were got wrong once and would be silent if got wrong again.
+
+BRIDGE = Path(__file__).resolve().parents[1] / 'amr_fleet' / 'vda5050_bridge.py'
+
+
+def bridge():
+    return BRIDGE.read_text()
+
+
+def test_the_lock_is_reentrant():
+    """_accept_order and _drive_next hold the lock and then call
+    _publish_state, which takes it again. With a plain Lock that deadlocks,
+    and only on the paths that report a problem: a refused order update, or a
+    queue that has run dry.
+
+    Measured: state publication stopped dead at 14 messages one second after a
+    disjoint order update, and the error it should have reported never left
+    the vehicle. The happy path never touched it.
+    """
+    t = bridge()
+    assert 'threading.RLock()' in t
+    assert 'threading.Lock()' not in t
+
+
+def test_the_last_will_is_registered_before_connecting():
+    """A vehicle cannot send its own last will, which is the entire point: the
+    robot that has crashed is exactly the one that cannot say so. It must be
+    set on the client before connect, or the broker never holds it."""
+    t = bridge()
+    i, j = t.find('will_set'), t.find('.connect(')
+    assert i != -1 and j != -1 and i < j
+
+
+def test_a_refused_order_is_reported_not_dropped():
+    """A master control that never hears about a rejected order assumes the
+    vehicle is executing it."""
+    t = bridge()
+    assert 'orderUpdateError' in t
+    assert 'order refused' in t
+
+
+def test_a_missing_broker_does_not_take_the_stack_down():
+    """The interface is optional. A hard exit here would make the whole robot
+    fail to launch over an integration nobody may be using."""
+    t = bridge()
+    assert 'is inert' in t
+    assert 'sys.exit' not in t.split('def main')[0]
+
+
+def test_state_is_published_on_change_not_only_on_the_timer():
+    """A master control schedules against driving, lastNodeId and
+    actionStates. A vehicle that reports only on a timer gives it up to a
+    second of stale truth to schedule on."""
+    t = bridge()
+    assert t.count('self._publish_state()') >= 5

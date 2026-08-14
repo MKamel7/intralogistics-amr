@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>amr_fleet</name>
+  <version>0.1.0</version>
+  <description>
+    VDA 5050 vehicle interface. The protocol bookkeeping is pure data in
+    vda5050.py and is tested without a broker; vda5050_bridge.py owns the
+    sockets and the action client and nothing else.
+  </description>
+  <maintainer email="mkamel860@gmail.com">Mohamed Kamel</maintainer>
+  <license>Apache-2.0</license>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>nav2_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <!-- Not available as a ROS key on every distribution; the container
+       installs python3-paho-mqtt and the node degrades to inert with a clear
+       error rather than failing the whole launch. -->
+  <exec_depend>python3-paho-mqtt</exec_depend>
+
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

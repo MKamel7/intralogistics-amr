@@ -2929,3 +2929,84 @@ stationary vehicle from behind.
 
 Hall's zones are anthropology rather than engineering, are labelled as such,
 and no safety figure in this project derives from them.
+
+---
+
+## V-44. The MP-400 is reliable, and control_latency is refuted
+
+Five runs of one configuration, the first distribution this project has taken
+of anything that matters.
+
+    4 of 5 runs usable
+    cycles completed   12 of 12
+    cycle time         223.1 s [175.0 to 272.0]  sd 23.7   n=12
+    distance            78.1 m [65.4 to 82.6]    sd 4.4    n=12
+    protective stops     2.1   [0.0 to 15.0]     sd 4.4    n=12
+
+**12 of 12 cycles.** The 3 of 3 then 1 of 3 that prompted this was the harness
+colliding with itself, not the vehicle: `stop_all.sh` left `tools/run_stack.sh`
+alive, so a teardown stopped the stack and the orchestrator launched a fresh
+one into it. Runs came up with no `/scan` and were scored as failures of the
+platform. That is now fixed and the platform's record is clean.
+
+Protective stops range 0 to 15 per cycle against a mean of 2.1, which is the
+widest spread in the table and the one worth watching next.
+
+### control_latency, and it is not what the spec says
+
+43 samples across the same five runs, so one configuration throughout:
+
+| | value |
+|---|---|
+| p50 | 68 ms |
+| p95 | **796 ms** |
+| p99 | 1260 ms |
+| sd | 273 ms |
+
+The platform specs carry `control_latency: 0.10   # s, NOT YET MEASURED`.
+
+**The estimate is refuted.** Every protective field in this stack is sized by
+
+    S = v (t_scanner + t_control + t_brake) + v^2 / 2a + C
+
+At the commissioned 0.75 m/s, the difference between the estimate and the
+measured p95 is **522 mm of travel that the fields do not carry**:
+
+| | travel before the command lands |
+|---|---|
+| spec estimate 0.100 s | 75 mm |
+| measured p95 0.796 s | 597 mm |
+
+### Why the p95 is NOT being written into the spec
+
+Because the distribution says it would be the wrong fix.
+
+A p50 of 68 ms against a p99 of 1260 ms is not a vehicle with a slow control
+path, it is a vehicle whose control path is occasionally starved. The median is
+close to the estimate; the tail is nearly twenty times it. Sizing a protective
+field on 796 ms would produce a field about 0.6 m longer than today's, and
+V-42 is a recent and expensive demonstration of what an over-large field costs:
+the vehicle stopped correctly for a rack and could not reverse away from it.
+
+**So the finding is that the estimate is refuted and the fix belongs in the
+stack rather than in the constant.** The tail wants attributing before anything
+is sized on it: the candidates are the same executor contention that produced
+the 380 ms MPPI iterations in V-37, and the scan merger lag that produced the
+transient source rejections in V-41.
+
+The spec keeps `0.10` and its `NOT YET MEASURED` marker, which is now an
+understatement rather than an unknown, and this entry is the reference.
+
+### What was fixed to get a usable measurement at all
+
+The first attempt produced nothing: five runs, all excluded, `no mission log`
+and `run_stack.sh REFUSED to start`. `stop_all.sh` matched processes under
+`$WS/install` and the orchestrators live in `$WS/tools`, so twenty stack
+processes survived a teardown that printed `all stopped`.
+
+Widening the match to `$WS/` catches them, and that breadth is dangerous:
+`experiment.py` calls the teardown through a subprocess shell, so it is the
+grandparent, and excluding only `$$` and `$PPID` would have let the teardown
+kill its own caller halfway through the measurement. The whole ancestor chain
+is now walked from `/proc` and excluded. Verified both ways: zero survivors
+afterwards, invoking shell still alive.
