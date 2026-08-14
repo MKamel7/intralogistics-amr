@@ -42,6 +42,68 @@ SCENARIOS = Path(__file__).resolve().parents[2] / 'amr_sim' / 'scenarios'
 ROBOT_MODEL = 'amr'
 
 
+# ---- occlusion ------------------------------------------------------------
+#
+# WHY THIS EXISTS. Recall counted a person as a miss whenever the tracker did
+# not report them, including people standing behind a rack. That makes recall a
+# statement about the building's geometry rather than about the tracker: move
+# the racking and the number changes with nothing else different.
+#
+# The range gate added earlier removed people who were simply too far away. It
+# did not remove the ones in range and out of sight, so the figure it produced
+# is a LOWER BOUND, which is what V-36 recorded.
+#
+# The ray cast walks the ground truth occupancy grid from the scanner to the
+# person and asks whether anything solid lies between. The truth map is a
+# measurement channel and is used here for scoring only, never in the control
+# path.
+
+
+class TruthMap:
+    """The generated ground truth floorplan, for line of sight only."""
+
+    def __init__(self, yaml_path):
+        meta = yaml.safe_load(Path(yaml_path).read_text())
+        self.res = float(meta['resolution'])
+        self.ox, self.oy = float(meta['origin'][0]), float(meta['origin'][1])
+        pgm = Path(yaml_path).parent / meta['image']
+        with open(pgm, 'rb') as f:
+            assert f.readline().strip() == b'P5', 'expected a binary PGM'
+            line = f.readline()
+            while line.startswith(b'#'):
+                line = f.readline()
+            self.w, self.h = (int(v) for v in line.split())
+            f.readline()                      # max value
+            self.data = f.read(self.w * self.h)
+
+    def occupied(self, x, y):
+        """Is this world point solid? Points off the map are treated as free,
+        because absence of map is not evidence of a wall."""
+        cx = int((x - self.ox) / self.res)
+        cy = int((y - self.oy) / self.res)
+        if not (0 <= cx < self.w and 0 <= cy < self.h):
+            return False
+        # PGM rows run top down; the map origin is bottom left.
+        v = self.data[(self.h - 1 - cy) * self.w + cx]
+        return v < 128          # dark is occupied, matching the generator
+
+    def line_of_sight(self, ax, ay, bx, by):
+        """Walk the segment and report whether it reaches b unobstructed.
+
+        Stepping at half the cell size so a ray cannot tunnel through a wall
+        one cell thick, which is exactly how racking is drawn.
+        """
+        d = math.hypot(bx - ax, by - ay)
+        if d < 1e-6:
+            return True
+        steps = max(2, int(d / (self.res * 0.5)))
+        for i in range(1, steps):
+            f = i / steps
+            if self.occupied(ax + (bx - ax) * f, ay + (by - ay) * f):
+                return False
+        return True
+
+
 class Scorer(Node):
     def __init__(self, names):
         super().__init__('score_tracks')
@@ -82,7 +144,7 @@ def to_base_link(x, y, robot):
     return c * dx - s * dy, s * dx + c * dy
 
 
-def score(frames, tolerance, moving_only, max_range):
+def score(frames, tolerance, moving_only, max_range, truth_map=None):
     """Precision and recall over people the sensor could actually see.
 
     THE RANGE GATE IS NOT A CONVENIENCE. Without it every person in the
@@ -105,10 +167,20 @@ def score(frames, tolerance, moving_only, max_range):
     errors = []
     ids_per_truth = {}
     in_range_frames = 0
+    occluded = 0
     for entries, truth, robot in frames:
         active = [e for e in entries if (e[2] if moving_only else True)]
-        remaining = {n: to_base_link(p[0], p[1], robot) for n, p in truth.items()
-                     if math.dist(p, robot[:2]) <= max_range}
+        in_range = {n: p for n, p in truth.items()
+                    if math.dist(p, robot[:2]) <= max_range}
+        # OCCLUDED PEOPLE ARE EXCLUDED, NOT COUNTED AS MISSES. A person behind
+        # a rack is invisible to a 2D scanner, and counting them makes recall a
+        # measurement of the building rather than of the tracker.
+        if truth_map is not None:
+            visible = {n: p for n, p in in_range.items()
+                       if truth_map.line_of_sight(robot[0], robot[1], p[0], p[1])}
+            occluded += len(in_range) - len(visible)
+            in_range = visible
+        remaining = {n: to_base_link(p[0], p[1], robot) for n, p in in_range.items()}
         if remaining:
             in_range_frames += 1
         for tx, ty, _moving, tid in active:
@@ -130,6 +202,7 @@ def score(frames, tolerance, moving_only, max_range):
     switches = sum(max(0, len(v) - 1) for v in ids_per_truth.values())
     return {
         'tp': tp, 'fp': fp, 'fn': fn, 'in_range_frames': in_range_frames,
+        'occluded': occluded,
         'precision': precision, 'recall': recall,
         'errors': sorted(errors), 'id_switches': switches,
         'ids_per_truth': {k: len(v) for k, v in ids_per_truth.items()},
@@ -146,7 +219,17 @@ def main():
     # rather than counted against it.
     ap.add_argument('--max-range', type=float, default=10.0,
                     help='only score people within this range of the vehicle')
+    # Without a truth map the occlusion gate cannot run and recall stays a
+    # lower bound. Saying so is better than quietly reporting the weaker
+    # number as though it were the real one.
+    ap.add_argument('--truth-map', default='',
+                    help='ground truth map yaml, for the line of sight gate')
     args = ap.parse_args()
+
+    truth_map = TruthMap(args.truth_map) if args.truth_map else None
+    if truth_map is None:
+        print('no --truth-map given: occluded people are counted as misses, '
+              'so recall below is a LOWER BOUND\n')
 
     spec = yaml.safe_load((SCENARIOS / f'{args.scenario}.yaml').read_text())
     names = [p['name'] for p in spec['people']]
@@ -180,7 +263,8 @@ def main():
 
     for label, moving_only in (('all confirmed tracks', False),
                                ('moving tracks only', True)):
-        r = score(node.frames, args.tolerance, moving_only, args.max_range)
+        r = score(node.frames, args.tolerance, moving_only, args.max_range,
+                  truth_map)
         print(f'  {label}')
         print(f'    precision {r["precision"]:.3f}   recall {r["recall"]:.3f}   '
               f'(tp {r["tp"]}, fp {r["fp"]}, fn {r["fn"]})')
@@ -192,6 +276,9 @@ def main():
               f'ids per person {r["ids_per_truth"]}')
         print(f'    scored on {r["in_range_frames"]} of {len(node.frames)} frames '
               f'that had somebody within {args.max_range:.0f} m')
+        if truth_map is not None:
+            print(f'    {r["occluded"]} person-frames excluded as occluded by '
+                  f'structure')
         print()
 
     print('  note: the stationary worker is in the scenario on purpose. The motion')
