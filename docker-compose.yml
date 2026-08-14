@@ -1,0 +1,28 @@
+# Headless simulation, for a reader who wants to run a mission rather than
+# only the tests.
+#
+# NO GUI SERVICE HERE ON PURPOSE. Rendering in a container needs a display
+# socket and GPU passthrough that differ per machine, and an image that only
+# works on the machine it was written on is worse than one that is honest
+# about its scope. Run the GUI on the host with tools/run_stack.sh.
+services:
+  tests:
+    build: .
+    command: ["pytest"]
+
+  mission:
+    build: .
+    # shm_size matters: Gazebo and the ROS middleware share memory, and the
+    # 64 MB default produces transport failures that look like sensor faults.
+    shm_size: 2gb
+    command:
+      - tools/run_stack.sh
+      - --test-track
+      - --cameras
+      - "off"
+      - --rviz
+      - "off"
+      - --run
+      - survey_mission
+      - --cycles
+      - "3"
