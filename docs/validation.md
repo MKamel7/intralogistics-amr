@@ -2704,3 +2704,70 @@ two quiet rounds with the east end still unmapped.
 The 3 of 3 in V-38 and the 5 of 5 on the AWS warehouse were run with surveys
 that happened to cover their stations. Nothing checked that they had. Those
 results stand, and the reason they stand was luck rather than design.
+
+---
+
+## V-41. The safety node reported active while doing nothing
+
+**The vehicle stood still for eight minutes with everything reporting healthy.**
+
+    ros2 lifecycle get /collision_monitor   ->  active [3]
+    /cmd_vel_nav                            ->  20.0 Hz
+    /cmd_vel_raw                            ->  16.7 Hz
+    /diff_drive_controller/cmd_vel          ->  SILENT
+    /collision_monitor_state                ->  SILENT for 30 s
+
+The collision monitor sits in the command path between the smoother and the
+wheels. It was alive, consuming about 10 percent of a core, lifecycle active,
+receiving commands at 16.7 Hz, and passing nothing through. The survey looped
+rounds 7 to 10 driving to goals 30 m away with **zero map growth** and the
+vehicle moving 0.00 m per minute for six consecutive minutes.
+
+Its scan source was healthy at the time: 608 samples, p50 56 ms, p95 92 ms,
+max 104 ms, against a `source_timeout` of 300 ms. Zero samples exceeded it.
+
+### What preceded it
+
+One transient source rejection:
+
+    [merged_scan]: Latest source and current collision monitor node timestamps
+                   differ on 0.384000 seconds. Ignoring the source.
+    Robot to stop due to invalid source.
+
+The same fault appears in the run of 13 August 19:25 with **8 events and a
+worse lag of 0.452 s**, which is before the V-39 field change, so it does not
+belong to that fix. That run still completed 1 of 3 cycles, so the rejection
+alone does not brick the vehicle; something about this occurrence did not
+recover.
+
+**The mechanism connecting the transient rejection to the permanent silence is
+not established.** What is established is the state above, measured directly.
+
+### Why nothing caught it
+
+Every check in `preflight.py` passed, including `/collision_monitor active`.
+
+**`active` is a statement about a lifecycle transition that happened once. It
+is not a statement about whether the node is doing its job now.** The project
+already learned a version of this when `grep -q active` matched `inactive`, and
+fixed the string without questioning what the word was being asked to prove.
+
+Preflight now checks that the monitor **passes commands through**, and the
+check is deliberately conditional: the monitor processes on an incoming
+command, so with no goal active both its output and its state are legitimately
+silent, and an unconditional check would fail every healthy bringup. The fault
+is input flowing while output does not.
+
+### The watchdog earned its place
+
+The eight minute freeze was found by an automated ground truth watchdog
+sampling once a minute, not by a log or a test:
+
+    07:46:20  1096   veh 0.00 m   crowd 5.67 m   VEHICLE STILL 5 min
+    07:47:20  1156   veh 0.00 m   crowd 9.28 m   VEHICLE STILL 6 min
+
+The crowd moving while the vehicle does not is the signature that separates a
+stalled simulator from a stalled robot, and it is why both are sampled. That
+watchdog also produced a false CROWD FROZEN on its own first tick, because
+there was no previous position to compare against, which was fixed before it
+had a chance to train anyone to ignore it.

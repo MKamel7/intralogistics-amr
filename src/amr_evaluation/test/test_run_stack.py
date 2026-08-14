@@ -88,3 +88,29 @@ def test_script_is_syntactically_valid():
     r = subprocess.run(['bash', '-n', str(RUN_STACK)],
                        capture_output=True, text=True)
     assert r.returncode == 0, f'bash -n failed:\n{r.stderr}'
+
+
+def preflight_text():
+    return (REPO / 'tools' / 'preflight.py').read_text()
+
+
+def test_preflight_checks_the_monitor_passes_commands_not_just_that_it_is_active():
+    """`active` is a statement about a transition that happened once.
+
+    The collision monitor returned `active [3]` while publishing neither its
+    command output nor its state for 30 seconds, with a healthy scan source
+    and its input flowing at 16.7 Hz. The vehicle stood still for eight
+    minutes and every check in preflight passed. See V-41.
+    """
+    t = preflight_text()
+    assert 'collision monitor passes commands through' in t
+
+
+def test_that_check_is_conditional_on_there_being_commands():
+    """The monitor processes on an incoming command, so with no goal active
+    both its output and its state are legitimately silent. An unconditional
+    check would fail every healthy bringup, and a check that cries wolf is one
+    people learn to ignore."""
+    t = preflight_text()
+    assert 'no commands in flight, nothing to pass (not a fault)' in t
+    assert "in_rate > 0.0" in t

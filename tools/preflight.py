@@ -165,6 +165,35 @@ class Preflight(Node):
             rate, detail = self.rate(topic)
             self.check(f'{topic} is flowing', rate > 0.0, detail)
 
+        print()
+        # THE SAFETY NODE MUST BE PUBLISHING, NOT MERELY ACTIVE.
+        #
+        # `ros2 lifecycle get /collision_monitor` returned `active [3]` while
+        # the node published neither its command output nor its state for 30
+        # seconds, its scan source was healthy at 92 ms p95 against a 300 ms
+        # timeout, and its input /cmd_vel_raw flowed at 16.7 Hz. The vehicle
+        # sat still for eight minutes and the survey looped four rounds with
+        # zero map growth, because the monitor sits in the command path and
+        # nothing was reaching the wheels.
+        #
+        # Every other check in this file passed throughout. `active` is a
+        # statement about a lifecycle transition that happened once, not about
+        # whether the node is doing its job now. See V-41.
+        # CONDITIONAL, and the condition matters. The collision monitor
+        # processes ON an incoming command, so with no goal active both its
+        # output and its state are legitimately silent and a bare "is flowing"
+        # check would fail every healthy bringup. The fault is input flowing
+        # while output does not.
+        in_rate, in_detail = self.rate('/cmd_vel_raw')
+        if in_rate > 0.0:
+            out_rate, out_detail = self.rate('/diff_drive_controller/cmd_vel')
+            self.check('collision monitor passes commands through',
+                       out_rate > 0.0,
+                       f'in {in_rate:.1f} Hz, out {out_detail}')
+        else:
+            self.check('collision monitor passes commands through', True,
+                       'no commands in flight, nothing to pass (not a fault)')
+
         failed = [r for r in self.results if not r[1]]
         print(f'\n{len(self.results) - len(failed)} passed, {len(failed)} failed\n')
         if failed:
