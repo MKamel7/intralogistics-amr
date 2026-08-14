@@ -294,7 +294,13 @@ fi
 
 case "$TASK" in
   survey)
+    # THE SURVEY IS TOLD WHICH STATIONS IT MUST COVER. Without this it can
+    # declare a building surveyed while a delivery station is still off the
+    # map, and every goal afterwards is rejected as outside bounds. Measured:
+    # a survey stopped at 295.1 m2 of a 544 m2 building and the mission scored
+    # 0 of 3 with the survey reporting success. See V-40.
     ros2 run amr_navigation survey_runner --ros-args -p use_sim_time:=true \
+        ${STATIONS:+-p stations_file:="$STATIONS"} \
         > "$RUN/survey.log" 2>&1
     say "survey exited $?" ;;
   survey_mission)
@@ -311,7 +317,13 @@ case "$TASK" in
     # what the vehicle can see from its start pose. The test track is 24 m long
     # and its dispatch station is not. So the track is surveyed first, in the
     # same run, against the same map, rather than loosening the planner.
+    # THE SURVEY IS TOLD WHICH STATIONS IT MUST COVER. Without this it can
+    # declare a building surveyed while a delivery station is still off the
+    # map, and every goal afterwards is rejected as outside bounds. Measured:
+    # a survey stopped at 295.1 m2 of a 544 m2 building and the mission scored
+    # 0 of 3 with the survey reporting success. See V-40.
     ros2 run amr_navigation survey_runner --ros-args -p use_sim_time:=true \
+        ${STATIONS:+-p stations_file:="$STATIONS"} \
         > "$RUN/survey.log" 2>&1
     say "survey exited $?"
     sleep 5

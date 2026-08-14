@@ -35,6 +35,8 @@ import time
 from collections import deque
 
 import numpy as np
+import yaml
+
 import rclpy
 from action_msgs.msg import GoalStatus
 from nav2_msgs.action import NavigateToPose
@@ -91,6 +93,20 @@ class SurveyRunner(Node):
         self.max_rounds = self.declare_parameter('max_rounds', 24).value
         # Below this the round taught us nothing worth another trip.
         self.growth_stop = self.declare_parameter('growth_stop_m2', 2.0).value
+        # A SURVEY EXISTS TO PRODUCE A MAP THE MISSION CAN USE, so it may not
+        # declare a building surveyed while a station the mission will be sent
+        # to is still off the map. Measured: a survey stopped at 295.1 m2 of a
+        # 544 m2 building and every delivery afterwards was rejected with
+        # "Goal Coordinates of(35.000000, 0.975000) was outside bounds". The
+        # survey reported success and the mission scored 0 of 3.
+        self.stations_file = self.declare_parameter('stations_file', '').value
+        # ONE QUIET ROUND IS NOT CONVERGENCE. The rule was a single round below
+        # the growth threshold, so one unlucky leg ended a survey that had
+        # eleven productive rounds left in it. The round before the early stop
+        # had added 47.7 m2.
+        self.quiet_rounds_needed = self.declare_parameter(
+            'quiet_rounds_needed', 2).value
+        self.quiet_rounds = 0
         self.goal_timeout = self.declare_parameter('goal_timeout_s', 180.0).value
 
         self.map = None
@@ -257,6 +273,38 @@ class SurveyRunner(Node):
             return False
         return True
 
+    def stations_off_map(self):
+        """Stations the mission will be sent to that the map does not cover.
+
+        Read from the generated stations file rather than assumed, and in the
+        MAP frame, which is the frame the planner rejects a goal in. Returns
+        the names, so the log says which ones rather than only how many.
+        """
+        if not self.stations_file or self.map is None:
+            return []
+        try:
+            spec = yaml.safe_load(open(self.stations_file))
+        except OSError:
+            self.get_logger().warn(
+                f'cannot read {self.stations_file}; the survey cannot tell '
+                f'whether it has covered the stations')
+            return []
+        missing = []
+        for st in spec.get('stations', []):
+            if not self.on_map(float(st['x']), float(st['y'])):
+                missing.append(st['name'])
+        return missing
+
+    def on_map(self, x, y):
+        """Is this map frame point inside the occupancy grid's extent?"""
+        g = self.map
+        if g is None:
+            return False
+        ox = g.info.origin.position.x
+        oy = g.info.origin.position.y
+        return (ox <= x <= ox + g.info.width * g.info.resolution
+                and oy <= y <= oy + g.info.height * g.info.resolution)
+
     def run(self):
         if not self.sync_clock():
             return 1
@@ -300,10 +348,27 @@ class SurveyRunner(Node):
                 f'map {before:.1f} -> {after:.1f} m2 '
                 f'({after - before:+.1f} m2)')
             if reached and after - before < self.growth_stop:
-                self.get_logger().info(
-                    f'map grew by less than {self.growth_stop} m2, '
-                    f'the building is surveyed')
-                break
+                self.quiet_rounds += 1
+            else:
+                self.quiet_rounds = 0
+
+            if self.quiet_rounds >= self.quiet_rounds_needed:
+                missing = self.stations_off_map()
+                if missing:
+                    # The map has stopped growing where the vehicle has been,
+                    # and it still does not cover somewhere the mission must
+                    # reach. Stopping here produces a map that looks finished
+                    # and fails every delivery.
+                    self.get_logger().warn(
+                        f'map has stopped growing but {len(missing)} station(s) '
+                        f'are still off it: {", ".join(missing)}. Continuing.')
+                    self.quiet_rounds = 0
+                else:
+                    self.get_logger().info(
+                        f'map grew by less than {self.growth_stop} m2 for '
+                        f'{self.quiet_rounds} consecutive round(s) and every '
+                        f'station is on the map, the building is surveyed')
+                    break
 
         self.get_logger().info(f'survey finished, {self.free_area():.1f} m2 mapped')
         return 0

@@ -2648,3 +2648,59 @@ building containing six people and never once slows for anybody is not
 obviously safe, it is possibly not looking. The contact probe is what turned
 that from a comfortable number into a finding, and it only exists because an
 operator watching the screen saw a pedestrian walk through the robot.
+
+---
+
+## V-40. Fixing the fields broke the survey, and the survey lied about it
+
+The V-39 fix worked and cost 3 of 3 cycles, which is the honest way to report
+it. **0 of 3, every cycle failing to reach dispatch, in 8 seconds.**
+
+    3 x failed to plan to (35.00, 0.97):
+        "Goal Coordinates of(35.000000, 0.975000) was outside bounds"
+
+`dispatch` is at map (35.0, 0.975) and the map did not reach it. The survey had
+declared the building surveyed at **295.1 m2 of a 544 m2 interior**, against
+417 and 452 m2 on earlier runs.
+
+### The chain, and it is a chain rather than a fault
+
+1. Protective fields were floored so the scan can see into them, V-39.
+2. A larger field means the vehicle keeps further from walls and frontiers, so
+   each survey round teaches it less.
+3. The survey's exit rule was **one round** below a 2.0 m2 growth threshold.
+   The round before the early stop had added 47.7 m2; the next added 0.5 and
+   ended it.
+4. The east end of the building, including the dispatch station, was never
+   mapped.
+5. Every delivery goal was rejected as outside bounds.
+
+Two variables moved from one change, which is the V-25 trap arriving from a
+direction that was not being watched. The safety fix is correct and stays.
+
+### The rule that was wrong
+
+**A survey exists to produce a map the mission can plan in**, and it was
+allowed to declare success without ever asking whether it had. It measured its
+own progress and nothing else, so a survey that stopped early reported exactly
+the same success as one that covered the building.
+
+Two changes, both in the exit condition:
+
+* **Consecutive quiet rounds.** One round below the threshold is not
+  convergence, it is one unlucky leg. Now two, and the counter resets on any
+  productive round.
+* **Every station must be on the map.** The survey is given the same generated
+  stations file the mission uses, and refuses to finish while any station it
+  will be sent to lies outside the occupancy grid. It names them in the log
+  rather than counting them.
+
+The second is the one that matters. The first would have delayed this failure
+rather than prevented it, because a big enough field would eventually produce
+two quiet rounds with the east end still unmapped.
+
+### What this says about the earlier successes
+
+The 3 of 3 in V-38 and the 5 of 5 on the AWS warehouse were run with surveys
+that happened to cover their stations. Nothing checked that they had. Those
+results stand, and the reason they stand was luck rather than design.
