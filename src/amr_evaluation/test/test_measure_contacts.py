@@ -114,3 +114,31 @@ def test_it_never_writes_anything():
     t = text()
     for bad in ('.write_text(', 'yaml.dump', 'open('):
         assert bad not in t, f'the probe must not write ({bad})'
+
+
+def test_contacts_are_attributed_by_vehicle_speed():
+    """A person walking into a parked robot is not the robot's failure.
+
+    Measured: of four contacts in one mission, two happened with the vehicle
+    at 0.00 m of travel for the whole minute around them. These pedestrians do
+    not avoid the vehicle by design, because a crowd that dodges never tests
+    anything, so a probe that blames the robot for every touch is measuring
+    the scenario rather than the stack.
+    """
+    t = text()
+    assert 'contact_speeds' in t
+    assert 'they walked into it' in t
+    assert 'DRIVING INTO THEM' in t
+
+
+def test_the_headline_separates_moving_contacts():
+    """The number that matters is contacts with the vehicle moving. Reporting
+    a single total invites the reading that the safety layer failed four times
+    when it may have failed none."""
+    t = text()
+    assert 'of which the vehicle was MOVING' in t
+
+
+def test_a_stationary_contact_is_named_a_scenario_artefact():
+    t = text()
+    assert 'scenario' in t and 'not a safety failure' in t

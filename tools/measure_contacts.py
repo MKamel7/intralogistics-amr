@@ -52,6 +52,7 @@ import sys
 import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
+from geometry_msgs.msg import TwistStamped
 from rclpy.qos import QoSDurabilityPolicy, QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
 from tf2_msgs.msg import TFMessage
 
@@ -96,15 +97,28 @@ class ContactProbe(Node):
         self.near_misses = {}
         self.samples = 0
         self.in_contact = set()
+        # WHO MOVED INTO WHOM. A contact while the vehicle is stationary is a
+        # person walking into a parked robot, which is not a failure of the
+        # robot and must not be counted as one. Measured: of four contacts in
+        # one mission, two happened with the vehicle at 0.00 m of travel for
+        # the whole minute around them.
+        self.speed = 0.0
+        self.contact_speeds = {}
 
         self.create_subscription(TFMessage, '/ground_truth/poses',
                                  self._truth, TRUTH_QOS)
+        self.create_subscription(TwistStamped,
+                                 '/diff_drive_controller/cmd_vel',
+                                 self._cmd, 10)
         self.t0 = self.get_clock().now()
         self.create_timer(1.0, self._tick)
         self.reported = False
         self.get_logger().info(
             f'watching for contact against a '
             f'{2 * self.half_length:.3f} by {2 * self.half_width:.3f} m footprint')
+
+    def _cmd(self, msg):
+        self.speed = abs(msg.twist.linear.x)
 
     def _truth(self, msg):
         poses = {}
@@ -146,8 +160,12 @@ class ContactProbe(Node):
                 if name not in self.in_contact:
                     self.contacts[name] = self.contacts.get(name, 0) + 1
                     self.in_contact.add(name)
+                    self.contact_speeds.setdefault(name, []).append(self.speed)
+                    moving = self.speed > 0.02
                     self.get_logger().error(
-                        f'CONTACT with {name}, {-gap:.3f} m inside the footprint')
+                        f'CONTACT with {name}, {-gap:.3f} m inside the '
+                        f'footprint, vehicle at {self.speed:.2f} m/s '
+                        f'({"DRIVING INTO THEM" if moving else "stationary, they walked into it"})')
             else:
                 self.in_contact.discard(name)
                 if gap <= self.near_miss:
@@ -171,7 +189,8 @@ class ContactProbe(Node):
             return
 
         total = sum(self.contacts.values())
-        print(f'  CONTACTS: {total}')
+        driven = sum(1 for v in self.contact_speeds.values() for s in v if s > 0.02)
+        print(f'  CONTACTS: {total}   of which the vehicle was MOVING: {driven}')
         for name in sorted(self.min_clear):
             n = self.contacts.get(name, 0)
             b = self.min_bearing.get(name)
@@ -188,8 +207,15 @@ class ContactProbe(Node):
                 print(f'  median of the per person minima: '
                       f'{statistics.median(gaps):+.3f} m')
         print()
-        if total:
-            print('  A CONTACT IS A FAILURE OF THE SAFETY LAYER, and in this')
+        if total and not driven:
+            print('  Every contact happened with the vehicle stationary, so a')
+            print('  person walked into a parked robot. That is a scenario')
+            print('  artefact, not a safety failure: these pedestrians do not')
+            print('  avoid the vehicle by design, because a crowd that dodges')
+            print('  never tests anything.')
+        elif driven:
+            print(f'  {driven} CONTACT(S) WITH THE VEHICLE MOVING. That is the')
+            print('  safety layer failing, and in this')
             print('  simulation it does not stop the vehicle, because the person')
             print('  model carries no collision geometry and is walked through.')
             print('  The run continues looking normal. That is why this is')
