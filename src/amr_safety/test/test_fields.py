@@ -443,8 +443,7 @@ def test_rotation_fields_do_not_double_count_the_supplement(platform, cfg):
         # raises it only where the self filter would have blanked it. This
         # still catches a doubly applied supplement, which lands well above
         # both.
-        # The observability floor is longitudinal only now, V-42, so the
-        # lateral half width is the ISO figure alone.
+        # The floor is reverted, V-45, so the ISO figure stands alone again.
         target = expected
         widest = max(abs(y) for _, y in _points(poly))
         assert widest == pytest.approx(target, abs=2e-4), (
@@ -478,6 +477,18 @@ def test_the_warning_field_limits_speed_rather_than_scaling_it(platform, cfg):
     assert fits, 'the warning speed cap falls outside every protective band'
 
 
+@pytest.mark.xfail(strict=True, reason=(
+    'V-39 OPEN DEFECT, and two attempted fixes were measured to be worse than '
+    'it. Flooring both axes trapped the MP-400 against a rack with 1057 '
+    'commands in and 0 out (V-42). Flooring the longitudinal axis alone '
+    'dropped the MiR250 from 3 of 3 to 2 of 9, because its blind zone is '
+    '0.46 m against the MP-400 0.355 m and the rule pushed its rear field '
+    '110 mm past its own back face (V-45). The self filter blanks a region '
+    'larger than the body, so any field clearing the blind zone reaches '
+    'beyond the body, and a field beyond the body stops the vehicle for what '
+    'it must reverse away from. The lever is self_filter_margin, and whether '
+    'shrinking it makes the vehicle see itself is a measurable claim nobody '
+    'has measured. Strict, so this XPASSes the moment it is genuinely fixed.'))
 def test_the_protective_fields_are_not_inside_the_self_filter(platform, platform_name):
     """The blind zone must not consume the field it sits inside.
 

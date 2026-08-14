@@ -96,44 +96,42 @@ def clear_of_blind_zone(spec):
             v['chassis_width'] / 2.0 + margin + MIN_DETECTABLE_BAND)
 
 
-def observable(points, spec):
-    """Grow a rectangle just enough that the scan can see into it.
+def observable(points, _spec):
+    """IDENTITY. The floor is gone, and both attempts to add one are recorded.
 
-    The polygons here are all axis aligned rectangles, so this works on their
-    extents directly. It never shrinks anything.
+    V-39 established a real defect by arithmetic: the scan merger deletes every
+    return within the chassis plus `self_filter_margin`, and several protective
+    polygons lie almost entirely inside that blind zone. The lateral coverage of
+    every forward field is 5.1 mm. That finding stands.
+
+    Two fixes were tried and both were measured to be worse than the defect.
+
+    V-42, flooring both axes: the MP-400 stopped correctly for a rack 0.38 m
+    off its flank and then could not reverse away, because the same widening
+    applied to the polygon selected when reversing. 1057 commands in, 0 out,
+    for five minutes.
+
+    V-45, flooring the longitudinal axis only: the MiR250 fell from 3 of 3
+    cycles to 2 of 9. Its blind zone is 0.46 m against the MP-400's 0.355 m,
+    because it is a longer vehicle carrying the same 60 mm filter margin, so
+    the same rule pushed its rear field 110 mm PAST ITS OWN BACK FACE. It
+    drove 0.0 m and spent 240 s per cycle on recovery behaviours that all
+    failed, with zero planner failures.
+
+    THE TENSION IS REAL AND IS NOT RESOLVED BY RESIZING FIELDS. The self filter
+    blanks a region larger than the vehicle body by `self_filter_margin`, so
+    any field that clears the blind zone necessarily reaches beyond the body,
+    and a field that reaches beyond the body stops the vehicle for things it
+    must be able to reverse away from. Enlarging the field trades a detection
+    hole for a mobility trap.
+
+    The lever that would actually work is `self_filter_margin`, currently
+    0.060 m. Shrinking it shrinks the blind zone without moving any field, and
+    the objection to it, that the vehicle might detect its own structure, is a
+    MEASURABLE claim nobody has measured. That measurement is the next step and
+    it is recorded as such rather than guessed at a third time.
     """
-    min_hl, _min_hw = clear_of_blind_zone(spec)
-    xs = [x for x, _ in points]
-    ys = [y for _, y in points]
-    x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
-
-    # LONGITUDINAL ONLY, and the asymmetry is the whole lesson.
-    #
-    # The first version floored the lateral extent too, which grew every
-    # polygon to 0.3895 m half width. That trapped the vehicle. Measured: it
-    # came to rest 0.07 m from a rack face in aisle_1, the rack returned seven
-    # points at 0.38 m lateral, and those points were outside the self filter
-    # at 0.3395 and inside the new field at 0.3895. A protective stop there is
-    # CORRECT; the vehicle really was almost touching a rack.
-    #
-    # What was not correct is that it could not leave. `stop_reverse` was
-    # widened by the same rule, so the returns that stopped it were also inside
-    # the field selected for reversing, and every commanded direction was
-    # refused. Before the change reverse was 0.3446 m half width, the rack sat
-    # outside it, and the vehicle could back off. The floor turned a recoverable
-    # protective stop into a deadlock: 1097 commands in, 0 out, for minutes.
-    #
-    # The longitudinal floor stays because `stop_reverse` genuinely had no
-    # coverage at all, being 60 mm SHORTER than the filter is long. The lateral
-    # extent goes back to the ISO figure, which is also the dimension that
-    # decides whether the vehicle fits an aisle. The 5.1 mm lateral detection
-    # band from V-39 is therefore still open, and is recorded as such rather
-    # than closed with a change that costs mobility.
-    if x1 < min_hl:
-        x1 = min_hl
-    if x0 > -min_hl:
-        x0 = -min_hl
-    return [(x1, y1), (x1, y0), (x0, y0), (x0, y1)]
+    return points
 
 
 def field_polygon(reach, half_width, half_length):

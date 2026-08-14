@@ -3010,3 +3010,75 @@ grandparent, and excluding only `$$` and `$PPID` would have let the teardown
 kill its own caller halfway through the measurement. The whole ancestor chain
 is now walked from `/proc` and excluded. Verified both ways: zero survivors
 afterwards, invoking shell still alive.
+
+---
+
+## V-45. The second field fix broke the other platform, and the floor is reverted
+
+**The MiR250 fell from 3 of 3 cycles to 2 of 9.**
+
+    run 1/3 ... 2/3 cycles
+    run 2/3 ... 0/3 cycles
+    run 3/3 ... 0/3 cycles
+
+It drove **0.0 m** and spent 240 s per cycle in recovery: 137 aborted
+`follow_path`, 25 failed spins, 21 aborted backups, and **zero planner
+failures**. Blocked, not lost. Surveys completed normally at 418 to 477 m2.
+
+Four polygons had changed, all of them mine:
+
+    stop_reverse   0.4000 -> 0.5100    (+110 mm)
+    warn_reverse   0.4000 -> 0.5100
+    stop_rot_0     0.4767 -> 0.5100
+    stop_rot_1_cw  0.4973 -> 0.5100
+
+### Why the same rule was harmless on one platform and fatal on the other
+
+The MiR250's blind zone is **0.46 m** against the MP-400's **0.355 m**, because
+it is a longer vehicle carrying the same 60 mm filter margin. `stop_reverse`
+had been 0.4000 m, which is exactly `chassis_length / 2`: the rear field ended
+at the vehicle's own back face. The floor pushed it to 0.51 m, **110 mm past
+that face**, so the vehicle stopped for anything close behind it and could not
+reverse. In a warehouse there is nearly always something close behind.
+
+On the MP-400 the same rule moved the rear field by a few centimetres and did
+nothing visible. **I validated the fix on the platform where it did not bite.**
+
+### The tension is real and resizing fields does not resolve it
+
+The self filter blanks a region **larger than the vehicle body**, by
+`self_filter_margin`. Therefore:
+
+* any field that clears the blind zone necessarily reaches beyond the body, and
+* any field reaching beyond the body stops the vehicle for things it must be
+  able to reverse away from.
+
+Enlarging a protective field trades a detection hole for a mobility trap. That
+is not a tuning problem, it is the geometry, and two attempts have now
+demonstrated both halves of it: V-42 laterally on the MP-400, V-45
+longitudinally on the MiR250.
+
+### Reverted, and the defect is recorded rather than closed
+
+Both platforms' field sets are now **byte identical to the pre-change
+baseline**, the configuration measured at 3 of 3 for the MiR250 and 12 of 12
+for the MP-400. The V-39 test is restored as a strict xfail, so the defect
+stays visible and the marker fails the build the moment it is genuinely fixed.
+
+**The lever that would work is `self_filter_margin`, currently 0.060 m.**
+Shrinking it shrinks the blind zone without moving any field. The objection to
+it, that the vehicle would begin detecting its own structure, is a **measurable
+claim that nobody has measured**, and taking that measurement is the next step
+rather than a third guess.
+
+### What this cost and what it is worth
+
+Two field changes, two regressions, one on each platform, both found only
+because both platforms were re-measured. The MP-400 alone would have shipped
+V-45 as a success.
+
+The general lesson is narrow and worth keeping: **a fix that is safe on the
+platform you tested is a fix you have not tested.** The abstraction that
+generates configuration per platform is exactly what makes a change look
+uniform when its effect is not, because the same rule meets a different
+vehicle at the other end of it.
