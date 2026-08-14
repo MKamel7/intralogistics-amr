@@ -102,19 +102,37 @@ def observable(points, spec):
     The polygons here are all axis aligned rectangles, so this works on their
     extents directly. It never shrinks anything.
     """
-    min_hl, min_hw = clear_of_blind_zone(spec)
+    min_hl, _min_hw = clear_of_blind_zone(spec)
     xs = [x for x, _ in points]
     ys = [y for _, y in points]
     x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
-    # Grow only the sides that are inside the blind zone, and only outward.
+
+    # LONGITUDINAL ONLY, and the asymmetry is the whole lesson.
+    #
+    # The first version floored the lateral extent too, which grew every
+    # polygon to 0.3895 m half width. That trapped the vehicle. Measured: it
+    # came to rest 0.07 m from a rack face in aisle_1, the rack returned seven
+    # points at 0.38 m lateral, and those points were outside the self filter
+    # at 0.3395 and inside the new field at 0.3895. A protective stop there is
+    # CORRECT; the vehicle really was almost touching a rack.
+    #
+    # What was not correct is that it could not leave. `stop_reverse` was
+    # widened by the same rule, so the returns that stopped it were also inside
+    # the field selected for reversing, and every commanded direction was
+    # refused. Before the change reverse was 0.3446 m half width, the rack sat
+    # outside it, and the vehicle could back off. The floor turned a recoverable
+    # protective stop into a deadlock: 1097 commands in, 0 out, for minutes.
+    #
+    # The longitudinal floor stays because `stop_reverse` genuinely had no
+    # coverage at all, being 60 mm SHORTER than the filter is long. The lateral
+    # extent goes back to the ISO figure, which is also the dimension that
+    # decides whether the vehicle fits an aisle. The 5.1 mm lateral detection
+    # band from V-39 is therefore still open, and is recorded as such rather
+    # than closed with a change that costs mobility.
     if x1 < min_hl:
         x1 = min_hl
     if x0 > -min_hl:
         x0 = -min_hl
-    if y1 < min_hw:
-        y1 = min_hw
-    if y0 > -min_hw:
-        y0 = -min_hw
     return [(x1, y1), (x1, y0), (x0, y0), (x0, y1)]
 
 

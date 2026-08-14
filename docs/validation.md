@@ -2771,3 +2771,76 @@ stalled simulator from a stalled robot, and it is why both are sampled. That
 watchdog also produced a false CROWD FROZEN on its own first tick, because
 there was no previous position to compare against, which was fixed before it
 had a chance to train anyone to ignore it.
+
+---
+
+## V-42. The safety fix trapped the vehicle, and the trap was the lateral half
+
+The V-39 floor was applied to every polygon in both axes. That was wrong in one
+of them, and the way it failed is worth more than the fix.
+
+**Measured, caught live by the watchdog:**
+
+    10:54:51  veh 0.00 m  crowd 7.48 m  cmd_in/out 1017/0   MONITOR SWALLOWING COMMANDS
+    10:58:51  veh 0.00 m  crowd 7.08 m  cmd_in/out 1057/0   VEHICLE STILL 5 min
+
+A thousand commands a minute going in and none coming out, for five minutes,
+while the crowd walked around normally.
+
+### It was not a hang, and the first reading was wrong
+
+The obvious conclusion from V-41 was that the monitor had hung. It had not:
+
+    Robot to stop due to protective polygon
+    Robot to continue normal operation        (alternating)
+    action_type: 1, polygon_name: "protective"
+
+It was making a decision, correctly, on every cycle. Seven scan returns sat
+inside the stop polygon, tightly clustered:
+
+    range 0.404 m at +68.2 deg  ->  body frame (+0.150, +0.375)
+    range 0.410 m at +70.4 deg  ->  body frame (+0.138, +0.387)
+
+The vehicle was in aisle_1 at world (25.40, 7.78), with `rack_b` ending at
+y = 7.710. Its flank was about 0.07 m from the rack face. **The protective stop
+was correct. The vehicle really was almost touching a rack.**
+
+### What was not correct
+
+It could not leave.
+
+Those returns are at 0.38 m lateral. The self filter deletes to 0.3395, so they
+survive it. Before V-39, `stop_reverse` was 0.3446 m half width, the returns
+were outside it, and reversing was permitted: the vehicle could back off and
+carry on. V-39 widened every polygon to 0.3895 m, including the one selected
+when reversing, so every commanded direction was refused by the field.
+
+**A recoverable protective stop became a deadlock.** The safety layer stopped
+the vehicle for a real obstacle and then denied it the one motion that would
+have resolved the situation.
+
+### The fix, and what stays open
+
+The floor is now longitudinal only.
+
+`stop_reverse` keeps it, because it was 60 mm SHORTER than the blind zone is
+long and had no rear coverage whatsoever, which is a genuine hole and reversing
+is what the survey does most. The lateral extent returns to the ISO figure,
+which is also the dimension that decides whether the vehicle fits an aisle.
+
+**The 5.1 mm lateral detection band from V-39 is therefore still open.** It is
+recorded as a known defect rather than closed with a change that costs the
+vehicle its ability to move. The candidate fix is reducing `self_filter_margin`
+from 0.060 m, which needs evidence that the vehicle does not then detect its
+own structure, and that evidence is a measurement nobody has taken.
+
+### The general lesson
+
+A safety change that removes an escape route is not obviously safer. The
+protective field decides both what the vehicle stops for and what it may do
+about it, and only the first half was being reasoned about. Enlarging a field
+looks unambiguously conservative right up to the point where the vehicle cannot
+reverse out of the situation the enlargement created.
+
+Every one of the four measurements that established this came from ground truth
+or from the raw scan, not from any log the stack produced about itself.
