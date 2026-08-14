@@ -125,6 +125,14 @@ class SocialProbe(Node):
         self.t0 = self.get_clock().now()
         self.create_timer(1.0, self._tick)
         self.reported = False
+        # SAY THAT IT STARTED. Without this the tool prints nothing at all
+        # until it reports, and a probe silent for fourteen minutes is
+        # indistinguishable from one that died on import. That ambiguity cost
+        # a few minutes of reading a zero byte log as a crash.
+        self.get_logger().info(
+            f'social metrics for {self.duration:.0f} s, attention range '
+            f'{self.attention:.1f} m, footprint '
+            f'{2 * self.half_length:.3f} by {2 * self.half_width:.3f} m')
 
     def _cmd(self, msg):
         self.speed = abs(msg.twist.linear.x)

@@ -97,3 +97,11 @@ def test_it_never_writes_anything():
     t = text()
     for bad in ('.write_text(', 'yaml.dump', 'open('):
         assert bad not in t
+
+
+def test_it_announces_itself_on_startup():
+    """A probe that prints nothing until it reports is indistinguishable from
+    one that died on import. Every other probe in this project says it
+    started; this one did not, and a zero byte log was briefly read as a
+    crash."""
+    assert 'social metrics for' in text()

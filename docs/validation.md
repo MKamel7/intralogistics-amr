@@ -2844,3 +2844,88 @@ reverse out of the situation the enlargement created.
 
 Every one of the four measurements that established this came from ground truth
 or from the raw scan, not from any log the stack produced about itself.
+
+---
+
+## V-43. Six contacts, none of them the vehicle's fault, and the first social table
+
+The corrected fields from V-42 were validated over two missions on one map.
+**The survey fix and the field fix both hold.** The contact result needed
+attribution before it meant anything, and the attribution reverses the reading.
+
+### The survey now refuses to finish early
+
+    map grew by less than 2.0 m2 for 2 consecutive round(s)
+        and every station is on the map, the building is surveyed
+    survey finished, 450.9 m2 mapped
+
+Against 295.1 m2 when the old rule quit on one quiet round. The log states both
+conditions, so a reader can see which one held it open.
+
+### First mission: 3 of 3, second: 1 of 3, nothing changed
+
+Same stack, same map, same scenario seed. **This variance is now the most
+important open question in the project**, because it means no single cycle
+count quoted anywhere, including the favourable ones, is trustworthy. It is
+what `tools/experiment.py --runs 5` exists for and it has still not been
+pointed at it.
+
+### The contacts, and why they are not a safety failure
+
+Six contacts, all grazing between 2 and 10 mm inside the footprint:
+
+| person | min clearance | bearing | contacts | speed at closest |
+|---|---|---|---|---|
+| walker_bay | -0.415 m | +136 deg astern | 4 | 0.00 m/s |
+| walker_aisle | -0.330 m | +139 deg astern | 1 | 0.00 m/s |
+| walker_route | -0.029 m | +125 deg port quarter | 1 | 0.00 m/s |
+| walker_cross | +1.135 m | -70 deg starboard | 0 | 0.30 m/s |
+| walker_wide | +0.237 m | -113 deg starboard | 0 | 0.73 m/s |
+| worker_standing | +2.254 m | astern | 0 | 0.10 m/s |
+
+**Every contact came from astern or the rear quarter, with the vehicle at
+0.00 m/s.** Not one occurred while it was moving.
+
+A stationary vehicle cannot avoid being walked into, and these pedestrians do
+not avoid it by design, because a crowd that dodges never tests anything. Four
+of the six were `walker_bay` alone, repeatedly wandering into a parked robot
+after the mission had ended.
+
+`measure_contacts.py` now records the commanded speed at the moment of contact
+and reports **contacts with the vehicle moving** as the headline, because a
+single total invites the reading that the safety layer failed six times when it
+failed none. That is the third probe in this session to measure correctly and
+then say the wrong thing about its own number.
+
+### The crossing pedestrian is the one that matters, and it passed
+
+`walker_cross` is the only person the vehicle actually had to solve, being the
+one that steps out in front of a moving vehicle rather than approaching a
+parked one. Closest approach **+1.135 m**, at 0.30 m/s, **zero near misses**,
+and zero time in intimate or personal space. The local planner handled every
+crossing without a contact and without a protective stop.
+
+### The first social navigation table
+
+Percentages are of the time that person was within 5 m of the vehicle, not of
+the run, because a vehicle in another aisle is not being polite, it is absent.
+
+| person | time near | intimate | personal | social |
+|---|---|---|---|---|
+| walker_aisle | 487.6 s | 1.4 % | 5.7 % | 87.6 % |
+| walker_bay | 559.3 s | 3.5 % | 18.7 % | 95.5 % |
+| walker_cross | 577.6 s | 0.0 % | 0.8 % | 12.3 % |
+| walker_route | 163.7 s | 7.8 % | 14.0 % | 93.8 % |
+| walker_wide | 52.3 s | 4.1 % | 8.7 % | 87.0 % |
+| worker_standing | 538.8 s | 0.0 % | 0.0 % | 98.3 % |
+
+Median of the per person minimum clearances: **+0.104 m**. Closest anyone came:
+**-0.415 m**, which is `walker_bay` standing on a parked robot.
+
+The interesting row is `walker_cross`: 0.0 percent intimate and 0.8 percent
+personal despite being the only person deliberately placed in the vehicle's
+path. The rows with high intimate percentages are all people who approached a
+stationary vehicle from behind.
+
+Hall's zones are anthropology rather than engineering, are labelled as such,
+and no safety figure in this project derives from them.
