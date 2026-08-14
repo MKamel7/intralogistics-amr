@@ -146,3 +146,29 @@ def test_the_other_world_is_still_reachable():
     """The AWS warehouse is the honest robustness case, a found building nobody
     sized for this vehicle. Repointing the demo must not hide it."""
     assert '--world warehouse' in demo_text()
+
+
+def stop_all_text():
+    return (REPO / 'tools' / 'stop_all.sh').read_text()
+
+
+def test_teardown_catches_the_orchestrators_not_just_the_stack():
+    """run_stack.sh lives in $WS/tools, not $WS/install, so a teardown that
+    matched only the install tree stopped the stack and left the script that
+    launches it. It carried on to its next stage and started a fresh stack
+    into the one just cleared: consecutive experiment runs collided, came up
+    with no /scan and no /odom, and were excluded as vehicle failures.
+    """
+    t = stop_all_text()
+    assert '*"$WS/"*' in t, 'the workspace match must cover tools, not only install'
+    assert 'ORCHESTRATORS' in t
+
+
+def test_teardown_spares_every_ancestor_not_just_the_parent():
+    """experiment.py calls this through a subprocess shell, so it is the
+    grandparent. A pattern broad enough to catch run_stack.sh is broad enough
+    to catch the experiment calling it, which would kill its own caller
+    halfway through a five run measurement."""
+    t = stop_all_text()
+    assert 'ANCESTORS' in t
+    assert '/proc/$_p/stat' in t, 'ancestry must be walked, not assumed'

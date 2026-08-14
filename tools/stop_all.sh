@@ -24,6 +24,22 @@ set -uo pipefail
 SELF=$$
 WS="$(cd "$(dirname "$0")/.." && pwd)"
 
+# EVERY ANCESTOR OF THIS SCRIPT IS OFF LIMITS.
+#
+# Excluding only $$ and $PPID was not enough once orchestrators entered the
+# picture. tools/experiment.py calls this between runs through a subprocess
+# shell, so experiment.py is the grandparent, not the parent, and a pattern
+# broad enough to catch tools/run_stack.sh is also broad enough to catch the
+# experiment that is calling it. It would kill its own caller halfway through
+# a five run measurement and leave a log that reads like the stack died.
+ANCESTORS=" "
+_p=$SELF
+while [ "$_p" != "1" ] && [ -r "/proc/$_p/stat" ]; do
+  ANCESTORS="$ANCESTORS$_p "
+  _p=$(awk '{print $4}' "/proc/$_p/stat" 2>/dev/null)
+  [ -z "$_p" ] && break
+done
+
 # THE PATTERN LIST IS DERIVED, NOT HAND MAINTAINED, and the reason is that the
 # hand maintained one was wrong for most of this project's life.
 #
@@ -62,14 +78,19 @@ collect() {
       # and a vanished pid is the normal case here, not an error.
       cmd=$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null || true)
       [ -z "$cmd" ] && continue
-      case "$cmd" in *"$WS/install/"*) echo "$pid" ;; esac
+      # $WS/ rather than $WS/install/, because the ORCHESTRATORS live in
+      # $WS/tools and were therefore never stopped. tools/run_stack.sh
+      # survived every teardown and carried on to its next stage, launching a
+      # fresh stack into the one that had just been cleared. Consecutive
+      # experiment runs collided, came up with no /scan and no /odom, and were
+      # excluded as failures of the vehicle.
+      case "$cmd" in *"$WS/"*) echo "$pid" ;; esac
     done
     # Plus the third-party processes, matched on their command lines.
     pgrep -f "$EXTERNAL" 2>/dev/null
   } | sort -u | while read -r pid; do
         [ -z "$pid" ] && continue
-        [ "$pid" = "$SELF" ] && continue
-        [ "$pid" = "$PPID" ] && continue
+        case "$ANCESTORS" in *" $pid "*) continue ;; esac
         [ -r "/proc/$pid/cmdline" ] || continue
         # Never match this script itself, or an editor holding it open.
         tr '\0' ' ' < "/proc/$pid/cmdline" | grep -q 'stop_all' && continue
