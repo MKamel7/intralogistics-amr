@@ -114,3 +114,35 @@ def test_that_check_is_conditional_on_there_being_commands():
     t = preflight_text()
     assert 'no commands in flight, nothing to pass (not a fault)' in t
     assert "in_rate > 0.0" in t
+
+
+def demo_text():
+    return (REPO / 'demo.sh').read_text()
+
+
+def test_the_front_door_runs_a_world_the_evidence_covers():
+    """demo.sh ran the AWS warehouse on a 5 of 5 result that predates the
+    protective field change in V-39, and nothing has re-measured it since.
+    Pointing the front door at a number the repository can no longer stand
+    behind is worse than showing a smaller one.
+    """
+    t = demo_text()
+    assert '--test-track' in t, 'the demo must run the generated track'
+    assert '--run survey_mission' in t, (
+        'no map ships with the repository, so the demo has to survey before '
+        'it can transport')
+
+
+def test_the_demo_is_honest_about_how_long_it_takes():
+    """The old message promised 90 seconds plus 90 per cycle, which was true
+    for a pre-built map and is not true for a survey. A front door that
+    under-promises time gets closed before it opens."""
+    t = demo_text()
+    assert '600 + CYCLES * 120' in t
+    assert 'survey is most of that time' in t
+
+
+def test_the_other_world_is_still_reachable():
+    """The AWS warehouse is the honest robustness case, a found building nobody
+    sized for this vehicle. Repointing the demo must not hide it."""
+    assert '--world warehouse' in demo_text()

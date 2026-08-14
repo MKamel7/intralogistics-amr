@@ -8,10 +8,16 @@
 # here becomes irrelevant. `tools/run_stack.sh` is the real instrument, with a
 # dozen flags and a preflight gate; this is the version with no decisions in it.
 #
-# It runs the KNOWN GOOD configuration deliberately: the MiR250 on the imported
-# warehouse, cameras off. That is the path measured at 5 of 5 transport cycles.
-# The test track and the second platform are more interesting and are one flag
-# away, but a front door should open.
+# It runs the GENERATED TEST TRACK, cameras off. That is the world every recent
+# measurement covers: derived aisle widths, moving pedestrians on routes and
+# crossings, painted delivery bays, and a ground truth oracle for scoring.
+#
+# It used to run the imported AWS warehouse on the strength of a 5 of 5 result.
+# That result predates the protective field change in V-39 and nothing has
+# re-measured it since, so pointing the front door at it would be showing a
+# number this repository can no longer stand behind. The AWS world is still one
+# flag away and is still the honest robustness case, a found building nobody
+# sized for this vehicle.
 set -uo pipefail
 
 REPO="$(cd "$(dirname "$0")" && pwd)"
@@ -47,15 +53,18 @@ if [ ! -f install/setup.bash ]; then
   echo
 fi
 
-echo "  Running $CYCLES transport cycle(s) on the MiR250, cameras off."
-echo "  Expect about $(( 90 + CYCLES * 90 )) seconds: the stack brings itself up,"
-echo "  checks its own health, then fetches and delivers a load while"
-echo "  pedestrians move around it."
+echo "  Running $CYCLES transport cycle(s) on the generated track, cameras off."
+echo "  Expect about $(( 600 + CYCLES * 120 )) seconds. The vehicle surveys the"
+echo "  building first, because a map is not shipped with the repository, then"
+echo "  fetches and delivers a load while people walk routes and cross in front"
+echo "  of it. The survey is most of that time and it only happens once."
+echo
+echo "  Add --world warehouse to run the imported AWS building instead."
 echo
 echo "  A window will open. Nothing needs clicking."
 echo
 
-tools/run_stack.sh --cameras off --run mission --cycles "$CYCLES"
+tools/run_stack.sh --test-track --cameras off --run survey_mission --cycles "$CYCLES"
 STATUS=$?
 
 RUN=$(readlink -f /tmp/amr-logs/latest 2>/dev/null)
