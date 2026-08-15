@@ -296,58 +296,50 @@ planner_server:
     use_sim_time: true
     expected_planner_frequency: 1.0
     planner_plugins: ["GridBased"]
+    # THE PLANNER IS SUBSTITUTED, and the reasoning below survives the
+    # substitution because it is about the choice, not about one plugin's
+    # parameters.
+    #
+    # SmacPlanner2D IS THE DEFAULT, AND HYBRID-A* IS NOT A CANDIDATE.
+    #
+    # Hybrid-A* is the more impressive sounding choice and it is the wrong one
+    # here. It plans in x, y, heading under a minimum turning radius, which is
+    # what an Ackermann vehicle needs. This is a differential drive: it turns
+    # on the spot. Imposing a turning radius it does not have would forbid
+    # legal manoeuvres, most obviously the spot turn the corner requirement
+    # depends on, and would produce longer paths to no benefit. It is excluded
+    # from the comparison table for the same reason: a table where the
+    # project's own planner beats a strawman is worth less than no table.
+    #
+    # This changes the day a towed cart or a trailer is added, because then
+    # the combination really does have a minimum radius. Recorded in the ADR.
+    #
+    # THE VEHICLE PLANS ONLY ON FLOOR IT HAS SURVEYED, and every candidate
+    # below sets allow_unknown: false. This was tried both ways and the
+    # evidence is worth keeping, because each setting fails in a way that
+    # looks like something else.
+    #
+    # With unknown floor allowed, the planner routes into space it knows
+    # nothing about. That works until the gap it chose turns out to be
+    # narrower than the vehicle, and by the time the scan reveals the walls
+    # the vehicle is already inside. Measured: it drove itself to a spot with
+    # 0.400 m of clearance against an inscribed radius of 0.501 m, where every
+    # candidate trajectory is in collision, so the controller correctly
+    # commanded zero and it sat there for four consecutive survey rounds while
+    # the planner cheerfully produced a fresh path every second.
+    #
+    # With unknown floor forbidden it appeared to fail worse, refusing every
+    # goal. That turned out not to be this setting's fault at all: the survey
+    # tool was offering goals reachable only through gaps the vehicle does not
+    # fit through, because its reachability search walked free cells rather
+    # than cells with the vehicle's clearance. With that fixed, the goals
+    # offered are ones the planner can genuinely reach.
+    #
+    # So: false. A vehicle that shares a floor with people should not drive
+    # into a space on the assumption that it is empty, and the survey grows
+    # the map perfectly well by driving to the edge of what it already knows.
     GridBased:
-      # SmacPlanner2D, NOT Hybrid-A*.
-      #
-      # Hybrid-A* is the more impressive-sounding choice and it is the WRONG one
-      # here. It plans in x, y, heading under a minimum turning radius, which is
-      # what an Ackermann vehicle needs. This is a differential drive: it turns
-      # on the spot. Imposing a turning radius it does not have would forbid
-      # legal manoeuvres, most obviously the spot turn the 950 mm corner
-      # requirement depends on, and would produce longer paths to no benefit.
-      #
-      # This changes the day a towed cart or a trailer is added, because then
-      # the combination really does have a minimum radius. Recorded in the ADR.
-      plugin: "nav2_smac_planner::SmacPlanner2D"
-      tolerance: 0.25
-      downsample_costmap: false
-      # THE VEHICLE PLANS ONLY ON FLOOR IT HAS SURVEYED.
-      #
-      # This was tried both ways and the evidence is worth keeping, because
-      # each setting fails in a way that looks like something else.
-      #
-      # With unknown floor allowed, the planner routes into space it knows
-      # nothing about. That works until the gap it chose turns out to be
-      # narrower than the vehicle, and by the time the scan reveals the walls
-      # the vehicle is already inside. Measured: it drove itself to a spot with
-      # 0.400 m of clearance against an inscribed radius of 0.501 m, where
-      # every candidate trajectory is in collision, so the controller correctly
-      # commanded zero and it sat there for four consecutive survey rounds
-      # while the planner cheerfully produced a fresh path every second.
-      #
-      # With unknown floor forbidden it appeared to fail worse, refusing every
-      # goal. That turned out not to be this setting's fault at all: the survey
-      # tool was offering goals reachable only through gaps the vehicle does
-      # not fit through, because its reachability search walked free cells
-      # rather than cells with the vehicle's clearance. With that fixed, the
-      # goals offered are ones the planner can genuinely reach.
-      #
-      # So: false. A vehicle that shares a floor with people should not drive
-      # into a space on the assumption that it is empty, and the survey grows
-      # the map perfectly well by driving to the edge of what it already knows.
-      allow_unknown: false
-      max_iterations: 1000000
-      max_on_approach_iterations: 1000
-      max_planning_time: 2.0
-      cost_travel_multiplier: 2.0    # bias away from walls even when the direct
-                                     # line is legal, so the vehicle drives down
-                                     # the middle of an aisle like a person would
-      use_final_approach_orientation: false
-      smoother:
-        max_iterations: 1000
-        w_smooth: 0.3
-        w_data: 0.2
-        tolerance: 1.0e-10
+${planner_block}
 
 smoother_server:
   ros__parameters:
