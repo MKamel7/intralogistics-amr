@@ -172,3 +172,16 @@ def test_teardown_spares_every_ancestor_not_just_the_parent():
     t = stop_all_text()
     assert 'ANCESTORS' in t
     assert '/proc/$_p/stat' in t, 'ancestry must be walked, not assumed'
+
+
+def test_there_is_a_process_check_that_does_not_count_itself():
+    """`pgrep -f run_stack` matches the shell asking the question.
+
+    That has produced a wrong answer three times in one session: the simulator
+    guard counted 1 on a clean machine, a teardown killed the shell about to
+    launch an experiment, and a pre-launch check reported an experiment alive
+    when none was, seconds before a launch that collided with a real one.
+    """
+    t = (REPO / 'tools' / 'whats_running.sh').read_text()
+    assert 'ANC' in t, 'it must exclude its own ancestry rather than a pattern'
+    assert 'whats_running' in t, 'and exclude itself by name too'
