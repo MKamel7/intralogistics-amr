@@ -3152,3 +3152,34 @@ assert its way out of.
 The MiR250 keeps 0.060, which is its own measured figure. The two platforms
 differ by 800 by 580 mm against 590 by 559 mm, and the whole reason this
 mattered is that one vehicle's number was carried onto the other.
+
+### V-46 continued: what the corrected margin bought
+
+Measured on the same track, same scenario, mission only on an existing map so
+the survey is not a variable:
+
+| | margin 0.060 (V-43) | margin 0.032 |
+|---|---|---|
+| contacts | **6** | **0** |
+| closest approach | **-0.415 m**, inside the footprint | **+0.022 m**, clear |
+| cycles completed | 1 of 3 | **3 of 3** |
+| protective stops | about 0 to 2 per cycle | about 36 per cycle |
+| held up by safety | 0 s | **4 s per cycle, 2 percent** |
+
+The twenty five fold rise in protective stops looked like a regression and is
+the fix working. The vehicle previously drove past obstacles three to six
+centimetres from its body without seeing them, which is precisely what V-36's
+89 mm approach and V-43's six contacts were. It now stops for them.
+
+**The interpretation was held until the contact number arrived**, because the
+same evidence supports both readings and picking the flattering one is the
+mistake V-38 already made, when 0 protective stops was reported as a clean run
+and actually meant the vehicle was not looking.
+
+The trade is now explicit rather than argued: **eliminating contact costs 2
+percent of cycle time.** That is a figure a safety assessor can evaluate, which
+"the fields are correctly sized" is not.
+
+The probe's own caveat stands and is worth repeating: the pedestrians here
+carry no collision geometry, so zero contacts is evidence the stack kept clear,
+not evidence that anything would have stopped it if the stack had not.

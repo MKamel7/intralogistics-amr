@@ -112,6 +112,64 @@ def footprint_param(half_x, half_y):
     return '"[' + ', '.join(f'[{x:.4f}, {y:.4f}]' for x, y in pts) + ']"'
 
 
+# ---- planner variants, for the comparison in docs -------------------------
+#
+# THREE CANDIDATES, AND ONE DELIBERATE OMISSION.
+#
+# Hybrid-A* is not here. It plans in x, y and heading under a minimum turning
+# radius, which is what an Ackermann vehicle needs and what a differential
+# drive does not have. Including it would produce a table where the project's
+# own planner wins against a strawman, and a comparison you have rigged is
+# worth less than no comparison.
+#
+# The three below all plan on a 2D costmap for a vehicle that turns on the
+# spot, so the comparison is between things that could each legitimately be
+# chosen for this machine.
+PLANNERS = {
+    'smac2d': {
+        'plugin': 'nav2_smac_planner::SmacPlanner2D',
+        'note': 'A* on the costmap with a cost aware travel multiplier',
+        'extra': """      downsample_costmap: false
+      allow_unknown: false
+      max_iterations: 1000000
+      max_on_approach_iterations: 1000
+      max_planning_time: 2.0
+      cost_travel_multiplier: 2.0
+      use_final_approach_orientation: false
+      smoother:
+        max_iterations: 1000
+        w_smooth: 0.3
+        w_data: 0.2
+        tolerance: 1.0e-10""",
+    },
+    'navfn': {
+        'plugin': 'nav2_navfn_planner::NavfnPlanner',
+        'note': 'Dijkstra on the costmap, the long standing ROS default',
+        'extra': """      use_astar: false
+      allow_unknown: false""",
+    },
+    'thetastar': {
+        'plugin': 'nav2_theta_star_planner::ThetaStarPlanner',
+        'note': 'any angle A*, fewer waypoints and straighter diagonals',
+        'extra': """      how_many_corners: 8
+      w_euc_cost: 1.0
+      w_traversal_cost: 2.0
+      allow_unknown: false""",
+    },
+}
+
+
+def planner_block(name):
+    """The GridBased body for one planner, as YAML at the right indent."""
+    if name not in PLANNERS:
+        raise SystemExit(f'unknown planner {name}; choose from {sorted(PLANNERS)}')
+    p = PLANNERS[name]
+    return (f'      # {p["note"]}\n'
+            f'      plugin: "{p["plugin"]}"\n'
+            f'      tolerance: 0.25\n'
+            f'{p["extra"]}')
+
+
 def derive(spec, platform):
     """Every platform-dependent value in the Nav2 configuration.
 
