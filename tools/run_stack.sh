@@ -139,10 +139,16 @@ if [ "$TRACK_WORLD" = true ]; then
   # slow departure is its own fault rather than the building's.
   SPAWN_X=2.5
   SPAWN_Y=6.0
-  KEEPOUT=keepout_mask_test_track
+  # PER PLATFORM, like everything else derived from the track geometry. Both
+  # of these were single files written by whichever platform was generated
+  # last, and both differ between platforms: the truth map because the
+  # building depth is derived from the vehicle's turning width, the keepout
+  # mask because it is sized to the same building. Sixth and seventh instance
+  # of that shape, after controllers.yaml and track_people.yaml.
+  KEEPOUT=keepout_mask_test_track.$PLATFORM
   STATIONS="$REPO/src/amr_mission/config/stations.test_track.$PLATFORM.yaml"
   SCENARIO=track_people.$PLATFORM
-  TRUTH_MAP=test_track_truth
+  TRUTH_MAP=test_track_truth.$PLATFORM
   # THE SPAWN COMES FROM THE GENERATED STATIONS FILE, not from a number typed
   # here. Station coordinates are in the map frame, whose origin SLAM puts at
   # the vehicle's start pose, so spawning anywhere else silently shifts every

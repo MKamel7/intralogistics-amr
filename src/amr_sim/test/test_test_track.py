@@ -565,3 +565,38 @@ def test_the_crossing_actually_crosses():
     assert span > 0.8, (
         f'the crossing spans only {span:.2f} m, which does not carry a person '
         f'across the vehicle path')
+
+
+def test_the_truth_map_and_keepout_mask_are_per_platform():
+    """Both are derived from the building, and the building is derived from
+    the vehicle's turning width, so both differ between platforms.
+
+    They were single unsuffixed files, so whichever platform was generated
+    last decided the ground truth oracle and the keepout zones for both.
+    Measured: the two platforms produce different bytes for each. Sixth and
+    seventh instance of that shape, after controllers.yaml and
+    track_people.yaml.
+    """
+    for stray in (PKG / 'maps' / 'test_track_truth.yaml',
+                  PKG.parents[0] / 'amr_navigation' / 'maps'
+                  / 'keepout_mask_test_track.yaml'):
+        assert not stray.exists(), (
+            f'{stray.name} is back; it is generated per platform now')
+    for p in SPEC_DIR.glob('*.yaml'):
+        assert (PKG / 'maps' / f'test_track_truth.{p.stem}.yaml').exists(), \
+            f'no truth map for {p.stem}'
+        assert (PKG.parents[0] / 'amr_navigation' / 'maps'
+                / f'keepout_mask_test_track.{p.stem}.yaml').exists(), \
+            f'no keepout mask for {p.stem}'
+
+
+def test_each_map_yaml_names_its_own_image():
+    """A yaml pointing at another platform's pgm would load the wrong geometry
+    silently, which is worse than a missing file."""
+    for p in SPEC_DIR.glob('*.yaml'):
+        for path in ((PKG / 'maps' / f'test_track_truth.{p.stem}.yaml'),
+                     (PKG.parents[0] / 'amr_navigation' / 'maps'
+                      / f'keepout_mask_test_track.{p.stem}.yaml')):
+            meta = yaml.safe_load(path.read_text())
+            assert p.stem in meta['image'], (
+                f'{path.name} points at {meta["image"]}, not its own platform')

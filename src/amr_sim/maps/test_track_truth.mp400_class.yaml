@@ -2,7 +2,7 @@
 # table as the world, so it cannot disagree with the geometry it
 # describes. MEASUREMENT ONLY: the ground truth map scores results and
 # must never reach the control path.
-image: test_track_truth.pgm
+image: test_track_truth.mp400_class.pgm
 resolution: 0.05
 origin:
 - 0.0

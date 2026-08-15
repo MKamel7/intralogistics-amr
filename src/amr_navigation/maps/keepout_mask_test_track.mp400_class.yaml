@@ -4,7 +4,7 @@
 # rather than the filter being disabled, because a costmap that
 # declares a filter and never receives its mask is the silent failure
 # recorded in V-25.
-image: keepout_mask_test_track.pgm
+image: keepout_mask_test_track.mp400_class.pgm
 resolution: 0.05
 origin:
 - -6.0
