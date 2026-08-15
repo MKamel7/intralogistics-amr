@@ -326,7 +326,32 @@ case "$TASK" in
         ${STATIONS:+-p stations_file:="$STATIONS"} \
         > "$RUN/survey.log" 2>&1
     say "survey exited $?"
-    sleep 5
+    # WAIT FOR THE CONTROLLER TO GO IDLE, do not sleep a guessed interval.
+    #
+    # The survey's last navigation goal is still unwinding when the survey
+    # process exits, and a mission goal issued into that window is refused:
+    #
+    #   Timed out while waiting for action server to acknowledge goal request
+    #   for follow_path
+    #
+    # Measured on an MiR250 run: that fired 8 seconds into the mission, on the
+    # very first goal, and cost cycle 1. It was NOT load. The worst control
+    # loop iteration in the whole run was 180 ms against a 1000 ms timeout and
+    # nothing exceeded 1000 ms at all, so the controller was not busy, it was
+    # mid transition.
+    #
+    # Idle means no velocity command for three consecutive seconds.
+    quiet=0
+    for _ in $(seq 1 40); do
+      if timeout 2 ros2 topic echo /cmd_vel_nav --once >/dev/null 2>&1; then
+        quiet=0
+      else
+        quiet=$((quiet + 1))
+        [ "$quiet" -ge 3 ] && break
+      fi
+      sleep 1
+    done
+    say "controller idle after survey (${quiet}s quiet)"
     ros2 launch amr_mission transport.launch.py cycles:=$CYCLES \
         platform:=$PLATFORM stations_file:="$STATIONS" > "$RUN/mission.log" 2>&1
     say "mission exited $?" ;;

@@ -185,3 +185,18 @@ def test_there_is_a_process_check_that_does_not_count_itself():
     t = (REPO / 'tools' / 'whats_running.sh').read_text()
     assert 'ANC' in t, 'it must exclude its own ancestry rather than a pattern'
     assert 'whats_running' in t, 'and exclude itself by name too'
+
+
+def test_the_survey_to_mission_handoff_waits_for_idle_not_a_guess():
+    """The survey's last goal is still unwinding when the survey process
+    exits, and a mission goal issued into that window is refused with
+    "Timed out while waiting for action server to acknowledge goal request".
+
+    Measured on an MiR250 run: it fired 8 seconds into the mission on the very
+    first goal and cost cycle 1. It was not load. The worst control loop
+    iteration in that entire run was 180 ms against a 1000 ms timeout, and
+    nothing exceeded 1000 ms at all.
+    """
+    t = text()
+    assert 'controller idle after survey' in t
+    assert 'cmd_vel_nav' in t, 'idleness must be observed, not assumed'
