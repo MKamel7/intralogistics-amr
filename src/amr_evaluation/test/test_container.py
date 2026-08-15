@@ -80,7 +80,23 @@ def test_compose_does_not_pretend_to_offer_a_gui():
 def test_the_entrypoint_sources_the_workspace():
     t = (REPO / 'docker-entrypoint.sh').read_text()
     assert 'install/setup.bash' in t
-    assert 'set -euo pipefail' in t
+
+
+def test_set_u_is_lifted_across_the_ros_setup_scripts():
+    """They read variables they have not set.
+
+    With -u in force the first source aborts on "AMENT_TRACE_SETUP_FILES:
+    unbound variable" and the container exits before running anything.
+    tools/run_stack.sh documents this and lifts -u the same way; the
+    entrypoint was written fresh and reproduced the fault anyway, which is
+    what a trap documented in one file and not the other buys.
+    """
+    t = (REPO / 'docker-entrypoint.sh').read_text()
+    assert 'set -euo pipefail' not in t, (
+        '-u across the ROS sources aborts the container on startup')
+    i, j, k = t.find('set +u'), t.find('/opt/ros/jazzy/setup.bash'), t.find('set -u\n')
+    assert -1 < i < j < k, 'lift -u before the sources and restore it after'
+    assert 'set -eo pipefail' in t, 'the rest of the script stays strict'
 
 
 def test_build_artefacts_are_not_copied_into_the_image():
