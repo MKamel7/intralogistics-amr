@@ -288,7 +288,18 @@ def test_the_planner_is_not_given_a_turning_radius_it_does_not_have(cfg):
     quietly refusing manoeuvres the vehicle can make.
     """
     planner = cfg['planner_server']['ros__parameters']['GridBased']
-    assert planner['plugin'] == 'nav2_smac_planner::SmacPlanner2D'
+    # THE PROPERTY, NOT THE PRODUCT. This asserted the plugin was exactly
+    # SmacPlanner2D, which pinned a commissioning choice into a test whose
+    # stated intent is that the vehicle is never given a constraint it does
+    # not have. The planner became selectable for the comparison table and
+    # this failed on a perfectly legal configuration.
+    forbidden = ('Hybrid', 'Lattice')          # both plan under a turning radius
+    assert not any(f in planner['plugin'] for f in forbidden), (
+        f"{planner['plugin']} plans under a minimum turning radius, which a "
+        f"differential drive does not have; it would forbid the spot turn the "
+        f"corner requirement depends on")
+    assert 'minimum_turning_radius' not in planner, (
+        'a differential drive has no minimum turning radius')
     assert _mppi(cfg)['motion_model'] == 'DiffDrive'
     assert _mppi(cfg)['vy_max'] == 0.0
 

@@ -200,3 +200,31 @@ def test_the_survey_to_mission_handoff_waits_for_idle_not_a_guess():
     t = text()
     assert 'controller idle after survey' in t
     assert 'cmd_vel_nav' in t, 'idleness must be observed, not assumed'
+
+
+def test_there_is_one_shared_way_to_source_ros():
+    """The unbound-variable trap has bitten three separate scripts.
+
+    ROS's setup scripts read variables they have not set, so under `set -u`
+    the first source aborts on AMENT_TRACE_SETUP_FILES and whatever was about
+    to run does not. It was fixed in run_stack.sh, then reproduced in
+    docker-entrypoint.sh, then reproduced again in a planner comparison that
+    silently produced nothing.
+
+    Each fix carried a comment explaining the trap, and each time the next
+    script written from scratch hit it anyway. A lesson recorded in one file
+    is not available to the next file, so the dance lives in tools/ros_env.sh
+    and callers source that.
+    """
+    helper = REPO / 'tools' / 'ros_env.sh'
+    assert helper.is_file(), 'tools/ros_env.sh is the one place that lifts -u'
+    t = helper.read_text()
+    assert 'set +u' in t and 'AMENT_TRACE_SETUP_FILES' in t
+    assert 'BASH_SOURCE' in t, 'it must locate the workspace relative to itself'
+
+
+def test_the_helper_restores_strictness_it_did_not_set():
+    """A helper that leaves -u on in a script that never asked for it changes
+    the caller's semantics, which is its own kind of surprise."""
+    t = (REPO / 'tools' / 'ros_env.sh').read_text()
+    assert '_ros_env_had_u' in t, 'it must remember whether -u was on'
