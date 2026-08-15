@@ -3082,3 +3082,73 @@ platform you tested is a fix you have not tested.** The abstraction that
 generates configuration per platform is exactly what makes a change look
 uniform when its effect is not, because the same rule meets a different
 vehicle at the other end of it.
+
+---
+
+## V-46. The self filter margin was another platform's number, and it cost the fields
+
+**The blocking claim behind V-39 was measured and turned out to be half right.**
+
+V-39 established that the scan merger's self filter blanks a region larger than
+the vehicle, leaving the forward protective fields **5.1 mm** of lateral
+coverage. Two attempts to fix it by resizing fields both made things worse:
+V-42 trapped the MP-400 against a rack, V-45 dropped the MiR250 from 3 of 3 to
+2 of 9. The remaining lever was `self_filter_margin`, and the objection to
+shrinking it was that the vehicle would start detecting its own structure.
+
+**Nobody had measured that on this platform.** Its own provenance said so:
+
+    MEASURED on the MiR250 build at 40 mm ... and carried here at 0.060 m
+    pending its own measurement on this platform ... the figure has not been
+    observed on this vehicle.
+
+### What the measurement said
+
+224 samples over 90 s, vehicle stationary, raw per-scanner returns transformed
+into the base frame:
+
+| | |
+|---|---|
+| self returns per scanner | **exactly 25**, every sample |
+| worst return beyond the chassis envelope | **0.0030 m** |
+| configured margin | 0.060 m, **20 times larger** |
+
+On that alone the margin could have gone to 0.010 m, taking the lateral band
+from 5.1 mm to 55.1 mm and closing V-39 outright.
+
+### Why 0.010 would have been wrong, and what caught it
+
+`test_self_filter_margin_covers_the_scanner_pods` failed immediately. The
+scanner pods are boxes rotated 45 degrees at the corners and they stand
+**28.7 mm proud of the chassis envelope**. The simulated lidar does not return
+hits on its own housing, so the measurement saw 3 mm where a real vehicle would
+see 29.
+
+That test's docstring records the failure it exists to prevent: when the margin
+was smaller than the pods, those returns survived the filter, landed inside the
+protective field, and the vehicle held a permanent protective stop against its
+own corners without moving once.
+
+**A measurement taken in simulation is a measurement of the simulation.** The
+geometry is the binding constraint and it is not observable in the place the
+observation was made.
+
+### Where it landed
+
+`self_filter_margin: 0.032` for the MP-400: the 28.7 mm the pods stand proud,
+plus the 3.0 mm of further self observation actually measured.
+
+| | margin | blind zone y | forward field lateral band |
+|---|---|---|---|
+| before | 0.060 | 0.3395 | **5.1 mm** |
+| after | 0.032 | 0.3115 | **33.1 mm** |
+
+**A 6.5 times improvement, and V-39 is still open.** 33.1 mm is short of the
+50 mm a field needs for a person entering it to produce the two returns
+`min_points` requires. Closing it properly needs a smaller pod or a different
+mounting, which is a hardware change and not something a configuration file can
+assert its way out of.
+
+The MiR250 keeps 0.060, which is its own measured figure. The two platforms
+differ by 800 by 580 mm against 590 by 559 mm, and the whole reason this
+mattered is that one vehicle's number was carried onto the other.
