@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = 'amr_fleet'
+package_name = 'amr_vda5050'
 
 setup(
     name=package_name,
@@ -19,7 +19,7 @@ setup(
     license='Apache-2.0',
     entry_points={
         'console_scripts': [
-            'vda5050_bridge = amr_fleet.vda5050_bridge:main',
+            'vda5050_bridge = amr_vda5050.vda5050_bridge:main',
         ],
     },
 )

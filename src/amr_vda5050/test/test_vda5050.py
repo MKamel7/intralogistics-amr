@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from amr_fleet import vda5050 as v  # noqa: E402
+from amr_vda5050 import vda5050 as v  # noqa: E402
 
 
 @pytest.fixture
@@ -136,7 +136,7 @@ def test_messages_serialise_compactly(header):
 # The node needs ROS and a broker, so what is asserted here is the set of
 # properties that were got wrong once and would be silent if got wrong again.
 
-BRIDGE = Path(__file__).resolve().parents[1] / 'amr_fleet' / 'vda5050_bridge.py'
+BRIDGE = Path(__file__).resolve().parents[1] / 'amr_vda5050' / 'vda5050_bridge.py'
 
 
 def bridge():

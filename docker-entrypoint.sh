@@ -11,7 +11,7 @@ set -euo pipefail
 
 source /opt/ros/jazzy/setup.bash
 source /ws/install/setup.bash
-cd /ws/src/intralogistics-amr-fleet
+cd /ws/src/intralogistics-amr
 
 if [ "${1:-}" = "pytest" ]; then
   shift

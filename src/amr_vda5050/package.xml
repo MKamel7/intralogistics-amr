@@ -1,11 +1,16 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>amr_fleet</name>
+  <name>amr_vda5050</name>
   <version>0.1.0</version>
   <description>
-    VDA 5050 vehicle interface. The protocol bookkeeping is pure data in
-    vda5050.py and is tested without a broker; vda5050_bridge.py owns the
-    sockets and the action client and nothing else.
+    VDA 5050 2.0 vehicle interface over MQTT: the side a master control
+    integrates against. The protocol bookkeeping is pure data in vda5050.py
+    and is tested without a broker; vda5050_bridge.py owns the sockets and the
+    Nav2 action client and nothing else.
+
+    This is the VEHICLE half only. There is deliberately no dispatcher and no
+    multi robot layer: this project runs one vehicle, and a fleet component
+    with one robot behind it would be a claim without a measurement.
   </description>
   <maintainer email="mkamel860@gmail.com">Mohamed Kamel</maintainer>
   <license>Apache-2.0</license>

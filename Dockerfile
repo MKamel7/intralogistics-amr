@@ -59,16 +59,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /ws
-COPY . /ws/src/intralogistics-amr-fleet
+COPY . /ws/src/intralogistics-amr
 
 # Build. --symlink-install matches how the project is developed, so a
 # generator run inside the container updates the installed config exactly as
 # it does on a workstation, which is the behaviour half the tests assume.
 RUN source /opt/ros/jazzy/setup.bash \
     && cd /ws \
-    && ln -s src/intralogistics-amr-fleet/tools tools \
-    && ln -s src/intralogistics-amr-fleet/demo.sh demo.sh \
-    && colcon build --symlink-install --base-paths src/intralogistics-amr-fleet
+    && ln -s src/intralogistics-amr/tools tools \
+    && ln -s src/intralogistics-amr/demo.sh demo.sh \
+    && colcon build --symlink-install --base-paths src/intralogistics-amr
 
 # HEADLESS BY DEFAULT. Without this Gazebo tries to open a render window and
 # fails in a way that reads as a simulation fault rather than a missing

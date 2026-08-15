@@ -291,8 +291,8 @@ refuses to measure an unhealthy stack.
 ## Build
 
 ```bash
-git clone https://github.com/MKamel7/intralogistics-amr-fleet.git
-cd intralogistics-amr-fleet
+git clone https://github.com/MKamel7/intralogistics-amr.git
+cd intralogistics-amr
 colcon build --symlink-install
 source install/setup.bash
 ```
