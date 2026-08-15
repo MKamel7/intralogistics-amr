@@ -98,3 +98,32 @@ def test_the_runner_is_told_which_stations_to_cover():
     rs = (PKG.parents[1] / 'tools' / 'run_stack.sh').read_text()
     assert rs.count('-p stations_file:=') >= 2, (
         'both survey invocations in run_stack.sh must pass the stations file')
+
+
+def test_a_leg_shorter_than_the_vehicle_ends_the_survey():
+    """The frontier search returned a goal 0.1 m away and kept returning it.
+
+    Rounds 22, 23 and 24 were each "driving 0.1 m through free space" from the
+    same pose, each arrived instantly, each added 0.0 m2. The survey burned to
+    max_rounds learning nothing and then reported success on 246.3 m2 of a
+    544 m2 building.
+    """
+    t = text()
+    assert 'min_leg' in t
+    assert 'under the' in t and 'minimum leg' in t
+
+
+def test_a_survey_that_missed_a_station_returns_failure():
+    """The station check previously guarded only the quiet rounds exit. Ending
+    any other way fell through to a success message, and the mission that
+    followed failed every cycle with a goal outside bounds, which is the
+    survey's fault reported as the vehicle's."""
+    t = text()
+    assert 'SURVEY FAILED' in t
+    assert 'return 1' in t
+    # Match the CODE line, not the phrase: the comment above it quotes the
+    # old success message while explaining the bug, and an earlier version of
+    # this assertion matched that comment and failed on a correct fix.
+    i = t.find('SURVEY FAILED')
+    j = t.find("self.get_logger().info(f'survey finished")
+    assert -1 < i < j, 'the failure path must precede and pre-empt the success line'

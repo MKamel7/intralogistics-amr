@@ -107,6 +107,17 @@ class SurveyRunner(Node):
         self.quiet_rounds_needed = self.declare_parameter(
             'quiet_rounds_needed', 2).value
         self.quiet_rounds = 0
+        # A SURVEY LEG SHORTER THAN THE VEHICLE IS NOT A LEG.
+        #
+        # The frontier search returned a goal 0.1 m away and did so on every
+        # remaining round: rounds 22, 23 and 24 were all "driving 0.1 m
+        # through free space" from the same pose, each arrived instantly, each
+        # added 0.0 m2. The survey burned to max_rounds learning nothing and
+        # then reported success on 246.3 m2 of a 544 m2 building.
+        #
+        # Below this, treat it as having nowhere left to go and say so, rather
+        # than spending rounds proving it.
+        self.min_leg = self.declare_parameter('min_leg_m', 1.0).value
         self.goal_timeout = self.declare_parameter('goal_timeout_s', 180.0).value
 
         self.map = None
@@ -329,6 +340,15 @@ class SurveyRunner(Node):
                 self.get_logger().info('no reachable goal with clearance, done')
                 break
             x, y, dist = target
+            if dist < self.min_leg:
+                # Nowhere left worth driving to. Rounds 22, 23 and 24 of one
+                # survey were each "driving 0.1 m" from the same pose, arriving
+                # instantly and adding 0.0 m2, until max_rounds ran out.
+                self.get_logger().info(
+                    f'best remaining goal is {dist:.2f} m away, under the '
+                    f'{self.min_leg:.2f} m minimum leg: nothing further is '
+                    f'reachable, done')
+                break
             heading = math.atan2(y - here[1], x - here[0])
             self.get_logger().info(
                 f'round {rnd}: at ({here[0]:.2f}, {here[1]:.2f}), driving '
@@ -370,6 +390,25 @@ class SurveyRunner(Node):
                         f'station is on the map, the building is surveyed')
                     break
 
+        # A SURVEY THAT DID NOT COVER THE STATIONS HAS FAILED, and must say
+        # so with an exit code rather than a warning.
+        #
+        # The station check previously guarded only the quiet rounds exit. When
+        # the loop ended any other way, on max_rounds or on running out of
+        # frontiers, it fell through to this line and printed success. Measured:
+        # it warned "1 station(s) are still off it: dispatch" three times and
+        # then reported "survey finished, 246.3 m2 mapped". The mission that
+        # followed failed every cycle with "Goal Coordinates of(35.000000,
+        # 0.975000) was outside bounds", which is the survey's fault reported
+        # as the vehicle's.
+        missing = self.stations_off_map()
+        if missing:
+            self.get_logger().error(
+                f'SURVEY FAILED: {len(missing)} station(s) never reached the '
+                f'map ({", ".join(missing)}) after {rnd} round(s), '
+                f'{self.free_area():.1f} m2 mapped. A mission run against this '
+                f'map will fail every goal it cannot plan to.')
+            return 1
         self.get_logger().info(f'survey finished, {self.free_area():.1f} m2 mapped')
         return 0
 
