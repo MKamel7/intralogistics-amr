@@ -2,9 +2,15 @@
 
 ## Read this first
 
-**334 tests pass, 2 strict xfails, ruff is clean, `gz sdf` validates both
-worlds, and the container builds from a clean base and runs the same suite to
-the same result.** 51 numbered findings in `docs/validation.md`.
+**471 tests pass under `colcon test` with 5 documented skips, ruff is clean,
+`gz sdf` validates both worlds, and the container builds from a clean base and
+runs the same suite to the same result.** 51 numbered findings in
+`docs/validation.md`.
+
+That test figure was 289 two days ago and the suite has not grown by 182
+tests. Eleven files across three packages were never registered with the
+build, and one package was the wrong build type and reported FAILED on every
+build while its tests passed under a direct run. See V-50.
 
 The project is **one vehicle**, the MP-400 class, and it says so everywhere.
 The repository was renamed from `intralogistics-amr-fleet` to
@@ -36,23 +42,33 @@ control path that is occasionally starved rather than one that is slow, and
 sizing a field on that tail would add roughly 0.6 m to it. V-42 and V-45 are
 what happens when a field is enlarged without measuring the cost.
 
-**2. V-39 is closed, and two attempts to close it first made things worse.** The scan
-merger's self filter blanks a region larger than the vehicle, so the forward
-protective fields had 5.1 mm of lateral coverage. Enlarging the fields trapped
-the MP-400 against a rack (V-42) and dropped the MiR250 from 3 of 3 to 2 of 9
-(V-45); both were reverted. Measuring the filter margin instead got it from
-5.1 mm to 33.1 mm and took contacts from six to zero (V-46). Shaping the filter
+**2. V-39 is closed, and two attempts to close it first made things worse.**
+The scan merger's self filter used to blank a region larger than the vehicle,
+which left the forward protective fields 5.1 mm of lateral coverage.
+Enlarging the fields trapped the MP-400 against a rack (V-42) and dropped the
+MiR250 from 3 of 3 to 2 of 9 (V-45); both were reverted. Measuring the filter
+margin instead got it from 5.1 mm to 33.1 mm and took contacts from six to
+zero (V-46). Shaping the filter
 to the vehicle rather than to its bounding box closed it at 55.1 mm, with no
 field resized (V-49). It had been called a hardware limit for three findings,
 because every attempt asked how LARGE the margin should be and none asked what
-SHAPE the filter was.
+SHAPE the filter was. Measured against a control arm on the same protocol,
+the deepest a person reached inside the footprint went from -0.466 m to
+-0.100 m, at a cost of about five percent of cycle time.
 
-**3. Nothing here has ever hit a person, and that claim is weaker than it
-sounds.** The pedestrians carry no collision geometry, deliberately, so a
-person cannot be struck in this simulation. Contact is therefore measured
-geometrically by `tools/measure_contacts.py` against the ground truth oracle,
-and zero contacts is evidence the stack kept clear, not evidence that anything
-would have stopped it.
+**3. The vehicle has never driven into anybody, and that claim is weaker than
+it sounds.** The pedestrians carry no collision geometry, deliberately, so a
+person cannot be struck in this simulation. Contact is measured geometrically
+by `tools/measure_contacts.py` against the ground truth oracle, and zero is
+evidence the stack kept clear rather than evidence that anything would have
+stopped it.
+
+The wording matters and used to be wrong. The probe called any contact above
+0.02 m/s one the vehicle drove into, which fired on a vehicle creeping at 0.03
+while a person walked into it at 0.91. Both velocities are now projected onto
+the line between the two bodies, so the closing rate splits into a share each.
+Every contact across both V-49 arms, four in 248 000 samples, was a person
+walking into a stationary vehicle. See V-51.
 
 ### The MiR250
 
