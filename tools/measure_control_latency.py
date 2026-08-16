@@ -110,6 +110,13 @@ from rclpy.qos import QoSDurabilityPolicy, QoSHistoryPolicy, QoSProfile, QoSReli
 from nav2_msgs.msg import CollisionMonitorState
 from sensor_msgs.msg import LaserScan
 
+# The simulated clock advances one physics step at a time, and every world
+# here sets `max_step_size` to 0.004. Nothing measured against that clock can
+# resolve finer, so an interval of 0.0 means "inside one step", not "zero".
+# Reporting it as zero would be a precision this probe does not have, and the
+# control half of every sample in the first good run came out at exactly 0.0.
+SIM_STEP = 0.004
+
 SENSOR_QOS = QoSProfile(
     reliability=QoSReliabilityPolicy.BEST_EFFORT,
     history=QoSHistoryPolicy.KEEP_LAST,
@@ -331,6 +338,12 @@ class LatencyProbe(Node):
         print('    measured at this node on reception, so these do NOT sum to')
         print('    the totals above, which are generation stamp to generation')
         print('    stamp. The split is for attribution, the total is the figure.')
+        below = sum(1 for c in control if c < SIM_STEP)
+        if below:
+            print(f'    {below} of {len(control)} control halves are under one '
+                  f'{SIM_STEP * 1000:.0f} ms physics step, which is the')
+            print('    resolution of the simulated clock. Under, not zero: the')
+            print('    clock cannot say which.')
         print(f'    sensor half   p50 {statistics.median(sensor) * 1000:7.1f} ms   '
               f'max {max(sensor) * 1000:7.1f} ms')
         print(f'    control half  p50 {statistics.median(control) * 1000:7.1f} ms   '

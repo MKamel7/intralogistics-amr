@@ -120,3 +120,37 @@ def test_the_total_still_comes_from_message_stamps():
     text = PROBE.read_text()
     assert 'dt = stamp_s(msg.header) - self.pending' in text, (
         'the headline latency is no longer a message stamp difference')
+
+
+def test_the_probe_admits_the_clocks_resolution():
+    """A control half of 0.0 ms is not a measurement of zero.
+
+    Every world here sets max_step_size to 0.004, and the simulated clock
+    advances one step at a time. Every interval in the first good run was a
+    multiple of 4 ms and every control half was exactly 0.0, which means the
+    command followed the decision inside one physics step. Reporting that as
+    zero claims a precision the probe does not have.
+    """
+    text = PROBE.read_text()
+    assert 'SIM_STEP = 0.004' in text
+    assert 'Under, not zero' in text, (
+        'the report presents sub-step intervals as zero, which is a precision '
+        'claim the simulated clock does not support')
+
+
+def test_the_step_matches_the_worlds():
+    """SIM_STEP is a copy of a number that lives in the world files.
+
+    A copy that nobody checks is how the MiR250 self filter margin ended up on
+    the MP-400. This fails if the worlds ever change step.
+    """
+    import re
+    worlds = sorted((PROBE.parents[1] / 'src' / 'amr_sim' / 'worlds').glob('*.sdf'))
+    assert worlds, 'no worlds found; the path in this test has rotted'
+    steps = set()
+    for w in worlds:
+        steps.update(re.findall(r'<max_step_size>([\d.]+)</max_step_size>',
+                                w.read_text()))
+    assert steps == {'0.004'}, (
+        f'worlds declare max_step_size {sorted(steps)}, but the probe assumes '
+        f'0.004; a split reported at the wrong resolution reads as precision')
