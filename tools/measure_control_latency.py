@@ -55,6 +55,38 @@ This prints p50, p95 and the maximum, and says plainly that the p95 is the
 candidate rather than writing it anywhere itself. A tool that edited the
 platform spec from its own measurement would be one bad run away from shrinking
 every protective field in the project.
+
+WHERE THE TAIL COMES FROM, WHICH IS THE POINT OF THE SPLIT
+
+V-44 measured p50 68 ms against p99 1260 ms and called it a control path that
+is occasionally starved rather than one that is slow. That reading was a
+hypothesis and it was recorded as one. Two candidates were named: the executor
+contention that produced 380 ms MPPI iterations in V-37, and the scan merger
+lag that produced transient source rejections in V-41. Nothing distinguished
+them, and no protective field can honestly be sized on an unattributed tail.
+
+So each sample is now split at the collision monitor, which is the one point in
+the chain that announces itself:
+
+    sensor half    scan stamp        -> monitor says STOP
+    control half   monitor says STOP -> the command reaches the wheels
+
+A tail in the SENSOR half is the scan pipeline: transport, the merge, the
+monitor's own cycle. A tail in the CONTROL half is downstream of a decision
+that had already been made, which is the executor. They are different faults
+with different fixes and the total cannot tell them apart.
+
+Two more quantities go with each sample, because a stalled stream is the
+signature the halves are being read for:
+
+    scan gap    the longest interval between scans in the second before
+    cmd gap     the longest interval between commands in the second before
+
+The monitor state message carries no header, so the moment it "arrived" is the
+receive time on the simulated clock. That makes the split slightly pessimistic
+about the sensor half and slightly optimistic about the control half, by one
+executor wakeup. It is stated here rather than corrected for, because the
+effect is single-digit milliseconds and the tail being attributed is 1260.
 """
 
 import statistics
@@ -89,12 +121,20 @@ class LatencyProbe(Node):
 
         self.last_scan = None        # stamp of the most recent scan
         self.pending = None          # stamp of the scan that triggered a stop
+        self.decided = None          # when the monitor announced that stop
         self.polygon = ''            # which field fired, for context
         self.stopping = False
         self.was_moving = False
         self.states_seen = 0
-        self.samples = []
+        self.samples = []            # total, kept for continuity with V-44
+        self.parts = []              # (total, sensor, control, scan_gap, cmd_gap)
         self.rejected = 0
+
+        # Arrival times, for the stall signature. One second of history is
+        # enough: the tail being attributed is on the order of a second, so a
+        # stall that explains a sample is inside this window by construction.
+        self.scan_arrivals = []
+        self.cmd_arrivals = []
 
         self.create_subscription(LaserScan, '/scan', self._scan, SENSOR_QOS)
         # nav2_msgs/CollisionMonitorState, NOT std_msgs/String. The first
@@ -112,8 +152,30 @@ class LatencyProbe(Node):
             f'measuring sensor to command latency for {self.duration:.0f} s. '
             f'Drive the vehicle somewhere people are.')
 
+    def _now(self):
+        return self.get_clock().now().nanoseconds * 1e-9
+
+    @staticmethod
+    def _widest_gap(arrivals, now):
+        """The longest interval between arrivals in the last second.
+
+        Zero when there are fewer than two, which reads as "no stall seen"
+        rather than as a stall of unknown size. A stream that stopped entirely
+        shows up as the gap to `now`, which is the case worth catching and the
+        one a pairwise diff over history alone would miss.
+        """
+        recent = [a for a in arrivals if now - a <= 1.0]
+        if not recent:
+            return 0.0
+        gaps = [b - a for a, b in zip(recent, recent[1:])]
+        gaps.append(now - recent[-1])
+        return max(gaps)
+
     def _scan(self, msg):
         self.last_scan = stamp_s(msg.header)
+        now = self._now()
+        self.scan_arrivals.append(now)
+        self.scan_arrivals = [a for a in self.scan_arrivals if now - a <= 2.0]
 
     def _state(self, msg):
         """The monitor announcing a protective stop starts the clock.
@@ -130,10 +192,15 @@ class LatencyProbe(Node):
         stopping = msg.action_type == CollisionMonitorState.STOP
         if stopping and not self.stopping and self.last_scan is not None:
             self.pending = self.last_scan
+            self.decided = self._now()
             self.polygon = msg.polygon_name
         self.stopping = stopping
 
     def _cmd(self, msg):
+        now = self._now()
+        self.cmd_arrivals.append(now)
+        self.cmd_arrivals = [a for a in self.cmd_arrivals if now - a <= 2.0]
+
         moving = abs(msg.twist.linear.x) > self.stop_eps
         # The falling edge only. A vehicle that was already stopped tells us
         # nothing about how fast the stack reacts.
@@ -141,9 +208,19 @@ class LatencyProbe(Node):
             dt = stamp_s(msg.header) - self.pending
             if 0.0 < dt < 2.0:
                 self.samples.append(dt)
+                # The split. `decided` is on the same clock as `now`, while
+                # `pending` is a message STAMP; both are the simulated clock,
+                # so the subtraction is meaningful.
+                sensor = max(0.0, self.decided - self.pending)
+                control = max(0.0, dt - sensor)
+                self.parts.append((
+                    dt, sensor, control,
+                    self._widest_gap(self.scan_arrivals, now),
+                    self._widest_gap(self.cmd_arrivals, now)))
                 self.get_logger().info(
                     f'  sample {len(self.samples)}: {dt * 1000:.1f} ms '
-                    f'({self.polygon or "field"})')
+                    f'= {sensor * 1000:.1f} sensor + {control * 1000:.1f} '
+                    f'control ({self.polygon or "field"})')
             else:
                 # Out of range means the pairing is wrong, not that the system
                 # is slow. Counted, never averaged in.
@@ -190,7 +267,52 @@ class LatencyProbe(Node):
         print('  half the time; a long tail means the fix is in the stack.')
         if n < 20:
             print(f'  {n} samples is thin. Prefer 20 or more before changing a spec.')
+        self._attribute(s, p50)
         print('=' * 70)
+
+    def _attribute(self, s, p50):
+        """Say where the tail is, or say that this run did not produce one.
+
+        The whole reason for the split. A total says the stack was slow; the
+        halves say which half, and that is the difference between a finding and
+        an observation.
+        """
+        if not self.parts:
+            return
+        # A tail sample is one at least four times the median. Arbitrary, and
+        # deliberately stated: what matters is that the threshold is fixed
+        # before the numbers are read, not that it is principled.
+        tail = [row for row in self.parts if row[0] >= 4.0 * p50]
+        print()
+        print(f'  ATTRIBUTION, over {len(self.parts)} split sample(s)')
+        sensor = [r[1] for r in self.parts]
+        control = [r[2] for r in self.parts]
+        print(f'    sensor half   p50 {statistics.median(sensor) * 1000:7.1f} ms   '
+              f'max {max(sensor) * 1000:7.1f} ms')
+        print(f'    control half  p50 {statistics.median(control) * 1000:7.1f} ms   '
+              f'max {max(control) * 1000:7.1f} ms')
+        if not tail:
+            print(f'    NO TAIL IN THIS RUN. No sample reached 4x the p50 of '
+                  f'{p50 * 1000:.0f} ms, so')
+            print('    there is nothing here to attribute. That is a result')
+            print('    about this run, not evidence the tail is gone.')
+            return
+        n_sensor = sum(1 for r in tail if r[1] > r[2])
+        print(f'    {len(tail)} sample(s) above 4x the p50 of {p50 * 1000:.0f} ms:')
+        print(f'      {n_sensor} dominated by the SENSOR half '
+              f'(scan transport, merge, monitor cycle)')
+        print(f'      {len(tail) - n_sensor} dominated by the CONTROL half '
+              f'(downstream of the decision)')
+        worst = max(tail, key=lambda r: r[0])
+        print(f'    worst: {worst[0] * 1000:.0f} ms = {worst[1] * 1000:.0f} sensor '
+              f'+ {worst[2] * 1000:.0f} control, with a scan gap of '
+              f'{worst[3] * 1000:.0f} ms')
+        print(f'           and a command gap of {worst[4] * 1000:.0f} ms '
+              f'in the second before it')
+        stalled_scan = sum(1 for r in tail if r[3] > 0.2)
+        stalled_cmd = sum(1 for r in tail if r[4] > 0.2)
+        print(f'    stream stalls over 200 ms alongside a tail sample: '
+              f'{stalled_scan} scan, {stalled_cmd} command')
 
 
 def main():

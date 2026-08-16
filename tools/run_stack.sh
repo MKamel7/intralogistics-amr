@@ -31,8 +31,9 @@
 #   tools/run_stack.sh --run survey_mission   survey first, then transport
 #   tools/run_stack.sh --run mission --classify   also attribute safety stops
 #   tools/run_stack.sh --run mission --latency    also measure control_latency
+#   tools/run_stack.sh --run mission --contacts   also measure contact with people
 #   tools/run_stack.sh --no-gate              measure anyway if preflight fails
-#   tools/run_stack.sh --platform mp400_class the second platform
+#   tools/run_stack.sh --platform mir250_class the second platform
 #   tools/run_stack.sh --test-track            the datasheet-sized test track
 #   tools/run_stack.sh --world <name>          any world in amr_sim/worlds
 #
@@ -56,7 +57,13 @@ cd "$REPO"
 
 CAMERAS=true
 RVIZ=true
-PLATFORM=mir250_class
+# THE PLATFORM THIS PROJECT IS ABOUT. It was mir250_class while the MiR250 was
+# the lead vehicle; every result from V-46 onward is on the MP-400, and a
+# default that does not match what the README reports is a way to measure the
+# wrong machine and not notice. mir250_class is still a supported --platform
+# and still generates, which is what keeps the generators honest about being
+# platform general rather than one vehicle with variables sprinkled in.
+PLATFORM=mp400_class
 WORLD=warehouse
 TRACK_WORLD=false
 KEEPOUT=keepout_mask
@@ -70,6 +77,7 @@ CLASSIFY=false
 TRACK=false
 TFTRACK=false
 LATENCY=false
+CONTACTS=false
 GATE=true
 CYCLES=2
 
@@ -86,6 +94,7 @@ while [ $# -gt 0 ]; do
     --track)   TRACK=true; shift ;;
     --tf)      TFTRACK=true; shift ;;
     --latency) LATENCY=true; shift ;;
+    --contacts) CONTACTS=true; shift ;;
     --no-gate) GATE=false; shift ;;
     -h|--help)
       # The usage block is the comment header of this file, so there is one
@@ -285,6 +294,32 @@ if [ "$CLASSIFY" = true ]; then
   CLS=$!
 fi
 
+# WHETHER THE SAFETY LAYER ACTUALLY KEPT PEOPLE OUT OF THE VEHICLE. The
+# pedestrians carry no collision geometry, so the simulator can never report a
+# collision and "zero collisions" would be a property of the model. This
+# measures it geometrically from the ground truth oracle instead. It was run by
+# hand from a second terminal for V-43 and V-46, which is how a measurement
+# gets skipped: it is a flag now.
+#
+# The half extents are the PLATFORM's, read from the same spec everything else
+# is generated from. Passing the default 0.300 by 0.2845 while running the
+# 0.295 by 0.2795 vehicle would have overstated every clearance by 5 mm, and
+# the numbers this probe produces are argued over at that scale.
+if [ "$CONTACTS" = true ]; then
+  read -r HL HW < <(python3 - "$PLATFORM" <<'EOF'
+import pathlib, sys, yaml
+spec = yaml.safe_load((pathlib.Path('src/amr_description/config/platforms')
+                       / f'{sys.argv[1]}.yaml').read_text())['values']
+print(spec['chassis_length'] / 2.0, spec['chassis_width'] / 2.0)
+EOF
+)
+  python3 -u tools/measure_contacts.py --ros-args -p duration_s:=2400.0 \
+          -p half_length:="$HL" -p half_width:="$HW" \
+          > "$RUN/contacts.log" 2>&1 &
+  CON=$!
+  say "contact probe running against a ${HL} x ${HW} m half footprint"
+fi
+
 # THE NUMBER A SAFETY ASSESSOR ASKS ABOUT FIRST. control_latency feeds every
 # protective field in the stack and is still an estimate on both platforms.
 # This measures it passively from whatever the run does anyway.
@@ -366,8 +401,24 @@ case "$TASK" in
         platform:=$PLATFORM stations_file:="$STATIONS" > "$RUN/mission.log" 2>&1
     say "mission exited $?" ;;
   none)
+    # HOLD, BUT ONLY WHILE THERE IS SOMETHING TO HOLD. This loop used to be
+    # `while true; do sleep 60; done`, and one of these was found alive after
+    # fifteen hours and fifty one minutes with every one of its children dead:
+    # no simulator, no stack nodes, just the orchestrator and a sleep. It
+    # counts as running to whats_running.sh and to stop_all.sh, so the next
+    # person to check "is anything up" gets told yes.
+    #
+    # The simulator is the right thing to watch. It is the one process nothing
+    # can proceed without, and when it goes the run is over whether or not
+    # anybody noticed.
     say "stack up, holding. Ctrl-C to stop, or tools/stop_all.sh"
-    while true; do sleep 60; done ;;
+    while true; do
+      sleep 60
+      if ! pgrep -x "gz" >/dev/null 2>&1 && ! pgrep -f "[g]z sim server" >/dev/null 2>&1; then
+        say "simulator is gone; releasing the hold rather than idling on a dead stack"
+        break
+      fi
+    done ;;
   *) say "unknown task $TASK"; exit 2 ;;
 esac
 
@@ -379,6 +430,11 @@ if [ "$LATENCY" = true ]; then
   kill -INT ${LAT:-} 2>/dev/null
   wait ${LAT:-} 2>/dev/null
   say "latency probe done; see $RUN/latency.log"
+fi
+if [ "$CONTACTS" = true ]; then
+  kill -INT ${CON:-} 2>/dev/null
+  wait ${CON:-} 2>/dev/null
+  say "contact probe done; see $RUN/contacts.log"
 fi
 if [ "$TRACK" = true ]; then
   wait ${TRK:-} 2>/dev/null

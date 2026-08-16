@@ -74,9 +74,13 @@ collect() {
     for pid in $(ls /proc 2>/dev/null | grep -E '^[0-9]+$'); do
       exe=$(readlink -f "/proc/$pid/exe" 2>/dev/null)
       case "$exe" in "$WS"/*) echo "$pid"; continue ;; esac
-      # 2>/dev/null because processes exit while this loop is walking /proc,
-      # and a vanished pid is the normal case here, not an error.
-      cmd=$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null || true)
+      # Processes exit while this loop is walking /proc, and a vanished pid is
+      # the normal case here rather than an error. The redirect has to be
+      # inside the subshell: `< file 2>/dev/null` silences the COMMAND, but it
+      # is the shell that fails to open the file and the shell that prints
+      # "No such file or directory", before tr ever runs. That noise was
+      # printing on every teardown and was mistaken for a teardown fault.
+      cmd=$( (tr '\0' ' ' < "/proc/$pid/cmdline") 2>/dev/null || true)
       [ -z "$cmd" ] && continue
       # $WS/ rather than $WS/install/, because the ORCHESTRATORS live in
       # $WS/tools and were therefore never stopped. tools/run_stack.sh
