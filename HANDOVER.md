@@ -2,10 +2,19 @@
 
 ## Read this first
 
-**499 tests pass under `colcon test` with 5 documented skips, ruff is clean,
-`gz sdf` validates both worlds, and the container builds from a clean base and
-runs the same suite to the same result: 392 passed and 5 skipped, on the host
-and in the container, verified after `amr_vda5050` changed build type.**
+**512 tests pass under `colcon test` with 5 documented skips, ruff is clean,
+every world parses and every model it includes is installed, and the container
+builds from a clean base and runs the same suite to the same result: 404
+passed and 5 skipped, on the host and in the container, verified after
+`amr_vda5050` changed build type.**
+
+This used to read "`gz sdf` validates both worlds". It cannot: `model://`
+resolution is installed by gz-sim at runtime, the standalone validator has no
+such callback, and it reports 25 errors on `warehouse.sdf`, a world that loads
+and runs. Only the generated test tracks can pass it, and only because they
+include nothing. `test_worlds.py` now checks what that claim was reaching for,
+which is that a world never references a model that is not installed. See
+V-55.
 
 The two figures differ because `colcon test` also runs each package's lint
 tests. What matters is that neither runs FEWER pytest cases than the other,

@@ -3807,3 +3807,61 @@ survived.
 Every one of them is a check that was correct about the case its author had in
 mind. The fix is the same every time: **derive the set from the world rather
 than from the case you were thinking of.**
+
+---
+
+## V-55. A verification claim that the tool cannot make
+
+The handover said "`gz sdf` validates both worlds". Checked while preparing to
+push, it does not, and it never could.
+
+    $ gz sdf -k src/amr_sim/worlds/warehouse.sdf
+    Tried to use callback in sdf::findFile(), but the callback is empty.
+      Did you call sdf::setFindCallback()?
+    Error Code 14: Unable to find uri[model://wf_shelf_f_01]
+    ... 25 errors
+
+**Every one of those models is installed and the world loads and runs.**
+`model://` resolution is a callback that gz-sim installs at runtime; the
+standalone validator has none, so every `<include>` in a world is unresolvable
+to it regardless of what is on `GZ_SIM_RESOURCE_PATH`. The two generated test
+tracks pass only because they are self contained and include nothing.
+
+So the claim asserted a property one of the worlds could never have, and no
+test backed it. It had been in the handover for as long as the handover has
+existed.
+
+### What the claim was reaching for
+
+That a world never references a model which is not installed. That failure is
+worth catching and is invisible at runtime: the object is simply absent, no log
+line says so, and the vehicle drives through where a shelf should have been
+while the run looks entirely normal.
+
+`test_worlds.py` checks it directly, over every world:
+
+- every `model://` reference resolves to a directory in `models/`
+- that directory carries a `model.config`, which is what gz actually resolves
+- the world is well formed XML declaring a `<world>`
+- and the sdf validator runs only over the worlds that include nothing,
+  **parametrised** so the worlds it cannot check are visibly absent from the
+  report rather than appearing as passes
+
+### Why this is the seventh of the same kind
+
+| | the check | why it never fired |
+|---|---|---|
+| V-49 | field coverage | a strict xfail nobody reads |
+| V-50 | eleven test files | never registered with the build |
+| V-50 | `amr_vda5050` | wrong build type, collected nothing |
+| V-51 | contact attribution | the speedometer answered a different question |
+| V-52 | `use_sim_time` | four probes set it, six did not |
+| V-54 | teardown matcher | written for an invocation nobody uses |
+| V-55 | `gz sdf` on the worlds | the tool cannot answer the question asked |
+
+V-55 is the one that was never run at all. The others were checks that ran and
+covered less than they appeared to; this was a sentence in a document.
+
+**A claim in a handover is a check with no test behind it.** Every figure in
+this project traces to a `V-` entry precisely so that this class of statement
+has somewhere to fail, and this one had no such anchor until now.

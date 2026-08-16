@@ -39,6 +39,7 @@ if(BUILD_TESTING)
   # runs is a test nothing can fail.
   ament_add_pytest_test(test_battery_model test/test_battery_model.py)
   ament_add_pytest_test(test_test_track test/test_test_track.py)
+  ament_add_pytest_test(test_worlds test/test_worlds.py)
   ament_add_pytest_test(test_pedestrian_behaviours test/test_pedestrian_behaviours.py)
   ament_add_pytest_test(test_pedestrian_recovery test/test_pedestrian_recovery.py)
 endif()
