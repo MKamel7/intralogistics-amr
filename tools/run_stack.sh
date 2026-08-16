@@ -407,11 +407,13 @@ case "$TASK" in
     say "controller idle after survey (${quiet}s quiet)"
     ros2 launch amr_mission transport.launch.py cycles:=$CYCLES \
         platform:=$PLATFORM stations_file:="$STATIONS" > "$RUN/mission.log" 2>&1
-    say "mission exited $?" ;;
+    MISSION_RC=$?
+    say "mission exited $MISSION_RC" ;;
   mission)
     ros2 launch amr_mission transport.launch.py cycles:=$CYCLES \
         platform:=$PLATFORM stations_file:="$STATIONS" > "$RUN/mission.log" 2>&1
-    say "mission exited $?" ;;
+    MISSION_RC=$?
+    say "mission exited $MISSION_RC" ;;
   none)
     # HOLD, BUT ONLY WHILE THERE IS SOMETHING TO HOLD. This loop used to be
     # `while true; do sleep 60; done`, and one of these was found alive after
@@ -459,4 +461,11 @@ if [ "$TFTRACK" = true ]; then
   wait ${TFT:-} 2>/dev/null
   say "tf tracker done"
 fi
+# THE RUN'S OWN EXIT CODE, so a caller and a CI job can tell the difference
+# between a mission and a mission that did nothing. A run completing 0 of 3
+# cycles having driven 0.0 m used to end with "mission exited 0" and a zero
+# from this script, because `ros2 launch` returns 0 whatever its nodes did.
+# transport.launch.py now shuts down on the task's exit, and this carries it
+# out to the shell.
 say "run complete"
+exit ${MISSION_RC:-0}

@@ -127,8 +127,12 @@ def test_contacts_are_attributed_by_vehicle_speed():
     """
     t = text()
     assert 'contact_speeds' in t
-    assert 'they walked into it' in t
-    assert 'DRIVING INTO THEM' in t
+    assert 'they walked into the vehicle' in t
+    assert 'THE VEHICLE DROVE INTO THEM' in t
+    # And the speed alone is no longer what decides it. See the closing_split
+    # tests below: 0.03 m/s counted as "moving" and was labelled as the
+    # vehicle's fault while the person did all of the closing.
+    assert 'contact_closing' in t
 
 
 def test_the_headline_separates_moving_contacts():
@@ -142,3 +146,92 @@ def test_the_headline_separates_moving_contacts():
 def test_a_stationary_contact_is_named_a_scenario_artefact():
     t = text()
     assert 'scenario' in t and 'not a safety failure' in t
+
+
+# ---------------------------------------------------------------------------
+# Who closed the distance. The vehicle's own speed cannot answer this, and it
+# was being asked to: a contact at 0.03 m/s was labelled DRIVING INTO THEM
+# while the person was walking at over a metre a second.
+
+def split(v_vehicle, v_person, offset):
+    return load().closing_split(v_vehicle, v_person, offset)
+
+
+def blame(vs, ps):
+    return load().blame(vs, ps)
+
+
+def test_a_stationary_vehicle_gets_none_of_the_blame():
+    """Person stands 2 m west of a parked robot and walks east into it."""
+    vs, ps = split((0.0, 0.0), (1.2, 0.0), (-2.0, 0.0))
+    assert vs == pytest.approx(0.0)
+    assert ps == pytest.approx(1.2)
+    assert blame(vs, ps) == 'they walked into the vehicle'
+
+
+def test_a_person_walking_away_is_not_closing():
+    """Same geometry, opposite direction. The sign must follow the motion and
+    not the fact that somebody is nearby."""
+    vs, ps = split((0.0, 0.0), (-1.2, 0.0), (-2.0, 0.0))
+    assert ps == pytest.approx(-1.2)
+
+
+def test_a_driving_vehicle_takes_the_blame():
+    vs, ps = split((0.9, 0.0), (0.0, 0.0), (3.0, 0.0))
+    assert vs == pytest.approx(0.9)
+    assert ps == pytest.approx(0.0)
+    assert blame(vs, ps) == 'THE VEHICLE DROVE INTO THEM'
+
+
+def test_the_creeping_case_that_prompted_this():
+    """0.03 m/s toward a person walking at 1.2 m/s toward the vehicle.
+
+    The old rule called this DRIVING INTO THEM because 0.03 exceeds the 0.02
+    movement threshold. It is a person walking into a vehicle that is barely
+    moving, and the difference matters to every claim built on the count.
+    """
+    vs, ps = split((0.03, 0.0), (-1.2, 0.0), (2.0, 0.0))
+    assert vs == pytest.approx(0.03)
+    assert ps == pytest.approx(1.2)
+    assert blame(vs, ps) == 'they walked into the vehicle'
+
+
+def test_moving_apart_is_negative_not_zero():
+    """A party retreating must not read as one standing still.
+
+    Otherwise a vehicle reversing away from someone who runs after it would
+    score the same as one that stood there, and the sign is the whole point.
+    """
+    vs, ps = split((-0.5, 0.0), (0.0, 0.0), (2.0, 0.0))
+    assert vs == pytest.approx(-0.5)
+
+
+def test_both_closing_names_neither():
+    vs, ps = split((0.6, 0.0), (-0.6, 0.0), (2.0, 0.0))
+    assert blame(vs, ps) == 'both were closing; neither dominates'
+
+
+def test_an_unknown_velocity_is_not_reported_as_zero():
+    """The first ground truth frame for a body has no previous sample.
+
+    Returning a confident (0, 0) there would silently credit the other party
+    with all of the closing on the very sample where a contact is most likely
+    to be first seen.
+    """
+    assert split(None, (1.0, 0.0), (2.0, 0.0)) == (0.0, 0.0)
+    assert split((1.0, 0.0), None, (2.0, 0.0)) == (0.0, 0.0)
+    assert blame(0.0, 0.0).startswith('neither was closing')
+
+
+def test_a_coincident_pose_does_not_divide_by_zero():
+    assert split((1.0, 0.0), (0.0, 0.0), (0.0, 0.0)) == (0.0, 0.0)
+
+
+def test_closing_is_projected_onto_the_line_not_the_speed():
+    """Motion across the line closes nothing.
+
+    A vehicle passing a person at a metre a second on a parallel track is not
+    approaching them, and counting its speed would say it was.
+    """
+    vs, _ = split((0.0, 1.0), (0.0, 0.0), (2.0, 0.0))
+    assert vs == pytest.approx(0.0)

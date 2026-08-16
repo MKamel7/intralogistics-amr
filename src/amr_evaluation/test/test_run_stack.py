@@ -228,3 +228,27 @@ def test_the_helper_restores_strictness_it_did_not_set():
     the caller's semantics, which is its own kind of surprise."""
     t = (REPO / 'tools' / 'ros_env.sh').read_text()
     assert '_ros_env_had_u' in t, 'it must remember whether -u was on'
+
+
+def test_a_failed_mission_does_not_report_success():
+    """V-40 again, in a different file.
+
+    A run that completed 0 of 3 cycles having driven 0.0 m ended with "mission
+    exited 0" and a zero from run_stack.sh, because `ros2 launch` returns 0
+    whatever its nodes did. transport_task already returned non-zero for an
+    incomplete cycle; nothing carried it out.
+
+    A stage that fails and declares success is worse than one that fails,
+    because the next thing measures on top of it.
+    """
+    t = text()
+    assert 'MISSION_RC=$?' in t, (
+        'the mission exit code is not captured, so $? has already been '
+        'overwritten by the time anything looks at it')
+    assert 'exit ${MISSION_RC:-0}' in t, (
+        'run_stack.sh does not carry the mission exit code out to the shell')
+
+    launch = (REPO / 'src' / 'amr_mission' / 'launch' / 'transport.launch.py').read_text()
+    assert 'on_exit=Shutdown()' in launch, (
+        'transport.launch.py does not shut the launch service down when the '
+        'task exits, so ros2 launch swallows its return code')

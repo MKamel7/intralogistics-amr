@@ -24,7 +24,7 @@ from pathlib import Path
 import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, OpaqueFunction, Shutdown
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
@@ -101,6 +101,16 @@ def make_node(context):
     return [Node(
         package='amr_mission', executable='transport_task',
         name='transport_task', output='screen',
+        # THE MISSION'S EXIT CODE HAS TO REACH THE CALLER. Without this,
+        # `ros2 launch` returns 0 whatever the node did, and a run that
+        # completed 0 of 3 cycles having driven 0.0 m reported "mission exited
+        # 0" to the orchestrator. That is V-40 again in a different file: a
+        # stage that fails and declares success is worse than one that fails.
+        #
+        # `Shutdown` as the on_exit action makes the launch service adopt the
+        # process's return code, so the non-zero that transport_task already
+        # returns for an incomplete cycle finally means something.
+        on_exit=Shutdown(),
         parameters=[{
             'use_sim_time': LaunchConfiguration('use_sim_time'),
             'cycles': LaunchConfiguration('cycles'),
