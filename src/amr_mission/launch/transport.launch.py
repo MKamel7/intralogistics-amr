@@ -101,15 +101,15 @@ def make_node(context):
     return [Node(
         package='amr_mission', executable='transport_task',
         name='transport_task', output='screen',
-        # THE MISSION'S EXIT CODE HAS TO REACH THE CALLER. Without this,
-        # `ros2 launch` returns 0 whatever the node did, and a run that
-        # completed 0 of 3 cycles having driven 0.0 m reported "mission exited
-        # 0" to the orchestrator. That is V-40 again in a different file: a
-        # stage that fails and declares success is worse than one that fails.
+        # SHUTS THE LAUNCH SERVICE DOWN when the task finishes, so the run
+        # does not hang waiting on a mission that has already reported.
         #
-        # `Shutdown` as the on_exit action makes the launch service adopt the
-        # process's return code, so the non-zero that transport_task already
-        # returns for an incomplete cycle finally means something.
+        # IT DOES NOT CARRY THE EXIT CODE OUT, and the comment here used to
+        # claim it did. Measured directly, a launch file whose process exits 3
+        # still makes `ros2 launch` return 0. transport_task returns non-zero
+        # for an incomplete cycle and nothing propagates it, so run_stack.sh
+        # takes the verdict from the mission's own summary line instead. See
+        # mission_verdict() there, and V-57.
         on_exit=Shutdown(),
         parameters=[{
             'use_sim_time': LaunchConfiguration('use_sim_time'),

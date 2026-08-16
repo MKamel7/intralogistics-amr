@@ -32,6 +32,7 @@
 #   tools/run_stack.sh --run mission --classify   also attribute safety stops
 #   tools/run_stack.sh --run mission --latency    also measure control_latency
 #   tools/run_stack.sh --run mission --contacts   also measure contact with people
+#   tools/run_stack.sh --run mission --social     also measure proxemic distance
 #   tools/run_stack.sh --no-gate              measure anyway if preflight fails
 #   tools/run_stack.sh --platform mir250_class the second platform
 #   tools/run_stack.sh --test-track            the datasheet-sized test track
@@ -78,6 +79,7 @@ TRACK=false
 TFTRACK=false
 LATENCY=false
 CONTACTS=false
+SOCIAL=false
 GATE=true
 CYCLES=2
 
@@ -95,6 +97,7 @@ while [ $# -gt 0 ]; do
     --tf)      TFTRACK=true; shift ;;
     --latency) LATENCY=true; shift ;;
     --contacts) CONTACTS=true; shift ;;
+    --social) SOCIAL=true; shift ;;
     --no-gate) GATE=false; shift ;;
     -h|--help)
       # The usage block is the comment header of this file, so there is one
@@ -122,6 +125,25 @@ set +u
 source /opt/ros/jazzy/setup.bash
 source install/setup.bash
 set -u
+
+mission_verdict() {  # log, launch return code
+  # Non-zero if any cycle did not complete, whatever ros2 launch claims.
+  local log="$1" rc="${2:-0}"
+  local line
+  line=$(grep -oE '[0-9]+ of [0-9]+ cycle\(s\) completed' "$log" 2>/dev/null | tail -1)
+  if [ -z "$line" ]; then
+    echo 2                       # the mission never reported at all
+    return
+  fi
+  local done_n total_n
+  done_n=${line%% of *}
+  total_n=$(echo "$line" | sed -E 's/^[0-9]+ of ([0-9]+) .*/\1/')
+  if [ "$done_n" -lt "$total_n" ]; then
+    echo 1
+  else
+    echo "$rc"
+  fi
+}
 
 wait_active() {  # node, timeout seconds
   # ANCHORED, and this was a diagnostic that lied. `ros2 lifecycle get` prints
@@ -337,6 +359,25 @@ fi
 # probe uses, so the contacts it reports fall on one side or the other. The
 # probe is left running across both because the survey phase is where the
 # first contact of V-51 turned up, and stopping it there would have hidden it.
+# HOW CLOSE THE VEHICLE CHOOSES TO PASS PEOPLE, which is a different question
+# from whether it touches them. measure_contacts.py answers the safety
+# question; this answers whether the stack is pleasant to share a floor with,
+# and it is what the proxemic layer is judged by.
+if [ "$SOCIAL" = true ]; then
+  read -r SHL SHW < <(python3 - "$PLATFORM" <<'EOF'
+import pathlib, sys, yaml
+spec = yaml.safe_load((pathlib.Path('src/amr_description/config/platforms')
+                       / f'{sys.argv[1]}.yaml').read_text())['values']
+print(spec['chassis_length'] / 2.0, spec['chassis_width'] / 2.0)
+EOF
+)
+  python3 -u tools/measure_social.py --ros-args -p duration_s:=2400.0 \
+          -p half_length:="$SHL" -p half_width:="$SHW" \
+          > "$RUN/social.log" 2>&1 &
+  SOC=$!
+  say "social probe running against a ${SHL} x ${SHW} m half footprint"
+fi
+
 if [ "$CONTACTS" = true ]; then
   read -r HL HW < <(python3 - "$PLATFORM" <<'EOF'
 import pathlib, sys, yaml
@@ -428,11 +469,31 @@ case "$TASK" in
     ros2 launch amr_mission transport.launch.py cycles:=$CYCLES \
         platform:=$PLATFORM stations_file:="$STATIONS" > "$RUN/mission.log" 2>&1
     MISSION_RC=$?
+    # AND THE LOG, BECAUSE THE EXIT CODE IS A LIE. `ros2 launch` returns 0
+    # whatever its nodes did, and `on_exit=Shutdown()` does not change that:
+    # measured directly with a launch file whose process exits 3, ros2 launch
+    # still returned 0. transport_task returns non-zero for an incomplete
+    # cycle and nothing carries it out.
+    #
+    # The summary line is authoritative and already printed, so the mission's
+    # own account of itself is what decides. A run that completed 0 of 3
+    # cycles having driven 0.0 m used to end with "mission exited 0".
+    MISSION_RC=$(mission_verdict "$RUN/mission.log" "$MISSION_RC")
     say "mission exited $MISSION_RC" ;;
   mission)
     ros2 launch amr_mission transport.launch.py cycles:=$CYCLES \
         platform:=$PLATFORM stations_file:="$STATIONS" > "$RUN/mission.log" 2>&1
     MISSION_RC=$?
+    # AND THE LOG, BECAUSE THE EXIT CODE IS A LIE. `ros2 launch` returns 0
+    # whatever its nodes did, and `on_exit=Shutdown()` does not change that:
+    # measured directly with a launch file whose process exits 3, ros2 launch
+    # still returned 0. transport_task returns non-zero for an incomplete
+    # cycle and nothing carries it out.
+    #
+    # The summary line is authoritative and already printed, so the mission's
+    # own account of itself is what decides. A run that completed 0 of 3
+    # cycles having driven 0.0 m used to end with "mission exited 0".
+    MISSION_RC=$(mission_verdict "$RUN/mission.log" "$MISSION_RC")
     say "mission exited $MISSION_RC" ;;
   none)
     # HOLD, BUT ONLY WHILE THERE IS SOMETHING TO HOLD. This loop used to be
@@ -469,6 +530,11 @@ if [ "$CONTACTS" = true ]; then
   kill -INT ${CON:-} 2>/dev/null
   wait ${CON:-} 2>/dev/null
   say "contact probe done; see $RUN/contacts.log"
+fi
+if [ "$SOCIAL" = true ]; then
+  kill -INT ${SOC:-} 2>/dev/null
+  wait ${SOC:-} 2>/dev/null
+  say "social probe done; see $RUN/social.log"
 fi
 if [ "$TRACK" = true ]; then
   wait ${TRK:-} 2>/dev/null

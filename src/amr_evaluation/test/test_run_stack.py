@@ -248,10 +248,18 @@ def test_a_failed_mission_does_not_report_success():
     assert 'exit ${MISSION_RC:-0}' in t, (
         'run_stack.sh does not carry the mission exit code out to the shell')
 
-    launch = (REPO / 'src' / 'amr_mission' / 'launch' / 'transport.launch.py').read_text()
-    assert 'on_exit=Shutdown()' in launch, (
-        'transport.launch.py does not shut the launch service down when the '
-        'task exits, so ros2 launch swallows its return code')
+    # NOT `on_exit=Shutdown()`. That was the first attempt and it does not
+    # work: measured directly with a launch file whose process exits 3,
+    # `ros2 launch` still returned 0. The test that accompanied it asserted the
+    # SOURCE CONTAINED that line, which is true and useless, and is the same
+    # mistake as every other check in this project that was correct about its
+    # author's intent and blind to whether it did anything.
+    #
+    # The mission's own summary line is authoritative, so the verdict comes
+    # from the log. The helper is executed below rather than grepped for.
+    assert 'mission_verdict' in t, (
+        'the mission verdict is not taken from the log, so it rests on a '
+        'ros2 launch return code that is always 0')
 
 
 def test_readiness_waits_are_tied_to_this_runs_bringup():
@@ -327,3 +335,36 @@ def test_teardown_still_refuses_to_kill_itself_or_its_ancestors():
     assert "grep -q 'stop_all'" in t, (
         'teardown no longer excludes itself by name, so a wider matcher can '
         'kill the script doing the killing')
+
+
+def test_the_mission_verdict_helper_actually_works():
+    """Run it, do not read it.
+
+    Every previous version of this check asserted that run_stack.sh contained
+    some string. A string is not behaviour, and the behaviour was wrong for as
+    long as the string was present.
+    """
+    import subprocess
+    import tempfile
+
+    helper = subprocess.run(
+        ['sed', '-n', '/^mission_verdict()/,/^}/p', str(RUN_STACK)],
+        capture_output=True, text=True, check=True).stdout
+    assert 'grep' in helper, 'mission_verdict was not extracted'
+
+    def verdict(contents):
+        with tempfile.NamedTemporaryFile('w', suffix='.log', delete=False) as f:
+            f.write(contents)
+            path = f.name
+        r = subprocess.run(['bash', '-c', f'{helper}\nmission_verdict {path} 0'],
+                           capture_output=True, text=True)
+        return r.stdout.strip()
+
+    assert verdict('3 of 3 cycle(s) completed\n') == '0'
+    assert verdict('0 of 3 cycle(s) completed\n') == '1'
+    assert verdict('2 of 3 cycle(s) completed\n') == '1'
+    # A mission that never reported is not a pass. It is the case that looks
+    # most like success in a log nobody reads.
+    assert verdict('nothing useful here\n') == '2'
+    # The LAST summary wins, because a run can log more than one.
+    assert verdict('0 of 3 cycle(s) completed\n3 of 3 cycle(s) completed\n') == '0'
