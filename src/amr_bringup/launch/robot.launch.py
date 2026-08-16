@@ -81,6 +81,10 @@ def generate_launch_description():
         DeclareLaunchArgument('cameras', default_value='true',
                               description='false gives the fleet-tier robot'),
         DeclareLaunchArgument('scanners', default_value='true'),
+        DeclareLaunchArgument(
+            'payload_kg', default_value='0.0',
+            description='carried mass on the top plate; the rated payload is '
+                        'max_payload in the platform spec'),
         DeclareLaunchArgument('platform', default_value='mir250_class'),
         DeclareLaunchArgument('x', default_value='2.0'),
         DeclareLaunchArgument('y', default_value='-1.0'),
@@ -107,6 +111,7 @@ def generate_launch_description():
             'platform:=', LaunchConfiguration('platform'), ' ',
             'use_cameras:=', LaunchConfiguration('cameras'), ' ',
             'use_scanners:=', LaunchConfiguration('scanners'), ' ',
+            'payload_kg:=', LaunchConfiguration('payload_kg'), ' ',
             'sim:=true',
         ]),
         value_type=str)

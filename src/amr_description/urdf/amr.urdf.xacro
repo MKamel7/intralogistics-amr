@@ -35,6 +35,15 @@
        each. -->
   <xacro:arg name="use_scanners" default="true"/>
   <xacro:arg name="use_cameras"  default="true"/>
+  <!-- PAYLOAD ON THE TOP PLATE, in kilograms, 0 for an empty vehicle.
+       WHY THIS IS A MASS AND NOT A PICK AND PLACE. Gazebo's DetachableJoint
+       starts attached and gz-sim 8.11 has no suppress_initial_attach, so a
+       joint cannot be created where a box was set down and re-made when the
+       vehicle returns for the next one. Modelling the carried mass directly
+       measures the thing that matters, which is what 100 kg does to the
+       braking distance a protective field is sized from, without pretending
+       to a transfer mechanism that is not simulated. See V-60. -->
+  <xacro:arg name="payload_kg"   default="0.0"/>
 
   <!-- Namespace, normalised to either "" or "name/" so it can be prefixed to a
        topic without callers having to remember the slash. -->
@@ -67,6 +76,11 @@
     value="${2*p['drive_wheel_mass'] + 4*(p['caster_wheel_mass'] + p['caster_swivel_mass'])
              + scanner_total + camera_total + p['imu_mass'] + p['beacon_mass']}"/>
   <xacro:property name="body_mass" value="${total_mass - component_mass}"/>
+  <!-- The payload is its OWN link with its own inertia rather than being added
+       to body_mass, because where the load sits changes the yaw moment and the
+       height of the centre of mass, and adding it to the chassis box would
+       silently place 100 kg at the chassis centroid instead of on the deck. -->
+  <xacro:property name="payload_mass" value="${float('$(arg payload_kg)')}"/>
 
   <material name="amr_body">    <color rgba="0.16 0.17 0.19 1.0"/></material>
   <material name="amr_accent">  <color rgba="0.90 0.55 0.10 1.0"/></material>
@@ -340,5 +354,47 @@
 
   <!-- ================= actuation and simulation ================= -->
   <xacro:amr_ros2_control sim="$(arg sim)" ns="${ns}"/>
+
+  <!-- ================= payload ================= -->
+  <!-- A CARRIED LOAD, ON THE PLATE, WITH ITS OWN INERTIA.
+       Built only when payload_kg is above zero, so an empty vehicle is exactly
+       the vehicle it was before this existed and every figure measured without
+       a load stays comparable.
+
+       The load is modelled as a 400 x 400 mm box on the top plate. That is a
+       Euro half pallet footprint, which is what a 100 kg load on a vehicle
+       this size actually is, and it is centred on the drive axis so the mass
+       does not shift the yaw moment asymmetrically. A real load would not be
+       centred; measuring an off centre one is a separate experiment and this
+       one deliberately isolates mass from balance.
+
+       Height is taken so the box SITS on the plate rather than being centred
+       on it, because a 100 kg mass 200 mm too low would understate the centre
+       of mass rise, which is the part that matters for tipping and for how the
+       vehicle behaves under braking. -->
+  <xacro:if value="${payload_mass > 0.0}">
+    <xacro:property name="pl_side" value="0.400"/>
+    <xacro:property name="pl_h"    value="0.200"/>
+    <link name="payload">
+      <xacro:box_inertia m="${payload_mass}" x="${pl_side}" y="${pl_side}"
+                         z="${pl_h}" cz="${pl_h / 2.0}"/>
+      <visual>
+        <origin xyz="0 0 ${pl_h / 2.0}"/>
+        <geometry><box size="${pl_side} ${pl_side} ${pl_h}"/></geometry>
+        <material name="amr_accent"/>
+      </visual>
+      <!-- NO COLLISION GEOMETRY, and that is deliberate rather than an
+           oversight. The scanners sit at 110 mm and the plate is at 381 mm, so
+           the load is above every scan plane and cannot be seen by the vehicle
+           itself. Giving it collision would let it catch on racking the
+           protective fields were never sized to clear, which would measure the
+           model rather than the vehicle. The mass and inertia are the point. -->
+    </link>
+    <joint name="payload_joint" type="fixed">
+      <parent link="base_link"/>
+      <child link="payload"/>
+      <origin xyz="0 0 ${p['top_plate_height']}"/>
+    </joint>
+  </xacro:if>
 
 </robot>

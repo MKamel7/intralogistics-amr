@@ -88,6 +88,7 @@ values:
   chassis_length: 0.590          # m, L1 overall length of platform
   chassis_width: 0.559           # m, W1 maximum width
   chassis_height: 0.411          # m, H1 height of mounting profiles
+  top_plate_height: 0.381        # m, H2, the surface a load sits on
   vehicle_envelope_height: 1.000 # m, vehicle plus the load it carries
   ground_clearance: 0.044        # m, G
   corner_cut_x: 0.060            # m, the chamfer visible in Fig. 2
@@ -237,6 +238,7 @@ provenance:
   # ---- From the MP-400 Operating Instructions, section 1.3.1 ----------
   chassis_length:      {kind: datasheet, src: "MP-400 manual 1.3.1, L1 overall length of platform 590 mm"}
   chassis_width:       {kind: datasheet, src: "MP-400 manual 1.3.1, W1 maximum width 559 mm"}
+  top_plate_height:    {kind: datasheet, src: "MP-400 manual 1.3.1, H2 top plate 381 mm. Distinct from chassis_height, which is H1 at 411 mm: H1 is the tallest fixed structure and is what an overhead obstruction must clear, H2 is the surface a payload actually rests on and is therefore where a carried mass belongs. Using H1 would put the load 30 mm above the plate and overstate the centre of mass height"}
   chassis_height:      {kind: datasheet, src: "MP-400 manual 1.3.1, H1 height of mounting profiles 411 mm. H2, the top plate, is 381 mm; H1 is used because it is the tallest fixed structure and therefore what an overhead obstruction has to clear"}
   ground_clearance:    {kind: datasheet, src: "MP-400 manual 1.3.1, G 44 mm"}
   drive_wheel_radius:  {kind: derived,   src: "MP-400 manual 1.3.1, D diameter of drive wheels 150 mm, halved"}

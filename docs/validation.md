@@ -4162,3 +4162,88 @@ manufactured.
 3. Then, and only then, decide whether the profile needs changing.
 
 Recorded as unfinished rather than presented as a feature.
+
+---
+
+## V-60. Carrying the rated payload does not change the braking distance, and the reason is architectural
+
+Two of the four terms in the ISO 13855 shape every protective field is sized by
+are braking:
+
+    S = v (t_scanner + t_control + t_brake) + v^2 / (2a) + C
+
+`a` comes from `max_linear_accel`, which the MP-400 manual publishes as a
+single 2.4 m/s2 rating and does NOT distinguish by load. The MiR250 sheet does
+distinguish, at 0.3 m/s2 with maximum payload. So this stack sizes its fields
+identically whether the vehicle is empty or carrying its rated 100 kg, and
+until now that was an inherited assumption rather than a measurement.
+
+### The measurement
+
+`measure_braking.py` reads every protective stop as a braking event. At about
+120 stops per cycle a single run yields hundreds of samples, which is why this
+metric has statistics the proxemic one in V-59 never had.
+
+| | unladen, 88 kg | laden, 188 kg |
+|---|---|---|
+| samples | 385 | 474 |
+| p50 | 9 mm | 9 mm |
+| p95 | 25 mm | 19 mm |
+| max | 95 mm | 102 mm |
+| fastest stop | 85 mm from 0.77 m/s | 97 mm from 0.89 m/s |
+| implied deceleration | 3.49 m/s2 | 4.08 m/s2 |
+
+**Adding 100 kg, a 114 percent increase in mass, changed the median braking
+distance by nothing at all.** The p95 moved the wrong way for a mass effect.
+
+The treatment was verified in the running system rather than assumed: the
+description on the live parameter server totals 188.00 kg against 88.00, and
+carries a `payload` link of 100 kg. That check exists because V-49's control
+arm taught the habit.
+
+### Why mass does not matter here, and it is not "the simulator is wrong"
+
+A protective stop does not go through the velocity smoother. The chain is
+
+    controller -> cmd_vel_nav -> velocity_smoother -> cmd_vel_raw
+                                                   -> collision_monitor
+                                                   -> diff_drive_controller
+
+The monitor is DOWNSTREAM of the smoother. It zeroes the command outright, so
+the smoother's `max_decel: [-1.00, 0.0, -2.00]`, whose own comment in the
+generated configuration reads "capped below the emergency rate", never applies
+to the stop it was written for.
+
+What the vehicle actually does is stop as hard as the drive and the floor
+allow, and at 88 or 188 kg that limit is the same because it is not
+mass-limited at these speeds. Measured, 3.49 and 4.08 m/s2, both **above** the
+2.4 m/s2 the fields are sized with.
+
+### What that means for the fields
+
+The `v^2 / 2a` term is conservative, by a third or more:
+
+| speed | assumed at 2.4 m/s2 | measured |
+|---|---|---|
+| 0.77 m/s | 124 mm | 85 mm |
+| 0.89 m/s | 165 mm | 97 mm |
+
+**Nothing is being resized on this.** A term that is conservative is a term
+that is safe, and V-42 and V-45 are what shrinking a field costs when the
+argument is arithmetic. The value of the measurement is that the term is now
+checked rather than assumed, and that the direction of the error is known.
+
+### The two things this does NOT establish
+
+**It is a service stop, not an emergency stop.** The probe says so in its own
+output. A hardware emergency stop would be harder still and is not modelled, so
+this is the optimistic figure for a safety argument in one direction and the
+pessimistic one in the other.
+
+**It is simulated friction.** A real vehicle braking at 4 m/s2 with 100 kg on
+an unsecured top plate is a load-securing problem, and the payload here carries
+no collision geometry, so nothing in this model can slide, tip or fall off.
+Deliberately, since giving it collision would let it snag on racking the
+protective fields were never sized to clear. The consequence is that the model
+cannot answer the question a real deployment would ask first, and it should not
+be quoted as though it had.

@@ -8,7 +8,7 @@ layer that sits after the planner and can override it.
 name outran the code; there is no traffic controller and no task allocation. A fleet layer is
 listed under Roadmap and is claimed nowhere else.
 
-**Status: one platform validated end to end, with 59 recorded findings.** This README documents
+**Status: one platform validated end to end, with 60 recorded findings.** This README documents
 what exists and what is measured, not what is planned. Every figure below is traceable to an entry
 in `docs/validation.md`; anything not built is under Roadmap and is claimed nowhere else.
 
@@ -28,6 +28,8 @@ in `docs/validation.md`; anything not built is under Roadmap and is claimed nowh
 | sensor to command latency | p50 84 ms, **p95 124 ms**, n=397, against a 0.10 s estimate | V-56 |
 | the latency tail | **retracted**: it was a probe pairing artifact, not the stack | V-56 |
 | protective field coverage outside the sensor's blind zone | **55.1 mm** against the 50 mm needed | V-49 |
+| braking distance, laden and unladen | **9 mm** median both, 85 to 97 mm worst, n=859 | V-60 |
+| deceleration in a protective stop | **3.5 to 4.1 m/s2**, against the 2.4 the fields assume | V-60 |
 
 The latency row was wrong for most of this project's life and the correction is worth reading.
 It said p95 796 ms and called the spec estimate refuted, on the strength of 43 samples pooled from
@@ -454,7 +456,10 @@ What is left, in the order it would be worth doing:
    where the vehicle never moved. Settling it needs a metric normalised by exposure and three runs
    per configuration, as V-47 did for the planners. See V-59.
 3. **Precision docking**, once localisation is good enough to support the claim.
-4. **Physical load transfer**, so that something is actually carried.
+4. **Physical load transfer.** The carried MASS is modelled and measured (V-60), and the pick and
+   place is not: Gazebo's DetachableJoint starts attached and gz-sim 8.11 has no
+   `suppress_initial_attach`, so a joint cannot be made where a box was set down and re-made when
+   the vehicle returns. What is missing is the transfer, not the load.
 
 Not on this list: a fleet layer. The project runs one vehicle and says so.
 

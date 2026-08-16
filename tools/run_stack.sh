@@ -33,6 +33,8 @@
 #   tools/run_stack.sh --run mission --latency    also measure control_latency
 #   tools/run_stack.sh --run mission --contacts   also measure contact with people
 #   tools/run_stack.sh --run mission --social     also measure proxemic distance
+#   tools/run_stack.sh --payload 100             carry the rated load
+#   tools/run_stack.sh --run mission --braking   also measure stopping distance
 #   tools/run_stack.sh --no-gate              measure anyway if preflight fails
 #   tools/run_stack.sh --platform mir250_class the second platform
 #   tools/run_stack.sh --test-track            the datasheet-sized test track
@@ -80,6 +82,8 @@ TFTRACK=false
 LATENCY=false
 CONTACTS=false
 SOCIAL=false
+PAYLOAD=0.0
+BRAKING=false
 GATE=true
 CYCLES=2
 
@@ -98,6 +102,8 @@ while [ $# -gt 0 ]; do
     --latency) LATENCY=true; shift ;;
     --contacts) CONTACTS=true; shift ;;
     --social) SOCIAL=true; shift ;;
+    --payload) PAYLOAD="${2:?--payload needs a mass in kg}"; shift 2 ;;
+    --braking) BRAKING=true; shift ;;
     --no-gate) GATE=false; shift ;;
     -h|--help)
       # The usage block is the comment header of this file, so there is one
@@ -249,7 +255,8 @@ fi
 say "starting: platform=$PLATFORM world=$WORLD cameras=$CAMERAS rviz=$RVIZ task=$TASK"
 ros2 launch amr_bringup robot.launch.py platform:=$PLATFORM world:=$WORLD \
      x:=$SPAWN_X y:=$SPAWN_Y \
-     gui:=true rviz:=$RVIZ cameras:=$CAMERAS > "$RUN/robot.log" 2>&1 &
+     gui:=true rviz:=$RVIZ cameras:=$CAMERAS payload_kg:=$PAYLOAD \
+     > "$RUN/robot.log" 2>&1 &
 # Every readiness wait below is conditional on this still being alive. A launch
 # that dies on a bad parameter does so in under a second, long before any node
 # could have come up, and without this the script cannot tell that from a slow
@@ -363,6 +370,18 @@ fi
 # from whether it touches them. measure_contacts.py answers the safety
 # question; this answers whether the stack is pleasant to share a floor with,
 # and it is what the proxemic layer is judged by.
+# HOW FAR IT TRAVELS AFTER BEING TOLD TO STOP, which is two of the four terms
+# in the ISO 13855 shape every protective field is sized by. `t_brake` is an
+# estimate and the deceleration comes from a single published rating that the
+# MP-400 manual does not distinguish by load, so a laden run measures an
+# assumption nobody has tested.
+if [ "$BRAKING" = true ]; then
+  python3 -u tools/measure_braking.py --ros-args -p duration_s:=2400.0 \
+          > "$RUN/braking.log" 2>&1 &
+  BRK=$!
+  say "braking probe running"
+fi
+
 if [ "$SOCIAL" = true ]; then
   read -r SHL SHW < <(python3 - "$PLATFORM" <<'EOF'
 import pathlib, sys, yaml
@@ -535,6 +554,11 @@ if [ "$SOCIAL" = true ]; then
   kill -INT ${SOC:-} 2>/dev/null
   wait ${SOC:-} 2>/dev/null
   say "social probe done; see $RUN/social.log"
+fi
+if [ "$BRAKING" = true ]; then
+  kill -INT ${BRK:-} 2>/dev/null
+  wait ${BRK:-} 2>/dev/null
+  say "braking probe done; see $RUN/braking.log"
 fi
 if [ "$TRACK" = true ]; then
   wait ${TRK:-} 2>/dev/null

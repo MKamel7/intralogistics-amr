@@ -30,6 +30,7 @@ values:
   chassis_length: 0.800          # m
   chassis_width: 0.580           # m
   chassis_height: 0.300          # m
+  top_plate_height: 0.300        # m, the deck itself
   vehicle_envelope_height: 1.200 # m, vehicle plus the load it carries
   ground_clearance: 0.026        # m
   # Corner recesses that house the safety scanners. Without them the scanners
@@ -165,6 +166,7 @@ safety_reference:
 provenance:
   chassis_length:      {kind: datasheet, src: "MiR250 sheet, Dimensions/Length 800 mm"}
   chassis_width:       {kind: datasheet, src: "MiR250 sheet, Dimensions/Width 580 mm"}
+  top_plate_height:    {kind: estimated, src: "not published separately. This platform has no raised mounting profile above the deck, unlike the MP-400 whose manual distinguishes H1 411 mm from H2 381 mm, so the load rests on the 300 mm chassis top itself and the two figures coincide. Carried as its own key anyway so the payload geometry is platform general rather than assuming every vehicle is this one"}
   chassis_height:      {kind: datasheet, src: "MiR250 sheet, Dimensions/Height 300 mm"}
   vehicle_envelope_height: {kind: estimated, src: "NOT published as a single figure, and it is not the 300 mm chassis height. This platform exists to carry a top module, so the height that must clear an overhead obstruction is the deck plus the load standing on it. 1200 mm covers a typical KLT stack or shelf-lifter module on a 250 kg class AMR. It matters because it is what the camera obstacle layer is configured from: the vehicle drove UNDER warehouse racking, which its 150 mm scan plane reads as a row of thin legs with drivable gaps between them, and wedged at 0.400 m clearance against a 0.501 m inscribed radius. Occupied area at robot height is 16.4 m2 against 108.7 m2 at person height, so the scanner is blind to roughly 85 percent of what should block this vehicle. If a real top module is specified this figure must be taken from it"}
   ground_clearance:    {kind: derived,   src: "MiR250 sheet gives a 25 to 28 mm range; midpoint taken"}
