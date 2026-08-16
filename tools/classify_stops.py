@@ -52,6 +52,13 @@ from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import LaserScan
 from tf2_msgs.msg import TFMessage
 
+# Bearing sectors, in degrees from straight ahead. Defined once because the
+# forward, side and rear counts and every split derived from them must use the
+# same boundaries; when they did not, the rear split printed a negative count.
+SIDE_BEARING = 60.0
+REAR_BEARING = 120.0
+
+
 ACTION = {0: 'clear', 1: 'stop', 2: 'slowdown', 3: 'approach', 4: 'limit'}
 
 
@@ -247,25 +254,34 @@ class StopClassifier(Node):
             bearings = [d[2] for d in struct]
             print(f'\n  structure stops: range {min(rng):.2f} to {max(rng):.2f} m, '
                   f'median {sorted(rng)[len(rng) // 2]:.2f} m')
-            fwd = sum(1 for b in bearings if abs(b) < 60)
-            side = sum(1 for b in bearings if 60 <= abs(b) < 120)
-            rear = sum(1 for b in bearings if abs(b) >= 120)
+            fwd = sum(1 for b in bearings if abs(b) < SIDE_BEARING)
+            side = sum(1 for b in bearings
+                       if SIDE_BEARING <= abs(b) < REAR_BEARING)
+            rear = sum(1 for b in bearings if abs(b) >= REAR_BEARING)
             print(f'    ahead {fwd}, to the side {side}, behind {rear}')
             if rear:
                 # Behind, split by what the vehicle was doing and which band
                 # the monitor had selected. Turning on the spot sweeps the rear
                 # and a stop there is correct; driving forward it is not.
-                turning = sum(1 for d in self.detail
-                              if d[0] == 'structure' and abs(d[2]) > 90.0
-                              and abs(d[7]) > 0.10)
+                #
+                # ONE PREDICATE FOR "BEHIND", used everywhere below. It used to
+                # be `>= 120` for the count and `> 90` for the split, so the
+                # split ran over a larger set than the thing it was splitting
+                # and printed "and -5 while NOT turning". A negative count is
+                # the only reason anybody looked; the same mismatch was also
+                # quietly inflating the band histogram beside it.
+                behind = [d for d in self.detail
+                          if d[0] == 'structure' and abs(d[2]) >= REAR_BEARING]
+                assert len(behind) == rear, (
+                    f'{len(behind)} rear stops by one rule and {rear} by the '
+                    f'other; the two disagree and the split below is not real')
+                turning = sum(1 for d in behind if abs(d[7]) > 0.10)
                 straight = rear - turning
                 print(f'      of those, {turning} while turning on the spot '
                       f'(correct: a spot turn sweeps the rear)')
                 print(f'      and {straight} while NOT turning, which is the '
                       f'rear field live during forward motion')
-                bands = Counter(d[5] for d in self.detail
-                                if d[0] == 'structure' and abs(d[2]) > 90.0
-                                and d[5])
+                bands = Counter(d[5] for d in behind if d[5])
                 for band, n in bands.most_common(4):
                     print(f'      band {band}: {n}')
             print('    a stop for something BEHIND while driving forward is the '

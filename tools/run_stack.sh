@@ -305,6 +305,18 @@ fi
 # is generated from. Passing the default 0.300 by 0.2845 while running the
 # 0.295 by 0.2795 vehicle would have overstated every clearance by 5 mm, and
 # the numbers this probe produces are argued over at that scale.
+#
+# ON A survey_mission RUN THIS SPANS BOTH PHASES, and the two are not the same
+# experiment. The survey drives frontier goals through a map that does not
+# exist yet; the mission drives known routes. V-43 and V-46 both measured
+# mission only on an existing map, deliberately, so the survey was not a
+# variable, and a summary that mixes the phases is not comparable with either.
+#
+# Splitting them needs no extra plumbing: `survey finished` in survey.log and
+# the first line of mission.log carry stamps on the same simulated clock the
+# probe uses, so the contacts it reports fall on one side or the other. The
+# probe is left running across both because the survey phase is where the
+# first contact of V-51 turned up, and stopping it there would have hidden it.
 if [ "$CONTACTS" = true ]; then
   read -r HL HW < <(python3 - "$PLATFORM" <<'EOF'
 import pathlib, sys, yaml
