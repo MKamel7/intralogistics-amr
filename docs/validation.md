@@ -3240,3 +3240,51 @@ them and is not distinguishable from either.
 The honest summary is that **SmacPlanner2D is kept, on tolerance rather than on
 path quality**, and that the comparison's main product is the mechanism rather
 than the ranking.
+
+---
+
+## V-48. HuNavSim cannot reach Gazebo Harmonic, and the spike was aborted on evidence
+
+Timeboxed at 90 minutes with the abort criterion written before starting: stop
+if it does not build against Jazzy and Harmonic, or if its pedestrians do not
+return lidar hits. **It aborted in about five minutes, on the first of those.**
+
+### The evidence
+
+`hunav_sim` itself is simulator agnostic. Its agent manager depends on
+`rclcpp`, `behaviortree_cpp`, `nav2_behavior_tree` and `people_msgs`, all of
+which exist on Jazzy. That half would port.
+
+The simulator integration does not. `hunav_gazebo_wrapper`, on its newest
+branch `v2.0`, declares:
+
+    <exec_depend>gazebo_ros</exec_depend>
+
+That is **Gazebo Classic**. Classic reached end of life in January 2025 and is
+not packaged for Jazzy: `apt-cache policy ros-jazzy-gazebo-ros` returns
+nothing. Jazzy pairs with Harmonic through `ros_gz_sim`, which is what this
+project uses.
+
+Branches available upstream, on both `hunav_sim` and `hunav_gazebo_wrapper`:
+`foxy`, `v1.0-humble`, `v2.0`. **There is no Jazzy branch and no Harmonic
+wrapper.** `hunav_gz_wrapper` does not exist as a repository.
+
+### What adopting it would actually have meant
+
+Writing a new Gazebo Harmonic system plugin to drive HuNav's agents, because
+the existing one targets a simulator that cannot be installed here. That is a
+project, not an integration, and it would have been undertaken to replace a
+pedestrian system that already works: routes, crossings, yield behaviour, and
+a measured social navigation table in V-43.
+
+### Why this is recorded rather than quietly dropped
+
+The risk was raised before starting, the decision to try anyway was explicit,
+and the abort criterion was written down first precisely so the outcome could
+not be rationalised afterwards. A dependency that does not support the
+distribution is a finding about the ecosystem, not a failure of the spike.
+
+**The social navigation metrics that motivated HuNavSim were built directly
+instead**, in `tools/measure_social.py`, and they produced the table in V-43
+without an external dependency. The metrics were always the value; the
+framework was never the point.
