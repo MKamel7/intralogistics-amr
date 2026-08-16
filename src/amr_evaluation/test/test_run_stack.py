@@ -282,3 +282,48 @@ def test_readiness_waits_are_tied_to_this_runs_bringup():
     assert t.index('BRINGUP_PID=$!') < t.index('wait_active /slam_toolbox'), (
         'the pid is captured after the first readiness wait, which is after '
         'the window it exists to protect')
+
+
+STOP_ALL = REPO / 'tools' / 'stop_all.sh'
+
+
+def test_teardown_matches_a_relatively_invoked_orchestrator():
+    """The invocation the handover documents is the one teardown could not see.
+
+    stop_all.sh matched a process by looking for the absolute workspace path in
+    its command line. `tools/run_stack.sh --run mission`, which is how every
+    example in HANDOVER.md and this file's own usage block invokes it, puts no
+    absolute path there at all.
+
+    Measured: two orchestrators and their four probes survived a teardown that
+    reported "all stopped" having killed 29 processes, and one was found alive
+    fifteen hours and fifty one minutes later, still counting as a running
+    stack to whats_running.sh. That is the collision this script exists to
+    prevent, surviving the script that exists to prevent it.
+
+    Resolving command line tokens against the process's own working directory
+    turns `tools/run_stack.sh` back into a path inside the workspace. A plain
+    shell sitting in the repository carries no such token, which is why the cwd
+    alone is not the test.
+    """
+    t = STOP_ALL.read_text()
+    assert 'readlink -f "/proc/$pid/cwd"' in t, (
+        'teardown does not look at the working directory, so it cannot '
+        'resolve a relative command line')
+    assert 'if [ -e "$cwd/$tok" ]' in t, (
+        'teardown does not resolve command line tokens against the cwd, so a '
+        'relatively invoked orchestrator is invisible to it')
+
+
+def test_teardown_still_refuses_to_kill_itself_or_its_ancestors():
+    """The guard that must survive every change to the matcher.
+
+    A teardown that matches more processes is one edit away from matching the
+    shell that launched it. It has done exactly that once: stop_all.sh killed
+    tools/run_stack.sh's own shell mid-run.
+    """
+    t = STOP_ALL.read_text()
+    assert 'ANCESTORS' in t, 'the ancestor exclusion is gone'
+    assert "grep -q 'stop_all'" in t, (
+        'teardown no longer excludes itself by name, so a wider matcher can '
+        'kill the script doing the killing')

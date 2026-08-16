@@ -88,7 +88,33 @@ collect() {
       # fresh stack into the one that had just been cleared. Consecutive
       # experiment runs collided, came up with no /scan and no /odom, and were
       # excluded as failures of the vehicle.
-      case "$cmd" in *"$WS/"*) echo "$pid" ;; esac
+      case "$cmd" in *"$WS/"*) echo "$pid"; continue ;; esac
+
+      # AND THE RELATIVE INVOCATION, which is the one the handover documents.
+      # `tools/run_stack.sh --run mission` puts no absolute path on the command
+      # line at all, so the test above cannot see it. Measured: two
+      # orchestrators and their four probes survived a teardown that reported
+      # "all stopped" and had killed 29 processes, and one was found alive
+      # fifteen hours later still counting as a running stack.
+      #
+      # Resolved against the process's own working directory, `tools/foo.py`
+      # becomes a real path inside the workspace. A plain shell sitting in the
+      # repository has no such token on its command line and is not matched,
+      # which is why this resolves tokens rather than testing the cwd alone.
+      cwd=$(readlink -f "/proc/$pid/cwd" 2>/dev/null) || continue
+      case "$cwd" in
+        "$WS"|"$WS"/*)
+          for tok in $cmd; do
+            case "$tok" in
+              -*|"") continue ;;
+            esac
+            if [ -e "$cwd/$tok" ]; then
+              case "$(readlink -f "$cwd/$tok" 2>/dev/null)" in
+                "$WS"/*) echo "$pid"; break ;;
+              esac
+            fi
+          done ;;
+      esac
     done
     # Plus the third-party processes, matched on their command lines.
     pgrep -f "$EXTERNAL" 2>/dev/null

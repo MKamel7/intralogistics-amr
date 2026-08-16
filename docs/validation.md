@@ -3737,3 +3737,73 @@ caught by a test:
 Each was caught because the components are printed beside the total rather than
 instead of it. A probe that printed only "the tail is in the control path"
 would have been wrong three times and convincing every time.
+
+---
+
+## V-54. Teardown could not see the invocation the handover documents
+
+`stop_all.sh` reported "all stopped" having killed 29 processes, and two
+orchestrators with four probes attached were still running.
+
+### The rule and the hole in it
+
+The matcher walks `/proc` and takes a process if either its executable resolves
+inside the workspace, which catches the C++ nodes, or its command line contains
+the absolute workspace path, which was added in an earlier finding to catch the
+Python nodes and the orchestrators in `tools/`.
+
+Neither test sees this:
+
+    bash tools/run_stack.sh --test-track --run survey_mission --cycles 3
+
+The executable is `/usr/bin/bash`. The command line contains no absolute path.
+And that is the form every example in `HANDOVER.md` uses, the form this script's
+own usage block documents, and the form used for every measurement run in this
+project.
+
+**The previous fix assumed the command line carries the workspace path. It does
+when the caller types the absolute path, and the caller never does.**
+
+### What it cost
+
+One of these was found alive after fifteen hours and fifty one minutes with
+every child dead, counting as a running stack to `whats_running.sh`. Another
+pair was found holding four probes open after a teardown that had just claimed
+success.
+
+Worse, this is the same defect the earlier fix was written for. A surviving
+orchestrator carries on to its next stage and launches a fresh stack into the
+one that was just cleared, which is how consecutive runs collided, came up with
+no `/scan` and no `/odom`, and were excluded as failures of the vehicle. **The
+teardown that exists to prevent that collision was itself surviving teardown.**
+
+### The fix, and why it is not simply "match the working directory"
+
+Each command line token is resolved against the process's own working
+directory, so `tools/run_stack.sh` becomes a real path inside the workspace and
+matches.
+
+Testing the working directory alone would match any shell someone happens to
+have open in the repository, including the one running the teardown. A plain
+shell has no token on its command line that resolves to a workspace file, so
+resolving tokens is both wider than the old rule and narrower than the obvious
+alternative.
+
+Verified by starting three relatively invoked processes from the repository
+root and running the teardown: all three died, the shell that ran the test
+survived.
+
+### The pattern, for the sixth time
+
+| | the check | why it never fired |
+|---|---|---|
+| V-49 | field coverage | a strict xfail nobody reads |
+| V-50 | eleven test files | never registered with the build |
+| V-50 | `amr_vda5050` | wrong build type, collected nothing |
+| V-51 | contact attribution | the speedometer answered a different question |
+| V-52 | `use_sim_time` | four probes set it, six did not |
+| V-54 | teardown matcher | written for the invocation nobody uses |
+
+Every one of them is a check that was correct about the case its author had in
+mind. The fix is the same every time: **derive the set from the world rather
+than from the case you were thinking of.**
