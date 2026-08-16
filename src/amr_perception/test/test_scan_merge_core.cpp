@@ -81,6 +81,61 @@ TEST(FootprintFilter, MarginExpandsTheEnvelopeSymmetrically)
   EXPECT_FALSE(f.isSelfReturn(f.halfLength() + 1e-6, 0.0));
 }
 
+TEST(FootprintFilter, PodsAreRejectedWithoutInflatingTheMargin)
+{
+  // The MP-400 numbers, because the whole point is that they are the real ones.
+  constexpr double kChassisL = 0.590;
+  constexpr double kChassisW = 0.559;
+  constexpr double kBodyMargin = 0.010;
+  constexpr double kPodX = 0.257574;
+  constexpr double kPodY = 0.242074;
+  constexpr double kPodHalf = 0.066114;
+
+  FootprintFilter f(
+    kChassisL, kChassisW, kBodyMargin,
+    {{kPodX, kPodY, kPodHalf}, {-kPodX, -kPodY, kPodHalf}});
+
+  // The pod corner, 28.7 mm proud of the chassis, is the extreme point of the
+  // vehicle. The old bounding box reached it by blanking that much everywhere.
+  EXPECT_TRUE(f.isSelfReturn(kPodX + kPodHalf - 1e-6, kPodY + kPodHalf - 1e-6));
+  EXPECT_TRUE(f.isSelfReturn(0.300, 0.2845));       // the optical centre
+  EXPECT_TRUE(f.isSelfReturn(-0.300, -0.2845));     // and the diagonal one
+  EXPECT_TRUE(f.isSelfReturn(0.0, 0.0));
+
+  // And this is what it buys. At the middle of the side the vehicle is only
+  // its chassis, so a return 20 mm off the flank is a return from the world.
+  // Under the 32 mm bounding box it was deleted as self. See V-39.
+  EXPECT_FALSE(f.isSelfReturn(0.0, 0.5 * kChassisW + 0.020));
+
+  // The forward protective field reaches 0.3446 m in y. Everything between the
+  // filter edge and that line is coverage the fields actually get to use.
+  const double band = (0.5 * kChassisW + 0.065) - (0.5 * kChassisW + kBodyMargin);
+  EXPECT_GE(band, 0.050);
+  EXPECT_FALSE(f.isSelfReturn(0.0, 0.5 * kChassisW + kBodyMargin + 1e-6));
+}
+
+TEST(FootprintFilter, PodsAreLocalToTheirCorners)
+{
+  // A pod that leaked along the flank would undo the shaping silently, so the
+  // asymmetry is asserted rather than assumed.
+  FootprintFilter f(0.590, 0.559, 0.010, {{0.257574, 0.242074, 0.066114}});
+
+  EXPECT_TRUE(f.isSelfReturn(0.257574, 0.300));   // beside the pod
+  EXPECT_FALSE(f.isSelfReturn(0.100, 0.300));     // beside the bare flank
+  EXPECT_FALSE(f.isSelfReturn(-0.257574, -0.300));  // the pod that is not there
+  EXPECT_EQ(f.pods().size(), 1u);
+}
+
+TEST(FootprintFilter, WithoutPodsIsTheOldPlainEnvelope)
+{
+  // A platform with flush scanners passes no pods at all, and must behave
+  // exactly as the filter did before it learned about them.
+  FootprintFilter f(kLength, kWidth, kMargin);
+  EXPECT_TRUE(f.pods().empty());
+  EXPECT_TRUE(f.isSelfReturn(f.halfLength(), f.halfWidth()));
+  EXPECT_FALSE(f.isSelfReturn(f.halfLength() + 1e-6, 0.0));
+}
+
 TEST(ScanAccumulator, StartsCompletelyEmpty)
 {
   ScanAccumulator acc(360, 0.05, 40.0);

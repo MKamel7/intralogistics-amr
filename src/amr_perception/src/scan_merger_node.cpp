@@ -14,6 +14,7 @@
 
 #include <chrono>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -54,8 +55,38 @@ public:
     const double footprint_length = declare_parameter("footprint_length", 0.800);
     const double footprint_width = declare_parameter("footprint_width", 0.580);
     const double footprint_margin = declare_parameter("footprint_margin", 0.020);
+
+    // The scanner pods, modelled where they are rather than covered by
+    // inflating the margin. Empty is legitimate: a platform with flush
+    // scanners has no pods, and the filter is then the plain envelope.
+    const auto pod_x = declare_parameter("self_pod_x", std::vector<double>{});
+    const auto pod_y = declare_parameter("self_pod_y", std::vector<double>{});
+    const auto pod_half = declare_parameter("self_pod_half", std::vector<double>{});
+    if (pod_x.size() != pod_y.size() || pod_x.size() != pod_half.size()) {
+      throw std::runtime_error(
+              "self_pod_x, self_pod_y and self_pod_half must be the same length");
+    }
+    std::vector<FootprintFilter::Pod> pods;
+    for (size_t i = 0; i < pod_x.size(); ++i) {
+      // A pod with a non-positive half extent filters nothing, and it would do
+      // so silently while the margin has already been reduced on the strength
+      // of the pods being modelled. That is a self return reaching the
+      // protective field, which is the exact failure mode of V-39. Loud.
+      if (pod_half[i] <= 0.0) {
+        throw std::runtime_error(
+                "self_pod_half[" + std::to_string(i) + "] is " +
+                std::to_string(pod_half[i]) +
+                ", so that pod would filter nothing while the chassis margin "
+                "has already been reduced to suit it");
+      }
+      pods.push_back({pod_x[i], pod_y[i], pod_half[i]});
+    }
+    RCLCPP_INFO(
+      get_logger(), "self filter: chassis %.3f x %.3f + %.3f m margin, %zu pod(s)",
+      footprint_length, footprint_width, footprint_margin, pods.size());
+
     footprint_ = std::make_unique<FootprintFilter>(
-      footprint_length, footprint_width, footprint_margin);
+      footprint_length, footprint_width, footprint_margin, std::move(pods));
 
     accumulator_ = std::make_unique<ScanAccumulator>(bins_, range_min_, range_max_);
 

@@ -44,26 +44,64 @@ struct Transform2D
 /// recesses, the arc pointing inboard reads about 0.06 m, which is the chassis
 /// wall. Those returns have to go before the merged scan is usable.
 ///
-/// The test is against the full bounding envelope rather than the plus-shaped
-/// chassis, on purpose. The recesses are part of the vehicle too, and a return
-/// inside them is equally impossible.
+/// SHAPED LIKE THE VEHICLE, NOT LIKE ITS BOUNDING BOX, and that distinction is
+/// the whole of V-39.
+///
+/// The scanner pods stand 28.7 mm proud of the chassis at the two diagonal
+/// CORNERS. A bounding box that covers them therefore blanks that much
+/// everywhere, including along the middle of each side where there is no pod
+/// and the vehicle is only its chassis width.
+///
+/// That mattered because the forward protective fields are only about 65 mm
+/// wider than the chassis, being a stopping distance plus the scanner's field
+/// supplement. A uniform 32 mm blind margin left them 33 mm of lateral
+/// coverage, against the 50 mm a person entering the field needs in order to
+/// produce the two returns `min_points` requires. Two attempts to fix that by
+/// making the FIELDS bigger both made things worse: V-42 trapped the vehicle
+/// against a rack, V-45 dropped the other platform from 3 of 3 cycles to 2 of
+/// 9. Making the FILTER smaller where the vehicle is actually smaller costs
+/// nothing and closes the gap.
+///
+/// So: a small margin on the body, and the pods modelled where they are.
 class FootprintFilter
 {
 public:
-  FootprintFilter(double length, double width, double margin)
-  : half_length_(0.5 * length + margin), half_width_(0.5 * width + margin) {}
+  struct Pod
+  {
+    double x{0.0};        ///< centre in base frame
+    double y{0.0};
+    double half{0.0};     ///< half extent of the housing, already rotated
+  };
+
+  /// \param margin clearance around the CHASSIS only. The pods carry their
+  ///        own geometry and must not be covered by inflating this.
+  FootprintFilter(double length, double width, double margin,
+                  std::vector<Pod> pods = {})
+  : half_length_(0.5 * length + margin),
+    half_width_(0.5 * width + margin),
+    pods_(std::move(pods)) {}
 
   inline bool isSelfReturn(double x, double y) const
   {
-    return std::abs(x) <= half_length_ && std::abs(y) <= half_width_;
+    if (std::abs(x) <= half_length_ && std::abs(y) <= half_width_) {
+      return true;
+    }
+    for (const auto & p : pods_) {
+      if (std::abs(x - p.x) <= p.half && std::abs(y - p.y) <= p.half) {
+        return true;
+      }
+    }
+    return false;
   }
 
   double halfLength() const {return half_length_;}
   double halfWidth() const {return half_width_;}
+  const std::vector<Pod> & pods() const {return pods_;}
 
 private:
   double half_length_;
   double half_width_;
+  std::vector<Pod> pods_;
 };
 
 /// One scanner's worth of polar data, in that scanner's own frame.

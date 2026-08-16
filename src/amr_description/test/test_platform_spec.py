@@ -42,6 +42,12 @@ def spec(request):
     return yaml.safe_load(request.param.read_text())
 
 
+@pytest.fixture
+def platform_name(request):
+    """The stem of whichever spec the `spec` fixture is currently serving."""
+    return request.node.callspec.params['spec'].stem
+
+
 def test_has_required_sections(spec):
     for section in ('platform', 'values', 'provenance', 'validation_targets'):
         assert section in spec, f'missing top-level section {section!r}'
@@ -165,26 +171,130 @@ def test_geometry_is_self_consistent(spec):
         'warning field cannot exceed the measuring range')
 
 
-def test_self_filter_margin_covers_the_scanner_pods(spec):
-    """The filter must reject the whole vehicle, pods included.
+# Platforms whose self filter is still the plain bounding box, and why.
+#
+# Shaping the filter needs the pods measured on that platform. The MiR250
+# figure is not a pod derivation at all: 0.060 m came from returns at a fixed
+# 0.440 m from centre, 12 of 12 protective stops in one run, minimum equal to
+# median equal to maximum and absent from both costmaps. Its own pod geometry
+# only reaches 0.4287 m, so 11 mm of that measurement is something else on the
+# vehicle and nobody has identified it. Shrinking that margin on the strength
+# of the MP-400 result would be exactly the mistake V-45 punished, where a rule
+# derived from one platform dropped the other from 3 of 3 cycles to 2 of 9.
+#
+# So V-39 stays OPEN on the MiR250, deliberately, and this list is the record.
+# An entry is asserted to be stale the moment that platform declares pods.
+UNSHAPED_SELF_FILTER = {
+    'mir250_class':
+        'V-39 open: the 40 mm of self return measured on this platform is not '
+        'explained by its pod geometry, which reaches 28.7 mm, and the '
+        'remaining 11 mm has never been identified. Not shaped until it is.',
+}
 
-    The optics sit 5 mm proud of the envelope corner and the housing is a box
-    rotated 45 degrees, so the pods reach further than the chassis does. When
-    the margin was smaller than that, those returns survived the self filter,
-    landed inside the protective field, and the vehicle held a permanent
-    protective stop against its own corners without moving once.
+
+def test_pod_geometry_matches_the_primitives(spec, platform_name):
+    """The pod boxes are derived, so they must not drift from what they derive from.
+
+    self_pod_x, self_pod_y and self_pod_half are carried as spec values because
+    the launch file and the scan merger both need them and neither is a good
+    place for trigonometry. That convenience is only safe while they still
+    agree with scanner_mount_x, scanner_mount_y, scanner_housing_inset and the
+    body dimensions. Move the mount without moving these and the filter would
+    reject a region the vehicle no longer occupies while missing one it does.
     """
     v = spec['values']
+    if platform_name in UNSHAPED_SELF_FILTER:
+        assert 'self_pod_x' not in v, (
+            f'{platform_name} declares pods now, so its UNSHAPED_SELF_FILTER '
+            f'entry is stale and must be deleted along with this branch')
+        pytest.skip(UNSHAPED_SELF_FILTER[platform_name])
     c = math.cos(math.pi / 4.0)
-    hx = v['scanner_mount_x'] - v['scanner_housing_inset'] * c
-    hy = v['scanner_mount_y'] - v['scanner_housing_inset'] * c
-    half = (v['scanner_body_x'] / 2.0) * c + (v['scanner_body_y'] / 2.0) * c
-    proud_x = hx + half - v['chassis_length'] / 2.0
-    proud_y = hy + half - v['chassis_width'] / 2.0
-    needed = max(proud_x, proud_y)
-    assert v['self_filter_margin'] >= needed, (
-        f'self filter margin {v["self_filter_margin"] * 1000:.1f} mm does not '
-        f'cover pods standing {needed * 1000:.1f} mm proud of the envelope')
+    expected = {
+        'self_pod_x': v['scanner_mount_x'] - v['scanner_housing_inset'] * c,
+        'self_pod_y': v['scanner_mount_y'] - v['scanner_housing_inset'] * c,
+        'self_pod_half': (v['scanner_body_x'] / 2.0) * c + (v['scanner_body_y'] / 2.0) * c,
+    }
+    for key, want in expected.items():
+        assert abs(v[key] - want) < 1e-6, (
+            f'{key} is {v[key]:.6f} but the primitives give {want:.6f}; the '
+            f'pod geometry has drifted from the mount it is derived from')
+
+
+def test_the_self_filter_rejects_the_whole_vehicle(spec, platform_name):
+    """Every part of the vehicle must fall inside the filter, pods included.
+
+    The optics sit 5 mm proud of the envelope corner and the housing is a box
+    rotated 45 degrees, so the pods reach 28.7 mm past the chassis. When
+    nothing covered that, those returns survived the self filter, landed inside
+    the protective field, and the vehicle held a permanent protective stop
+    against its own corners without moving once.
+
+    What changed in V-49 is HOW they are covered. The margin used to be wide
+    enough to swallow them, which blanked 28.7 mm along every side including
+    the ones with no pod on them. Now the pods are modelled and the margin only
+    has to clear the chassis. This test still demands full coverage; it just no
+    longer accepts a margin as the way to get it.
+    """
+    v = spec['values']
+    if platform_name in UNSHAPED_SELF_FILTER:
+        assert 'self_pod_x' not in v, (
+            f'{platform_name} declares pods now, so its UNSHAPED_SELF_FILTER '
+            f'entry is stale and must be deleted along with this branch')
+        pytest.skip(UNSHAPED_SELF_FILTER[platform_name])
+    c = math.cos(math.pi / 4.0)
+    half = v['self_pod_half']
+
+    # The pod corner is the extreme point of the whole vehicle, and it is the
+    # pod box rather than the body box that has to contain it. So what is
+    # checked here is that the pod box was not drawn smaller than the housing
+    # it stands for.
+    assert half >= (v['scanner_body_x'] / 2.0) * c, (
+        'pod half extent is smaller than the rotated housing, so the corner of '
+        'the scanner itself falls outside the self filter')
+
+    # And the optics, which sit further out than the housing does.
+    assert v['self_pod_y'] + half >= v['scanner_mount_y'], (
+        'the pod box does not reach the optical centre, so the scanner would '
+        'see its own aperture')
+
+    # And the margin must still cover what the vehicle was MEASURED to see of
+    # itself beyond the chassis, which is a different quantity from the pods.
+    assert v['self_filter_margin'] >= 0.0030, (
+        f'self filter margin {v["self_filter_margin"] * 1000:.1f} mm is below '
+        f'the 3.0 mm of self observation measured on this platform')
+
+
+def test_the_self_filter_is_not_wider_than_the_vehicle_where_there_is_no_pod(
+        spec, platform_name):
+    """The other half of V-39, and the reason the filter is shaped at all.
+
+    A blind zone along the flank costs lateral coverage in the forward
+    protective fields, which are only scanner_protective_supplement wider than
+    the chassis to begin with. The pods are corner-local: they span x from
+    0.191 to 0.324, so along the middle of each side the vehicle is nothing but
+    chassis and the filter must not pretend otherwise.
+
+    Two earlier attempts to buy that coverage by enlarging the FIELDS were both
+    measured to be worse than the defect (V-42, V-45). Shrinking the filter
+    where the vehicle is genuinely smaller costs nothing.
+    """
+    v = spec['values']
+    if platform_name in UNSHAPED_SELF_FILTER:
+        assert 'self_pod_x' not in v, (
+            f'{platform_name} declares pods now, so its UNSHAPED_SELF_FILTER '
+            f'entry is stale and must be deleted along with this branch')
+        pytest.skip(UNSHAPED_SELF_FILTER[platform_name])
+    band = (v['chassis_width'] / 2.0 + v['scanner_protective_supplement']) - (
+        v['chassis_width'] / 2.0 + v['self_filter_margin'])
+    assert band >= 0.050, (
+        f'the self filter leaves forward protective fields {band * 1000:.1f} mm '
+        f'of lateral coverage along the flank, below the 50 mm a person needs '
+        f'to produce the two returns min_points requires. This is V-39')
+
+    # The pods may not creep along the side and undo that.
+    assert v['self_pod_x'] - v['self_pod_half'] > 0.15, (
+        'the pod boxes now reach the middle of the side, where they blank the '
+        'flank coverage the shaped filter exists to protect')
 
 
 def test_scanner_pair_covers_360_degrees(spec):

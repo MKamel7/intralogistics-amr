@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bring up one MiR250-class AMR in the warehouse.
+"""Bring up one MP-400-class AMR in the warehouse.
 
     ros2 launch amr_bringup robot.launch.py
     ros2 launch amr_bringup robot.launch.py gui:=false cameras:=false
@@ -242,10 +242,16 @@ def generate_launch_description():
                 'publish_rate': v['scanner_update_rate'],
                 'footprint_length': v['chassis_length'],
                 'footprint_width': v['chassis_width'],
-                # Must cover the scanner pods, which stand proud of the
-                # published envelope. Too small and the vehicle sees its own
-                # corners and holds a permanent protective stop.
+                # Clearance around the CHASSIS. It does not cover the scanner
+                # pods and must not be inflated until it does: the pods stand
+                # proud only at the two diagonal corners, so a margin sized for
+                # them blanks that much along every side, and the forward
+                # protective fields are only about 65 mm wider than the chassis
+                # to begin with. That was V-39. The pods go in separately.
                 'footprint_margin': v['self_filter_margin'],
+                'self_pod_x': [v['self_pod_x'], -v['self_pod_x']],
+                'self_pod_y': [v['self_pod_y'], -v['self_pod_y']],
+                'self_pod_half': [v['self_pod_half'], v['self_pod_half']],
             }])]
 
     scan_merger = OpaqueFunction(function=make_scan_merger)

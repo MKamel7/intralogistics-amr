@@ -30,6 +30,24 @@ def cfg_path(name):
     return PKG / 'config' / f'collision_monitor.{name}.yaml'
 
 
+def stop_and_warn_polygons(path):
+    """Yield (name, [(x, y), ...]) for every protective and warning polygon.
+
+    Every vertex, not the first one. The first vertex of a reverse field is its
+    FRONT corner, which sits on the chassis by construction, so a check that
+    reads only points[0] measures the end the field does not extend from.
+    """
+    import re
+    text = path.read_text()
+    for m in re.finditer(
+            r"^\s{6}((?:stop|warn)\w*):\s*\n(?:.*\n)*?\s+points:\s*'(\[\[.*?\]\])'",
+            text, re.M | re.S):
+        pts = [(float(a), float(b)) for a, b in
+               re.findall(r'\[\s*([-\d.]+),\s*([-\d.]+)\s*\]', m.group(2))]
+        assert len(pts) >= 4, f'{m.group(1)} has {len(pts)} vertices'
+        yield m.group(1), pts
+
+
 def _load_generator():
     spec = importlib.util.spec_from_file_location('generate_fields', GEN)
     mod = importlib.util.module_from_spec(spec)
@@ -477,64 +495,95 @@ def test_the_warning_field_limits_speed_rather_than_scaling_it(platform, cfg):
     assert fits, 'the warning speed cap falls outside every protective band'
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    'V-39 OPEN DEFECT, and two attempted fixes were measured to be worse than '
-    'it. Flooring both axes trapped the MP-400 against a rack with 1057 '
-    'commands in and 0 out (V-42). Flooring the longitudinal axis alone '
-    'dropped the MiR250 from 3 of 3 to 2 of 9, because its blind zone is '
-    '0.46 m against the MP-400 0.355 m and the rule pushed its rear field '
-    '110 mm past its own back face (V-45). The self filter blanks a region '
-    'larger than the body, so any field clearing the blind zone reaches '
-    'beyond the body, and a field beyond the body stops the vehicle for what '
-    'it must reverse away from. The lever is self_filter_margin, and whether '
-    'shrinking it makes the vehicle see itself is a measurable claim nobody '
-    'has measured. Strict, so this XPASSes the moment it is genuinely fixed.'))
+# Platforms whose self filter is still the plain bounding box, and why. Kept in
+# step with UNSHAPED_SELF_FILTER in amr_description/test/test_platform_spec.py,
+# which carries the full reasoning. The short version: the 40 mm of self return
+# measured on the MiR250 is not explained by its pod geometry and nobody has
+# identified the remaining 11 mm, so V-39 stays open there on purpose.
+UNSHAPED_SELF_FILTER = ('mir250_class',)
+
+
 def test_the_protective_fields_are_not_inside_the_self_filter(platform, platform_name):
     """The blind zone must not consume the field it sits inside.
 
-    The scan merger deletes every return within the chassis plus
-    self_filter_margin, so the vehicle does not see its own body. The
-    protective polygons are generated separately from ISO 13855 stopping
-    distances, and nothing related the two.
+    The scan merger deletes every return inside the vehicle, so it does not see
+    its own body. The protective polygons are generated separately from ISO
+    13855 stopping distances, and for a long time nothing related the two.
 
-    Measured on the MP-400: the filter blanks 0.3550 by 0.3395 m while every
-    forward stop polygon is 0.3446 m half width, leaving 5.1 mm of lateral
-    coverage, and stop_reverse is shorter than the filter is long. A person
-    reached 197 mm inside the footprint at +42 degrees with the monitor active
-    and no stop. See V-39.
+    What that cost, measured on the MP-400: the filter blanked 0.3550 by 0.3395
+    m while every forward stop polygon is 0.3446 m half width, leaving 5.1 mm
+    of lateral coverage. A person reached 197 mm inside the footprint at +42
+    degrees with the monitor active and no stop. That was V-39.
+
+    Two attempts to buy the coverage by enlarging the FIELDS were both measured
+    to be worse than the defect: V-42 trapped the MP-400 against a rack with
+    1057 commands in and 0 out, and V-45 dropped the MiR250 from 3 of 3 cycles
+    to 2 of 9. What closed it was shaping the FILTER instead, in V-49. The pods
+    stand proud only at the two diagonal corners, so modelling them where they
+    are lets the margin fall to the 10 mm the chassis needs, and the flank band
+    goes from 33.1 mm to 55.1 mm with no field resized at all.
 
     A protective field the sensor cannot see into is not a protective field.
     """
-    import re
     v = platform
+    if platform_name in UNSHAPED_SELF_FILTER:
+        pytest.skip(
+            f'{platform_name} self filter is not shaped yet, see '
+            f'UNSHAPED_SELF_FILTER; V-39 remains open on this platform')
+
     fx = v['chassis_length'] / 2.0 + v['self_filter_margin']
     fy = v['chassis_width'] / 2.0 + v['self_filter_margin']
 
-    text = cfg_path(platform_name).read_text()
     thin = []
-    for m in re.finditer(
-            r'^\s{6}(\w+):\s*\n(?:.*\n)*?\s+points:\s*\'\[\[([-\d.]+), ([-\d.]+)\]',
-            text, re.M):
-        name, hx, hy = m.group(1), float(m.group(2)), float(m.group(3))
-        if not name.startswith(('stop', 'warn')):
-            continue
-        # A field must extend meaningfully beyond the blind zone in at least
-        # one axis, or nothing inside it can ever be seen.
-        # LONGITUDINAL ONLY. Flooring the lateral extent as well trapped the
-        # vehicle: it stopped correctly for a rack 0.38 m off its flank and
-        # then could not reverse away, because the same widening applied to
-        # stop_reverse. 1097 commands in, 0 out. See V-42.
-        #
-        # The lateral band remains 5.1 mm and that is a REAL open defect from
-        # V-39, recorded rather than closed with a change that costs mobility.
-        # It is not asserted here because it currently fails by design.
-        # The generator floors these to exactly MIN_DETECTABLE_BAND, so a bare
-        # < comparison fails on floating point rounding at the boundary. The
-        # tolerance is a micrometre; it is about representation, not margin.
+    for name, pts in stop_and_warn_polygons(cfg_path(platform_name)):
+        # The field's reach in each axis, taken over EVERY vertex. Reading the
+        # first vertex alone was a real bug here: for a reverse field it is the
+        # front corner, which sits at the chassis front by construction, so the
+        # test measured the end of the polygon the field does not extend from
+        # and reported a 151 mm reach as a negative one.
+        hx = max(abs(x) for x, _ in pts)
+        hy = max(abs(y) for _, y in pts)
+        # A micrometre of tolerance because the generator floors to exactly
+        # MIN_DETECTABLE_BAND and a bare < fails on representation.
         if (hx - fx) < MIN_DETECTABLE_BAND - 1e-6:
-            thin.append(f'{name}: {(hx - fx) * 1000:.1f} mm of longitudinal '
-                        f'coverage beyond the blind zone')
+            thin.append(f'{name}: {(hx - fx) * 1000:.1f} mm longitudinal')
+        if (hy - fy) < MIN_DETECTABLE_BAND - 1e-6:
+            thin.append(f'{name}: {(hy - fy) * 1000:.1f} mm lateral')
     assert not thin, (
-        'these protective fields have no longitudinal coverage outside the '
-        f'self filter blind zone of {fx:.4f} x {fy:.4f} m, so the scan they '
-        'rely on has already been deleted:\n  ' + '\n  '.join(thin))
+        'these protective fields have no coverage outside the self filter '
+        f'blind zone of {fx:.4f} x {fy:.4f} m, so the scan they rely on has '
+        'already been deleted:\n  ' + '\n  '.join(thin))
+
+
+def test_the_pod_shadow_is_recorded_rather_than_ignored(platform, platform_name):
+    """The part of V-39 that shaping does not remove, stated honestly.
+
+    A pod is still a blind box. Along the x span it occupies, the flank blind
+    edge is the pod edge and not the chassis edge, so the band there is smaller
+    than the 55.1 mm the rest of the flank gets. This test does not demand 50
+    mm inside the pod shadow, because a corner scanner cannot see past its own
+    housing and no filter shape changes that. It demands the shadow be small,
+    local, and of a known size, so nobody reads the flank figure as if it
+    applied along the whole side.
+    """
+    v = platform
+    if platform_name in UNSHAPED_SELF_FILTER:
+        pytest.skip(f'{platform_name} declares no pods')
+
+    pod_edge = v['self_pod_y'] + v['self_pod_half']
+    span = 2.0 * v['self_pod_half']
+    worst = min(
+        max(abs(y) for _, y in pts) - pod_edge
+        for _, pts in stop_and_warn_polygons(cfg_path(platform_name)))
+
+    # The measured figure, asserted so it cannot drift unnoticed: 36.4 mm over
+    # the 132 mm the pods span, against 55.1 mm along the remaining 458 mm of
+    # the side. Whether that shadow is detectable in practice is a question for
+    # measure_contacts.py, not for arithmetic.
+    assert worst > 0.030, (
+        f'the pod shadow leaves only {worst * 1000:.1f} mm of coverage, which '
+        f'is no longer a shadow but a hole')
+    assert span < 0.25 * v['chassis_length'], (
+        f'the pods span {span * 1000:.0f} mm of a '
+        f'{v["chassis_length"] * 1000:.0f} mm side, which is not local enough '
+        f'to call a shadow')

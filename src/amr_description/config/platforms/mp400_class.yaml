@@ -151,7 +151,10 @@ values:
   scanner_warning_range: 10.0    # m
   scanner_protective_supplement: 0.065   # m
   scanner_detection_resolution: 0.070    # m
-  self_filter_margin: 0.032      # m
+  self_filter_margin: 0.010      # m, CHASSIS only; the pods are modelled
+  self_pod_x: 0.257574           # m, pod centre from robot centre
+  self_pod_y: 0.242074           # m
+  self_pod_half: 0.066114        # m, half extent of the rotated housing
 
   # ---- Cameras: Intel RealSense D435i ---------------------------------
   camera_mount_height: 0.270     # m
@@ -296,7 +299,10 @@ provenance:
   scanner_warning_range: {kind: datasheet, src: "SICK nanoScan3 sheet, Warning field range 10 m"}
   scanner_protective_supplement: {kind: datasheet, src: "SICK nanoScan3 sheet, Protective field supplement 65 mm"}
   scanner_detection_resolution: {kind: datasheet, src: "SICK nanoScan3 sheet, Resolution can be configured, 70 mm setting chosen rather than the 20 mm used on the MiR250 build. This is the one sensor SETTING that differs between the platforms and it is a deliberate coarsening: min_object_at_1m below is the target it sets"}
-  self_filter_margin:  {kind: derived,   src: "0.032 m = the 0.0287 m the scanner pods stand proud of the chassis envelope, plus the 0.0030 m of further self observation MEASURED on this platform on 2026-08-15 over 224 samples in 90 s, each scanner returning exactly 25 hits on the vehicle's own body. The pod figure is the binding one and it is geometry, not observation: the simulated lidar does not return hits on its own housing, so the measurement alone would have justified 0.010 m and been wrong on hardware. The previous 0.060 m was the MiR250 figure of 40 mm carried across untested, and its own provenance said so; that vehicle is 800 by 580 mm against this one at 590 by 559 mm. This is not cosmetic: at 0.060 the blind zone left the forward protective fields 5.1 mm of lateral coverage, V-39. At 0.032 it is 33.1 mm, which is a 6.5 times improvement and still short of the 50 mm a field needs to be observable. See V-46"}
+  self_filter_margin:  {kind: derived,   src: "0.010 m of clearance around the CHASSIS, and around the chassis only. Three times the 0.0030 m of self observation MEASURED on this platform on 2026-08-15 over 224 samples in 90 s, each scanner returning exactly 25 hits on the vehicle's own body, rounded up from 0.0090 to 0.010. It is derived rather than measured because the factor of three is a judgement about headroom and not an observation, and the difference matters: the previous note argued that 0.010 would be wrong on HARDWARE, since a simulated lidar returns no hits on its own housing and a real one does. That objection is answered by modelling the pods, not by widening this. The scanner pods are NOT covered by this number any more: they are modelled where they are, as self_pod_x, self_pod_y and self_pod_half, because they stand proud only at the two diagonal CORNERS and a margin wide enough for them blanked that much along every side. That is the whole of V-39. The history is worth keeping: 0.060 m was the MiR250 figure carried across untested and left the forward fields 5.1 mm of lateral coverage; 0.032 m was the pods measured properly and gave 33.1 mm; shaping the filter rather than inflating it gives 55.1 mm against the 50 mm needed, with no field resized and nothing given up in mobility. See V-46 and V-49"}
+  self_pod_x:          {kind: derived,   src: "scanner_mount_x - scanner_housing_inset * cos(45 deg) = 0.300 - 0.060 * 0.70711 = 0.257574. The housing hangs back along the corner diagonal from the optical centre, which is the same 45 degree mounting the URDF uses. test_pod_geometry_matches_the_primitives recomputes this and fails if the mount ever moves without this following it"}
+  self_pod_y:          {kind: derived,   src: "scanner_mount_y - scanner_housing_inset * cos(45 deg) = 0.2845 - 0.060 * 0.70711 = 0.242074"}
+  self_pod_half:       {kind: derived,   src: "half extent of the scanner_body_x by scanner_body_y box once rotated 45 deg = (0.107/2 + 0.080/2) * cos(45 deg) = 0.066114. Taken as a square because the filter is axis aligned and the rotated box inscribes in one; it over-rejects by at most the corner slivers, which are inside the recess anyway. The pods reach 0.3082 m in y, 28.7 mm proud of the chassis, and that is what the old uniform margin was sized for"}
   camera_mount_height: {kind: estimated, src: "not published for this platform; below the 411 mm profile height"}
   camera_mount_y:      {kind: estimated, src: "not published; a forward facing pair splayed about the centre line"}
   camera_splay:        {kind: estimated, src: "not published; chosen so the two 87 deg fields overlap slightly"}
