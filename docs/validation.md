@@ -3865,3 +3865,98 @@ covered less than they appeared to; this was a sentence in a document.
 **A claim in a handover is a check with no test behind it.** Every figure in
 this project traces to a `V-` entry precisely so that this class of statement
 has somewhere to fail, and this one had no such anchor until now.
+
+---
+
+## V-56. The latency tail was the probe, and V-44's headline claim is retracted
+
+`control_latency: 0.10 # NOT YET MEASURED` has been the first thing this
+project says about itself since V-44. The measurement that refuted it was wrong
+in two independent ways.
+
+### The artifact
+
+A latency sample is ARMED on the rising edge of a protective stop and CLOSED on
+the falling edge of motion. It was armed regardless of whether the vehicle was
+moving.
+
+When the monitor announces a stop and the vehicle is already stationary,
+nothing closes that sample. It stays armed until some later, unrelated stop,
+and the interval then measured spans two events that were never connected. It
+is not a slow latency. It is not a latency.
+
+**397 samples in the guarded run, 20 decisions ignored because the vehicle was
+already stationary.** Those twenty were the tail.
+
+### What the stamps had already said
+
+The tail sample in the run before the guard:
+
+    worst: 872 ms total
+      STAMP gaps here:  scan 68 ms, command 52 ms
+      arrival gaps:     scan 72 ms, command 60 ms
+
+The controller published every 52 ms straight through an 872 ms "latency".
+Nothing stalled, in any stream, by any measure. A genuine sensor to command
+interval of 872 ms is impossible under those conditions, and that impossibility
+was visible in the log before the cause was known.
+
+### Before and after
+
+| run | n | p50 | p95 | max | sd |
+|---|---|---|---|---|---|
+| unguarded | 302 | 88 | 128 | **980** | 56 |
+| unguarded | 191 | 88 | 116 | **872** | 60 |
+| **guarded** | **397** | **84** | **124** | **144** | **24** |
+
+Every unguarded run contained exactly one far outlier. The guarded run contains
+none, the standard deviation falls from 56 to 24 ms, and the control half never
+exceeds one 4 ms physics step.
+
+### The second problem, which stands on its own
+
+V-44 quoted p95 796 ms and p99 1260 ms from **43 samples pooled across five
+runs of 17, 6, 7, 7 and 6.** A p99 of 43 samples is the maximum with decimal
+places. The probe printed, in that same output:
+
+    7 samples is thin. Prefer 20 or more before changing a spec.
+
+The warning was in the report and the number went into the README anyway. That
+is the eighth defect of this shape in the project and the most embarrassing,
+because unlike a strict xfail or an unregistered test, this one was printed in
+plain language at the moment of use.
+
+### What is retracted
+
+- **"The estimate is refuted"**, and the 522 mm of travel the fields were said
+  not to carry. Measured properly the p95 is 124 ms against an estimate of
+  100 ms. At the commissioned 0.75 m/s that is **18 mm**, not 522.
+- **V-53's attribution of the tail to a starved executor.** There is no tail.
+  The bimodal control half it described, 291 samples under one step and one at
+  904 ms, was 291 real samples and one artifact. The mechanism it proposed was
+  an explanation for a measurement error.
+- **The roadmap's first item and the handover's first "thing most worth
+  knowing"**, both of which were rewritten on V-53's strength earlier the same
+  day.
+
+### What survives
+
+The split itself, and its finding: the sensor half never exceeds 76 ms across
+397 samples, and the control half never exceeds one physics step. The chain
+from scan to command is tight and boring, which is what it should be.
+
+`control_latency` is now a measured quantity rather than an estimate, and
+whether to write 0.125 into the spec is a separate decision recorded below.
+
+### The lesson, said plainly because it is the useful part
+
+Four defects were found in this project's stack over three days. **Five were
+found in the instrument measuring it**: the wrong clock, the wrong anchor, the
+wrong precision, the wrong pairing, and percentiles from seven samples.
+
+An instrument that has been wrong more often than the system is not a reason to
+distrust the measurements. It is a reason to distrust measurements that were
+never cross checked, and every one of these was caught the same way: by
+printing the components beside the conclusion, and by asking what else would
+have to be true. The 872 ms could not coexist with a 52 ms command cadence.
+Nothing but the log said so.

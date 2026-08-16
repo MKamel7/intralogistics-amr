@@ -152,7 +152,9 @@ class LatencyProbe(Node):
         self.was_moving = False
         self.states_seen = 0
         self.samples = []            # total, kept for continuity with V-44
-        self.parts = []              # (total, sensor, control, scan_gap, cmd_gap)
+        # (total, sensor, control, scan_arrival_gap, cmd_arrival_gap,
+        #  scan_stamp_gap, cmd_stamp_gap)
+        self.parts = []
         self.rejected = 0
 
         # Arrival times, for the stall signature. One second of history is
@@ -160,6 +162,32 @@ class LatencyProbe(Node):
         # stall that explains a sample is inside this window by construction.
         self.scan_arrivals = []
         self.cmd_arrivals = []
+
+        # STAMP GAPS, which the arrival gaps above cannot substitute for.
+        #
+        # An arrival gap is measured at this node and therefore includes this
+        # node's own scheduling. That is exactly the quantity the split is
+        # made of, so using it to check the split proves nothing: if this
+        # probe stalls, the split and the arrival gap move together and agree
+        # with each other while both are wrong.
+        #
+        # A stamp gap is written by the PUBLISHER. If the command stream has a
+        # 900 ms hole in its own stamps, the controller stopped producing. If
+        # the stamps are evenly spaced and only the arrivals are late, the
+        # delay is transport or this probe, and the split is measuring the
+        # instrument.
+        self.prev_cmd_stamp = None
+        self.prev_scan_stamp = None
+
+        # A decision armed while the vehicle was already stopped, and one that
+        # nothing closed before it went stale. Both are counted and reported
+        # rather than silently dropped: a probe that quietly discards its
+        # awkward samples is how a clean number gets believed.
+        self.armed_while_stopped = 0
+        self.expired = 0
+        # Generous: five times the 0.10 s the spec carries. A stop that has not
+        # reached the wheels within this did not come from that decision.
+        self.max_pair_age = self.declare_parameter('max_pair_age_s', 0.5).value
 
         self.create_subscription(LaserScan, '/scan', self._scan, SENSOR_QOS)
         # nav2_msgs/CollisionMonitorState, NOT std_msgs/String. The first
@@ -197,7 +225,11 @@ class LatencyProbe(Node):
         return max(gaps)
 
     def _scan(self, msg):
-        self.last_scan = stamp_s(msg.header)
+        stamp = stamp_s(msg.header)
+        self.scan_stamp_gap = (
+            stamp - self.prev_scan_stamp if self.prev_scan_stamp else 0.0)
+        self.prev_scan_stamp = stamp
+        self.last_scan = stamp
         now = self._now()
         self.last_scan_rx = now
         self.scan_arrivals.append(now)
@@ -217,6 +249,22 @@ class LatencyProbe(Node):
         self.states_seen += 1
         stopping = msg.action_type == CollisionMonitorState.STOP
         if stopping and not self.stopping and self.last_scan is not None:
+            # ONLY IF THERE IS MOTION TO STOP, and this is the whole of V-56.
+            #
+            # A sample is closed on the falling edge of motion. Arming this
+            # while the vehicle is ALREADY stationary means nothing closes it
+            # until some later, unrelated stop, and the interval then measured
+            # spans both events. That is not a latency, it is the gap between
+            # two things that were never connected.
+            #
+            # It produced the tail. The worst sample in the run before this
+            # guard was 872 ms with the command stream publishing every 52 ms
+            # throughout and no stall anywhere, which is impossible for a
+            # genuine sensor to command latency and obvious in hindsight.
+            if not self.was_moving:
+                self.armed_while_stopped += 1
+                self.stopping = stopping
+                return
             self.pending = self.last_scan
             self.pending_rx = self.last_scan_rx
             self.decided = self._now()
@@ -224,6 +272,10 @@ class LatencyProbe(Node):
         self.stopping = stopping
 
     def _cmd(self, msg):
+        stamp = stamp_s(msg.header)
+        cmd_stamp_gap = (
+            stamp - self.prev_cmd_stamp if self.prev_cmd_stamp else 0.0)
+        self.prev_cmd_stamp = stamp
         now = self._now()
         self.cmd_arrivals.append(now)
         self.cmd_arrivals = [a for a in self.cmd_arrivals if now - a <= 2.0]
@@ -231,6 +283,16 @@ class LatencyProbe(Node):
         moving = abs(msg.twist.linear.x) > self.stop_eps
         # The falling edge only. A vehicle that was already stopped tells us
         # nothing about how fast the stack reacts.
+        # AND IT MUST NOT OUTLIVE ITS OWN EVENT. Even armed correctly, a
+        # decision that nothing closes stays armed and is eventually paired
+        # with a stop that had a different cause. Expiring it is a measurement
+        # this run did not make, which is a different thing from a slow one.
+        if (self.pending is not None and self.decided is not None
+                and now - self.decided > self.max_pair_age):
+            self.expired += 1
+            self.pending = None
+            self.decided = None
+
         if self.was_moving and not moving and self.pending is not None:
             dt = stamp_s(msg.header) - self.pending
             if 0.0 < dt < 2.0:
@@ -263,7 +325,8 @@ class LatencyProbe(Node):
                 self.parts.append((
                     dt, sensor, control,
                     self._widest_gap(self.scan_arrivals, now),
-                    self._widest_gap(self.cmd_arrivals, now)))
+                    self._widest_gap(self.cmd_arrivals, now),
+                    getattr(self, 'scan_stamp_gap', 0.0), cmd_stamp_gap))
                 self.get_logger().info(
                     f'  sample {len(self.samples)}: {dt * 1000:.1f} ms; '
                     f'split {(sensor + control) * 1000:.1f} = '
@@ -286,6 +349,12 @@ class LatencyProbe(Node):
         print('\n' + '=' * 70)
         print(f'  sensor to command latency, {n} sample(s), '
               f'{self.rejected} rejected as unpairable')
+        print(f'  {self.armed_while_stopped} decision(s) ignored because the '
+              f'vehicle was already stationary,')
+        print(f'  {self.expired} armed decision(s) expired after '
+              f'{self.max_pair_age:.2f} s with nothing to close them.')
+        print('  Both are excluded on purpose. Pairing a decision with an')
+        print('  unrelated later stop is what produced the tail in V-44.')
         if n == 0:
             print(f'  NO SAMPLES. {self.states_seen} monitor state message(s) '
                   f'were seen.')
@@ -362,14 +431,41 @@ class LatencyProbe(Node):
               f'(downstream of the decision)')
         worst = max(tail, key=lambda r: r[0])
         print(f'    worst: {worst[0] * 1000:.0f} ms = {worst[1] * 1000:.0f} sensor '
-              f'+ {worst[2] * 1000:.0f} control, with a scan gap of '
-              f'{worst[3] * 1000:.0f} ms')
-        print(f'           and a command gap of {worst[4] * 1000:.0f} ms '
-              f'in the second before it')
+              f'+ {worst[2] * 1000:.0f} control')
+        print(f'      arrival gaps here: scan {worst[3] * 1000:.0f} ms, '
+              f'command {worst[4] * 1000:.0f} ms')
+        print(f'      STAMP gaps here:   scan {worst[5] * 1000:.0f} ms, '
+              f'command {worst[6] * 1000:.0f} ms')
         stalled_scan = sum(1 for r in tail if r[3] > 0.2)
         stalled_cmd = sum(1 for r in tail if r[4] > 0.2)
-        print(f'    stream stalls over 200 ms alongside a tail sample: '
+        print(f'    arrival stalls over 200 ms alongside a tail sample: '
               f'{stalled_scan} scan, {stalled_cmd} command')
+
+        # THE QUESTION THAT DECIDES WHETHER ANY OF THIS IS ABOUT THE SYSTEM.
+        #
+        # Arrival gaps and the split are both measured at this node, so they
+        # move together when this node stalls and agree with each other while
+        # both describe the probe. Stamps are written by the publisher and are
+        # the only quantity here that cannot be distorted by the instrument.
+        print()
+        for label, idx in (('command', 6), ('scan', 5)):
+            stamped = [r[idx] for r in tail if r[idx] > 0.0]
+            if not stamped:
+                continue
+            big = [g for g in stamped if g > 0.2]
+            if big:
+                print(f'    {len(big)} of {len(stamped)} tail samples have a '
+                      f'{label} STAMP gap over 200 ms, worst '
+                      f'{max(big) * 1000:.0f} ms.')
+                print('      The publisher stopped producing.')
+                print('      This is the system, not the probe.')
+            else:
+                print(f'    Every {label} STAMP gap at a tail sample is under '
+                      f'200 ms, worst {max(stamped) * 1000:.0f} ms.')
+                print('      The publisher kept its cadence, so a large '
+                      'arrival gap beside it is')
+                print('      transport or this probe: the split is '
+                      'measuring the instrument.')
 
 
 def main():

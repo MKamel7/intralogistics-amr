@@ -154,3 +154,68 @@ def test_the_step_matches_the_worlds():
     assert steps == {'0.004'}, (
         f'worlds declare max_step_size {sorted(steps)}, but the probe assumes '
         f'0.004; a split reported at the wrong resolution reads as precision')
+
+
+def test_the_report_can_tell_the_system_from_the_instrument():
+    """The check that decides whether the split means anything at all.
+
+    Both halves of the split, and both arrival gaps, are measured at this node.
+    When this node stalls they all move together and agree with each other
+    while every one of them describes the probe rather than the stack. Nothing
+    in that set can falsify the others.
+
+    A stamp is written by the publisher. If the command stream has a hole in
+    its own stamps the controller stopped producing; if the stamps are evenly
+    spaced and only the arrivals are late, the delay is transport or this
+    probe. That is the only quantity here immune to the instrument.
+    """
+    text = PROBE.read_text()
+    assert 'prev_cmd_stamp' in text and 'prev_scan_stamp' in text, (
+        'the probe records only arrival gaps, which cannot distinguish a '
+        'stalled publisher from a stalled subscriber')
+    assert 'measuring the instrument' in text, (
+        'the report never states the case where the split describes the probe '
+        'rather than the stack')
+    assert 'This is the system, not the probe' in text
+
+
+def test_a_decision_is_not_armed_while_the_vehicle_is_stationary():
+    """V-56, and the reason the tail existed at all.
+
+    A sample closes on the falling edge of motion. Arming one while the vehicle
+    is already stopped means nothing closes it until some later, unrelated
+    stop, and the interval then measured spans two events that were never
+    connected. It is not a slow latency, it is not a latency.
+
+    The evidence it was happening: the worst sample in a 191 sample run was
+    872 ms while the command stream published every 52 ms throughout, the scan
+    stream every 68 ms, and no arrival gap exceeded 72 ms. Nothing stalled
+    anywhere, which makes a genuine 872 ms sensor to command interval
+    impossible.
+    """
+    text = PROBE.read_text()
+    assert 'if not self.was_moving:' in text, (
+        'the probe arms a sample regardless of whether the vehicle is moving, '
+        'so a decision can be paired with an unrelated later stop')
+    assert 'armed_while_stopped' in text
+
+
+def test_an_armed_decision_expires():
+    """Even armed correctly, one that nothing closes goes stale.
+
+    Expiring it records a measurement the run did not make, which is a
+    different thing from a slow one, and the count is printed rather than
+    dropped: a probe that quietly discards its awkward samples is how a clean
+    number gets believed.
+    """
+    text = PROBE.read_text()
+    assert 'max_pair_age' in text
+    assert 'self.expired += 1' in text
+    assert 'expired after' in text, (
+        'expiries are counted but never reported, so the sample count cannot '
+        'be reconciled with the number of protective stops')
+
+
+def test_the_exclusions_are_reported_not_silent():
+    text = PROBE.read_text()
+    assert 'Both are excluded on purpose' in text

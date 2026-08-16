@@ -2,9 +2,9 @@
 
 ## Read this first
 
-**512 tests pass under `colcon test` with 5 documented skips, ruff is clean,
+**516 tests pass under `colcon test` with 5 documented skips, ruff is clean,
 every world parses and every model it includes is installed, and the container
-builds from a clean base and runs the same suite to the same result: 404
+builds from a clean base and runs the same suite to the same result: 408
 passed and 5 skipped, on the host and in the container, verified after
 `amr_vda5050` changed build type.**
 
@@ -18,7 +18,7 @@ V-55.
 
 The two figures differ because `colcon test` also runs each package's lint
 tests. What matters is that neither runs FEWER pytest cases than the other,
-which for most of this project's life was untrue. See V-50. 51 numbered findings in
+which for most of this project's life was untrue. See V-50. 56 numbered findings in
 `docs/validation.md`.
 
 That test figure was 289 two days ago and the suite has not grown by 182
@@ -42,26 +42,34 @@ and is not coming.
 | localisation | p50 0.027 m driving, 0.055 m parked | V-37 |
 | odometry against truth | ratio 1.025 | V-33 |
 | people tracking | precision 0.615, recall 0.988, 0 ID switches | V-36 |
-| sensor to command latency | p50 68 ms, p95 796 ms against a 0.10 s estimate | V-44 |
-| where the latency tail lives | after the decision, not in the sensor path, whose max over 302 samples is 72 ms | V-53 |
+| sensor to command latency | p50 84 ms, p95 124 ms, n=397, against a 0.10 s estimate | V-56 |
+| the latency tail | retracted: a probe pairing artifact, not the stack | V-56 |
 | planner choice | SmacPlanner2D 9 of 9, NavFn 8 of 9, ThetaStar 6 of 9 | V-47 |
 
 ### The three things most worth knowing
 
-**1. The latency estimate is refuted, attributed, and deliberately not
-fixed.** Every protective field is sized through ISO 13855 by
-`control_latency: 0.10`, marked NOT YET MEASURED. Measured, it is p50 68 ms and
-p95 796 ms, which at the commissioned 0.75 m/s is 522 mm of travel the fields
-do not carry.
+**1. The latency estimate is NOT refuted, and the claim that it was is the
+largest thing this project got wrong.** Every protective field is sized through
+ISO 13855 by `control_latency: 0.10`, marked NOT YET MEASURED, and V-44 said
+the measurement refuted it at p95 796 ms and p99 1260 ms.
 
-The p95 is still NOT written into the spec, and V-53 is why rather than a
-guess. Splitting each sample at the collision monitor puts the tail entirely
-AFTER the decision: over 302 samples the sensor half never exceeded 72 ms, and
-during a 980 ms event it was 24 ms. The control half is bimodal, 291 samples
-under one 4 ms physics step and one at 904 ms with nothing in between, which is
-a starved executor and not a slow control path. The fix for that is in the
-stack. Sizing every field for a 904 ms scheduling gap would add about 0.68 m,
-and V-42 and V-45 are what enlarging fields costs.
+That measurement was wrong twice over. The percentiles came from 43 samples
+pooled across five runs of 17, 6, 7, 7 and 6, with the probe's own warning,
+"7 samples is thin, prefer 20 or more before changing a spec", printed in the
+same output and quoted past. And the tail in them was an artifact: a sample was
+armed on a protective stop even when the vehicle was already stationary, so
+nothing closed it until an unrelated later stop, and the interval spanned two
+events that were never connected.
+
+Guarded, over 397 samples: **p50 84 ms, p95 124 ms, max 144 ms, sd 24 ms**
+against a previous 56, with 20 decisions ignored for being armed while
+stationary. Those twenty were the tail. At the commissioned 0.75 m/s the
+estimate is short by 18 mm, not 522.
+
+What survives is the split. The sensor half never exceeds 76 ms and the control
+half never exceeds one 4 ms physics step, so the chain from scan to command is
+tight and boring, which is what it should be. See V-56, and read it before
+quoting any number from V-44.
 
 **2. V-39 is closed, and two attempts to close it first made things worse.**
 The scan merger's self filter used to blank a region larger than the vehicle,
@@ -315,15 +323,13 @@ cover the racking, so the cameras are not load-bearing for that case.
 Every item below is something this project can state a reason for, not a wish
 list. Nothing here is claimed anywhere else in the repository.
 
-**1. Fix the executor stall.** The tail is attributed, so this is no longer
-"find out where it comes from". V-53 puts it entirely AFTER the collision
-monitor decides: the sensor half never exceeded 72 ms across 302 samples and
-was 24 ms during a 980 ms event, which rules out the scan merger lag of V-41.
-The control half is bimodal, 291 samples under one 4 ms physics step and one at
-904 ms with nothing between, which is a starved callback rather than a slow
-path. What is left is the cause and the fix: the MPPI iteration cost of V-37,
-and the executor the stack runs on. Until then `control_latency` keeps its
-0.10 s and the tail is documented rather than designed around.
+**1. Decide whether to write the measured latency into the spec.** It is now
+a measurement rather than an estimate: p95 124 ms over 397 samples, sd 24 ms.
+`control_latency: 0.10` is short of that by 24 ms, which is 18 mm of travel at
+0.75 m/s. That is a decision about a safety constant, not a correction, so
+nothing has written it. Whoever does must run a cycle afterwards: V-42 and V-45
+are what enlarging a protective field costs, and neither was predicted from
+arithmetic.
 
 **2. A human-aware costmap layer.** People are detected, tracked and scored,
 and the planner routes around them as ordinary obstacles. It does not yet pay a

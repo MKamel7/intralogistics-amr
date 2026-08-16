@@ -8,7 +8,7 @@ layer that sits after the planner and can override it.
 name outran the code; there is no traffic controller and no task allocation. A fleet layer is
 listed under Roadmap and is claimed nowhere else.
 
-**Status: one platform validated end to end, with 55 recorded findings.** This README documents
+**Status: one platform validated end to end, with 56 recorded findings.** This README documents
 what exists and what is measured, not what is planned. Every figure below is traceable to an entry
 in `docs/validation.md`; anything not built is under Roadmap and is claimed nowhere else.
 
@@ -25,18 +25,21 @@ in `docs/validation.md`; anything not built is under Roadmap and is claimed nowh
 | localisation error | p50 0.027 m driving, 0.055 m parked | V-37 |
 | odometry against ground truth | ratio 1.025 | V-33 |
 | people tracking | precision 0.615, recall 0.988, 0 ID switches | V-36 |
-| sensor to command latency | p50 68 ms, **p95 796 ms** against a 0.10 s estimate | V-44 |
-| where the latency tail lives | **after** the decision, not in the sensor path, whose max over 302 samples is 72 ms | V-53 |
+| sensor to command latency | p50 84 ms, **p95 124 ms**, n=397, against a 0.10 s estimate | V-56 |
+| the latency tail | **retracted**: it was a probe pairing artifact, not the stack | V-56 |
 | protective field coverage outside the sensor's blind zone | **55.1 mm** against the 50 mm needed | V-49 |
 
-The last row is the one to read twice. The specification carries
-`control_latency: 0.10 # NOT YET MEASURED`, every protective field is sized by it through
-ISO 13855, and the measurement **refutes it**: at the commissioned 0.75 m/s the difference between
-the estimate and the measured p95 is 522 mm of travel the fields do not carry. The figure is not
-written into the spec, because a p50 of 68 ms against a p99 of 1260 ms is a control path that is
-occasionally starved rather than one that is slow, and sizing a field on the tail would add roughly
-0.6 m to it. V-42 and V-45 are what happens when a protective field is enlarged without measuring
-the cost.
+The latency row was wrong for most of this project's life and the correction is worth reading.
+It said p95 796 ms and called the spec estimate refuted, on the strength of 43 samples pooled from
+five runs of 17, 6, 7, 7 and 6, containing an artifact: the probe armed a sample on a protective
+stop even when the vehicle was already stationary, so nothing closed it until an unrelated later
+stop and the interval spanned both. Guarded, over 397 samples, the p95 is 124 ms and the maximum is
+144 ms against a previous 980. See V-56.
+
+`control_latency: 0.10 # NOT YET MEASURED` is therefore **not refuted**. At the commissioned
+0.75 m/s the gap between the estimate and the measured p95 is 18 mm, not the 522 mm previously
+claimed. Whether to write the measured figure into the spec is a decision, not a correction, and
+it is recorded as one.
 
 ### Planner comparison
 
@@ -355,7 +358,7 @@ wrong in a way that looked ordinary:
 | `measure_contacts.py` | how close the vehicle came to people | a pedestrian walked through the robot |
 | `measure_social.py` | proxemic zones, time to collision | V-43 |
 | `measure_path_efficiency.py` | planner overhead vs controller overhead | they imply opposite fixes, V-38 |
-| `measure_control_latency.py` | sensor to command | refuted the spec estimate, V-44 |
+| `measure_control_latency.py` | sensor to command | p95 124 ms over 397 samples, V-56 |
 | `experiment.py` | N runs, reported as a distribution | one run cost a retraction |
 
 ## Try it
@@ -439,20 +442,22 @@ way the error points.
 
 What is left, in the order it would be worth doing:
 
-1. **Fix the executor stall.** V-53 attributed the latency tail: it is entirely after the collision
-   monitor decides, and the control half is bimodal, 291 samples under one 4 ms physics step and one
-   at 904 ms with nothing in between. That is a starved callback, not a slow control path. The
-   candidates are the MPPI iteration cost of V-37 and the single-threaded executor the stack runs on.
-   Until it is fixed, `control_latency` keeps its 0.10 s and the tail is documented rather than
-   designed around.
+1. **Decide whether to write the measured latency into the spec.** `control_latency: 0.10` is
+   marked NOT YET MEASURED and is now measured: p95 124 ms over 397 samples, sd 24 ms. The estimate
+   is short by 24 ms, which is 18 mm of travel at 0.75 m/s. That is a decision about a safety
+   constant rather than a correction, so nothing has written it, and whoever does should run a cycle
+   afterwards: V-42 and V-45 are what enlarging a protective field costs and neither was predicted
+   from arithmetic.
 2. **A human-aware costmap layer**, scored against the proxemic figures already being measured.
 3. **Precision docking**, once localisation is good enough to support the claim.
 4. **Physical load transfer**, so that something is actually carried.
-5. **The MiR250's self filter.** V-39 is closed on the MP-400 and deliberately open on the MiR250:
-   11 mm of the 40 mm measured on that vehicle is not explained by its pod geometry and nobody has
-   identified it. It needs measuring on that platform, not reasoning about from this one.
 
 Not on this list: a fleet layer. The project runs one vehicle and says so.
+
+Also not on this list: closing V-39 on the MiR250. It stays deliberately open there, recorded in
+`UNSHAPED_SELF_FILTER` in two test modules with the reasoning attached. That platform is kept as a
+second specification because generating two vehicles from one set of tools is what caught V-33, and
+it is not a runtime target, so measuring its self filter would be work in service of nothing.
 
 ## Predecessor
 
