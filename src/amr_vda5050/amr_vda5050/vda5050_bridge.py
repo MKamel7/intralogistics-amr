@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """VDA 5050 vehicle interface: MQTT on one side, Nav2 on the other.
 
 WHAT THIS IS FOR
