@@ -8,7 +8,7 @@ layer that sits after the planner and can override it.
 name outran the code; there is no traffic controller and no task allocation. A fleet layer is
 listed under Roadmap and is claimed nowhere else.
 
-**Status: one platform validated end to end, with 52 recorded findings.** This README documents
+**Status: one platform validated end to end, with 53 recorded findings.** This README documents
 what exists and what is measured, not what is planned. Every figure below is traceable to an entry
 in `docs/validation.md`; anything not built is under Roadmap and is claimed nowhere else.
 
@@ -26,6 +26,7 @@ in `docs/validation.md`; anything not built is under Roadmap and is claimed nowh
 | odometry against ground truth | ratio 1.025 | V-33 |
 | people tracking | precision 0.615, recall 0.988, 0 ID switches | V-36 |
 | sensor to command latency | p50 68 ms, **p95 796 ms** against a 0.10 s estimate | V-44 |
+| where the latency tail lives | **after** the decision, not in the sensor path, whose max over 302 samples is 72 ms | V-53 |
 | protective field coverage outside the sensor's blind zone | **55.1 mm** against the 50 mm needed | V-49 |
 
 The last row is the one to read twice. The specification carries

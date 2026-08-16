@@ -2,7 +2,7 @@
 
 ## Read this first
 
-**493 tests pass under `colcon test` with 5 documented skips, ruff is clean,
+**497 tests pass under `colcon test` with 5 documented skips, ruff is clean,
 `gz sdf` validates both worlds, and the container builds from a clean base and
 runs the same suite to the same result.** 51 numbered findings in
 `docs/validation.md`.
@@ -29,18 +29,25 @@ and is not coming.
 | odometry against truth | ratio 1.025 | V-33 |
 | people tracking | precision 0.615, recall 0.988, 0 ID switches | V-36 |
 | sensor to command latency | p50 68 ms, p95 796 ms against a 0.10 s estimate | V-44 |
+| where the latency tail lives | after the decision, not in the sensor path, whose max over 302 samples is 72 ms | V-53 |
 | planner choice | SmacPlanner2D 9 of 9, NavFn 8 of 9, ThetaStar 6 of 9 | V-47 |
 
 ### The three things most worth knowing
 
-**1. The latency estimate is refuted and deliberately not fixed.** Every
-protective field is sized through ISO 13855 by `control_latency: 0.10`, marked
-NOT YET MEASURED. Measured, it is p50 68 ms and p95 796 ms, which at the
-commissioned 0.75 m/s is 522 mm of travel the fields do not carry. The p95 is
-NOT written into the spec, because a p50 of 68 against a p99 of 1260 is a
-control path that is occasionally starved rather than one that is slow, and
-sizing a field on that tail would add roughly 0.6 m to it. V-42 and V-45 are
-what happens when a field is enlarged without measuring the cost.
+**1. The latency estimate is refuted, attributed, and deliberately not
+fixed.** Every protective field is sized through ISO 13855 by
+`control_latency: 0.10`, marked NOT YET MEASURED. Measured, it is p50 68 ms and
+p95 796 ms, which at the commissioned 0.75 m/s is 522 mm of travel the fields
+do not carry.
+
+The p95 is still NOT written into the spec, and V-53 is why rather than a
+guess. Splitting each sample at the collision monitor puts the tail entirely
+AFTER the decision: over 302 samples the sensor half never exceeded 72 ms, and
+during a 980 ms event it was 24 ms. The control half is bimodal, 291 samples
+under one 4 ms physics step and one at 904 ms with nothing in between, which is
+a starved executor and not a slow control path. The fix for that is in the
+stack. Sizing every field for a 904 ms scheduling gap would add about 0.68 m,
+and V-42 and V-45 are what enlarging fields costs.
 
 **2. V-39 is closed, and two attempts to close it first made things worse.**
 The scan merger's self filter used to blank a region larger than the vehicle,

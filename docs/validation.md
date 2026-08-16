@@ -3655,3 +3655,85 @@ Each time the fix is the same: **walk the tree instead of naming the files.**
 `test_probe_clocks.py` discovers every script in `tools/` that constructs an
 rclpy node, and it asserts there are at least four of them, because an empty
 parametrisation is a green tick that checked nothing.
+
+---
+
+## V-53. The latency tail is downstream of the decision, and it is a stall
+
+V-44 measured p50 68 ms against p99 1260 ms, called it "a control path that is
+occasionally starved rather than one that is slow", and named two candidates
+without being able to separate them: the executor contention behind the 380 ms
+MPPI iterations of V-37, and the scan merger lag behind the transient source
+rejections of V-41. Nothing distinguished them, and **no protective field can
+honestly be sized on an unattributed tail.**
+
+302 samples, one `survey_mission` run on the generated track.
+
+### The split
+
+| | p50 | max |
+|---|---|---|
+| total, generation stamp to generation stamp | 88.0 ms | 980.0 ms |
+| sensor half, scan seen to decision seen | 36.0 ms | **72.0 ms** |
+| control half, decision seen to command seen | under one step | **904.0 ms** |
+
+291 of 302 control halves are under one 4 ms physics step, which is the
+resolution of the simulated clock. Under, not zero.
+
+### What the one tail sample says, and what the other 301 say
+
+    980.0 ms  =  24.0 sensor + 904.0 control
+
+**The strong claim is the negative one.** Across all 302 samples the sensor
+half never exceeded **72 ms**, and during the tail event itself it was 24 ms,
+which is better than its own median. Whatever produces a 980 ms event, it is
+not scan transport, not the merge, and not the collision monitor's cycle,
+because none of them was slow at the time and none of them has ever been
+observed to take more than 72 ms. **V-41's scan merger lag is ruled out as the
+cause of the tail.**
+
+The positive claim is one sample and is labelled as such. It says the 904 ms
+sat after the monitor had already decided, which is the executor, and it
+agrees with V-44's reading and with the 380 ms MPPI iterations of V-37.
+
+### The shape is the evidence, not the single value
+
+Every control half in the run:
+
+    291 samples   under one 4 ms step
+     10 samples   exactly one 4 ms step
+      1 sample    904 ms
+
+**Nothing between 4 ms and 904 ms.** A control path that was merely slow would
+fill that gap. One that is starved would not: the callback is either serviced
+on the next step or the thread does not run at all for most of a second. The
+distribution is bimodal and that is the signature V-44 guessed at.
+
+### What this does NOT license
+
+**`control_latency` still does not get the tail written into it.** The p50 of
+88 ms sits close to the 0.10 s the spec already carries, and the fix for a
+stall is in the stack, not in the field geometry. Sizing every protective field
+for a 904 ms scheduling gap would add roughly 0.68 m at the commissioned
+0.75 m/s, and V-42 and V-45 are what enlarging fields costs.
+
+This run's own p95 was 128 ms against V-44's 796 ms over five runs. **Those are
+not comparable** and no claim of improvement is made: one run, a different
+distribution of tail events, and the tail is by nature rare.
+
+### The probe was wrong three times getting here
+
+Worth recording, because the errors were all in the same direction and none was
+caught by a test:
+
+1. **The wrong clock.** No `use_sim_time`, so the sensor half was a wall clock
+   reading minus a simulated stamp, and printed the epoch as a duration. V-52.
+2. **The wrong anchor.** `CollisionMonitorState` has no header, so the decision
+   time is a reception time. Mixing it with generation stamps made the sensor
+   half exceed its own total and clamped the control half to zero.
+3. **The wrong precision.** A control half of 0.0 ms is not zero, it is under
+   one physics step.
+
+Each was caught because the components are printed beside the total rather than
+instead of it. A probe that printed only "the tail is in the control path"
+would have been wrong three times and convincing every time.

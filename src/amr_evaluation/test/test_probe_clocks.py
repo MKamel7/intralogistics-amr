@@ -19,7 +19,6 @@ This walks tools/ rather than naming files, so a new probe is covered the day
 it is written.
 """
 
-import re
 from pathlib import Path
 
 import pytest
