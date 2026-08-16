@@ -52,6 +52,7 @@ import sys
 import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
+from rclpy.parameter import Parameter
 from geometry_msgs.msg import TwistStamped
 from rclpy.qos import QoSDurabilityPolicy, QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
 from tf2_msgs.msg import TFMessage
@@ -120,7 +121,13 @@ def blame(v_share, p_share):
 
 class ContactProbe(Node):
     def __init__(self):
-        super().__init__('contact_probe')
+        super().__init__('contact_probe',
+                         # THE SIMULATED CLOCK. Without it get_clock() returns
+                         # epoch seconds while every stamp read here is sim
+                         # time, and the difference between them is not a
+                         # duration. See V-52.
+                         parameter_overrides=[
+                             Parameter('use_sim_time', value=True)])
         self.duration = self.declare_parameter('duration_s', 600.0).value
         self.vehicle_frame = self.declare_parameter('vehicle_frame', 'amr').value
         # Footprint half extents. Defaults are the MP-400's; pass the platform's

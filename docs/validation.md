@@ -3591,3 +3591,67 @@ person, and there is nothing to fix here.
 **Recorded because the question was real and the answer took a measurement.**
 The alternative was to argue it from geometry, which is what V-46 did when it
 concluded V-39 needed new hardware.
+
+---
+
+## V-52. Six probes were reading the wall clock in a simulated world
+
+Caught by its own output, three minutes into a run, because a duration printed
+as `1786870613342.4 ms`.
+
+### What broke
+
+V-44's latency figure is the interval between two message stamps, and it was
+correct. The split added in this session is not: the sensor half is the moment
+the collision monitor announced a stop, minus the stamp on the scan that caused
+it. `CollisionMonitorState` carries no header, so the first term is a clock
+reading and the second is a message stamp.
+
+Every node in this stack runs on simulated time. A probe that does not set
+`use_sim_time` gets wall time from `self.get_clock()`, so the subtraction was
+epoch seconds minus simulated seconds, and the answer was the epoch.
+
+    sample 118: 132.0 ms = 1786870613355.0 sensor + 0.0 control
+
+**The total was right the whole time.** Two wrong clocks cancel when you
+subtract one stamp from another, which is why V-44 stands and why this survived
+a full run before anything looked odd.
+
+### How far it spread
+
+Four probes already set `use_sim_time`. Six did not, and a test that walks
+`tools/` rather than naming files found all six at once:
+
+| probe | what the clock was used for | effect |
+|---|---|---|
+| `measure_control_latency` | **clock minus message stamp** | **fatal, the epoch as a duration** |
+| `measure_contacts` | velocity, position over clock interval | scaled by the real time factor, about 1 percent |
+| `measure_localisation` | its own run length | ran for wall seconds, not simulated ones |
+| `measure_path_efficiency` | its own run length | same |
+| `measure_slip` | its own run length | same |
+| `measure_social` | its own run length | same |
+
+Only the first is a corrupted figure, and it had never been published. The
+other five subtract one clock reading from another, which is self consistent
+whichever clock it is, so **no recorded result in this repository moves.** The
+contact velocities in V-51 were out by the real time factor, which ran at 98 to
+99 percent, and 0.91 m/s against 0.00 m/s does not become a different finding
+at 0.90.
+
+### Why this is a finding and not a typo
+
+It is the fourth defect in two days of the same shape: a check that exists,
+covers one case, and is assumed to cover the rest.
+
+| | the check | why it never fired |
+|---|---|---|
+| V-49 | field coverage | a strict xfail nobody reads |
+| V-50 | eleven test files | never registered with the build |
+| V-50 | `amr_vda5050` | wrong build type, collected nothing |
+| V-51 | contact attribution | the vehicle's speedometer asked the wrong question |
+| V-52 | `use_sim_time` | four probes set it, six did not, nothing compared them |
+
+Each time the fix is the same: **walk the tree instead of naming the files.**
+`test_probe_clocks.py` discovers every script in `tools/` that constructs an
+rclpy node, and it asserts there are at least four of them, because an empty
+parametrisation is a green tick that checked nothing.

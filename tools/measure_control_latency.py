@@ -96,6 +96,7 @@ import rclpy
 from geometry_msgs.msg import TwistStamped
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
+from rclpy.parameter import Parameter
 from rclpy.qos import QoSDurabilityPolicy, QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
 from nav2_msgs.msg import CollisionMonitorState
 from sensor_msgs.msg import LaserScan
@@ -113,7 +114,13 @@ def stamp_s(header):
 
 class LatencyProbe(Node):
     def __init__(self):
-        super().__init__('control_latency_probe')
+        super().__init__('control_latency_probe',
+                         # THE SIMULATED CLOCK. Without it get_clock() returns
+                         # epoch seconds while every stamp read here is sim
+                         # time, and the difference between them is not a
+                         # duration. See V-52.
+                         parameter_overrides=[
+                             Parameter('use_sim_time', value=True)])
         self.duration = self.declare_parameter('duration_s', 300.0).value
         # A command below this is a stop rather than a slow-down. The drive's
         # own deadband, matching min_x_velocity_threshold in the Nav2 config.

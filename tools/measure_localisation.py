@@ -62,6 +62,7 @@ import yaml
 from nav_msgs.msg import Odometry
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
+from rclpy.parameter import Parameter
 from rclpy.qos import QoSDurabilityPolicy, QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
 from tf2_msgs.msg import TFMessage
 
@@ -82,7 +83,16 @@ STARTUP_AGREEMENT = 0.50
 
 class LocalisationProbe(Node):
     def __init__(self):
-        super().__init__('localisation_probe')
+        super().__init__('localisation_probe',
+                         # THE SIMULATED CLOCK. Without it `duration_s` counts
+                         # wall seconds while everything measured happens in
+                         # simulated ones, so the probe runs for the wrong
+                         # length of time by the real time factor. Six probes
+                         # here were missing it and one of them, the latency
+                         # split, was subtracting a clock reading from a
+                         # message stamp and reporting the epoch as a duration.
+                         parameter_overrides=[
+                             Parameter('use_sim_time', value=True)])
         self.duration = self.declare_parameter('duration_s', 300.0).value
         self.vehicle_frame = self.declare_parameter('vehicle_frame', 'amr').value
         stations = self.declare_parameter('stations_file', '').value

@@ -24,6 +24,7 @@ if(BUILD_TESTING)
   ament_add_pytest_test(test_occlusion test/test_occlusion.py)
   ament_add_pytest_test(test_run_stack test/test_run_stack.py)
   ament_add_pytest_test(test_measure_control_latency test/test_measure_control_latency.py)
+  ament_add_pytest_test(test_probe_clocks test/test_probe_clocks.py)
   ament_add_pytest_test(test_registration test/test_registration.py)
 endif()
 

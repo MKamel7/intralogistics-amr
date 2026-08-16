@@ -2,7 +2,7 @@
 
 ## Read this first
 
-**471 tests pass under `colcon test` with 5 documented skips, ruff is clean,
+**493 tests pass under `colcon test` with 5 documented skips, ruff is clean,
 `gz sdf` validates both worlds, and the container builds from a clean base and
 runs the same suite to the same result.** 51 numbered findings in
 `docs/validation.md`.

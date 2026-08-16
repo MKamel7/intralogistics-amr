@@ -56,6 +56,7 @@ import rclpy
 from geometry_msgs.msg import TwistStamped
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
+from rclpy.parameter import Parameter
 from rclpy.qos import QoSDurabilityPolicy, QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
 from tf2_msgs.msg import TFMessage
 
@@ -99,7 +100,16 @@ def time_to_collision(gap, closing_speed):
 
 class SocialProbe(Node):
     def __init__(self):
-        super().__init__('social_probe')
+        super().__init__('social_probe',
+                         # THE SIMULATED CLOCK. Without it `duration_s` counts
+                         # wall seconds while everything measured happens in
+                         # simulated ones, so the probe runs for the wrong
+                         # length of time by the real time factor. Six probes
+                         # here were missing it and one of them, the latency
+                         # split, was subtracting a clock reading from a
+                         # message stamp and reporting the epoch as a duration.
+                         parameter_overrides=[
+                             Parameter('use_sim_time', value=True)])
         self.duration = self.declare_parameter('duration_s', 600.0).value
         self.vehicle_frame = self.declare_parameter('vehicle_frame', 'amr').value
         self.half_length = self.declare_parameter('half_length', 0.300).value
