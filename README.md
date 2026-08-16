@@ -8,7 +8,7 @@ layer that sits after the planner and can override it.
 name outran the code; there is no traffic controller and no task allocation. A fleet layer is
 listed under Roadmap and is claimed nowhere else.
 
-**Status: one platform validated end to end, with 50 recorded findings.** This README documents
+**Status: one platform validated end to end, with 51 recorded findings.** This README documents
 what exists and what is measured, not what is planned. Every figure below is traceable to an entry
 in `docs/validation.md`; anything not built is under Roadmap and is claimed nowhere else.
 
@@ -19,8 +19,9 @@ in `docs/validation.md`; anything not built is under Roadmap and is claimed nowh
 | transport cycles | **12 of 12** across five runs | V-44 |
 | cycle time | 223 s [175 to 272], sd 24, n=12 | V-44 |
 | distance per cycle | 78.1 m [65.4 to 82.6] | V-44 |
-| contact with people | **0**, closest approach +0.022 m | V-46 |
-| cost of that safety | 36 protective stops per cycle, **2 % of cycle time** | V-46 |
+| contacts the vehicle drove into | **0** in 248 000 samples across two arms | V-51 |
+| deepest a person reached inside the footprint | **-0.100 m**, against -0.466 m before V-39 was closed | V-49 |
+| cost of that safety | 103 protective stops per cycle, **7 % of cycle time**, against 38 and 2 % | V-49 |
 | localisation error | p50 0.027 m driving, 0.055 m parked | V-37 |
 | odometry against ground truth | ratio 1.025 | V-33 |
 | people tracking | precision 0.615, recall 0.988, 0 ID switches | V-36 |

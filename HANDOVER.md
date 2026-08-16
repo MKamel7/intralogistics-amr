@@ -4,7 +4,7 @@
 
 **334 tests pass, 2 strict xfails, ruff is clean, `gz sdf` validates both
 worlds, and the container builds from a clean base and runs the same suite to
-the same result.** 50 numbered findings in `docs/validation.md`.
+the same result.** 51 numbered findings in `docs/validation.md`.
 
 The project is **one vehicle**, the MP-400 class, and it says so everywhere.
 The repository was renamed from `intralogistics-amr-fleet` to
@@ -16,8 +16,9 @@ and is not coming.
 | | result | where |
 |---|---|---|
 | transport cycles | 12 of 12 across five runs | V-44 |
-| contact with people | 0, closest approach +0.022 m | V-46 |
-| cost of that safety | 36 protective stops per cycle, 2 % of cycle time | V-46 |
+| contacts the vehicle drove into | 0 in 248 000 samples across two arms | V-51 |
+| deepest a person reached inside the footprint | -0.100 m, against -0.466 m before V-39 | V-49 |
+| cost of that safety | 103 protective stops per cycle, 7 % of cycle time, against 38 and 2 % | V-49 |
 | localisation | p50 0.027 m driving, 0.055 m parked | V-37 |
 | odometry against truth | ratio 1.025 | V-33 |
 | people tracking | precision 0.615, recall 0.988, 0 ID switches | V-36 |

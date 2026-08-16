@@ -3366,6 +3366,60 @@ That is the part worth keeping: V-42 and V-45 both failed because they moved
 the fields, and mobility is what a field costs when it is wrong. Shrinking the
 filter where the vehicle is genuinely smaller takes nothing away from anything.
 
+### Measured, both arms, same protocol
+
+The V-46 comparison could not be reused: it was mission only on an existing
+map, and `--run mission` on a fresh stack drives 0.0 m because no map exists
+yet, which is how that was discovered. Both arms below are therefore
+`survey_mission` on the generated track, same scenario, three cycles, with the
+platform spec reverted to `self_filter_margin: 0.032` and no pods for the
+control. The scan merger logs which filter it built, and both logs were read
+before anything else was:
+
+    control   self filter: chassis 0.590 x 0.559 + 0.032 m margin, 0 pod(s)
+    treated   self filter: chassis 0.590 x 0.559 + 0.010 m margin, 2 pod(s)
+
+| | control, bounding box | treated, shaped |
+|---|---|---|
+| cycles completed | 2 of 3 | **3 of 3** |
+| protective stops per cycle | 38.5 | **102.7** |
+| held up by safety | 2 percent | **7 percent** |
+| contacts | 3 | **1** |
+| of which the vehicle drove into | 0 | 0 |
+| deepest penetration | **-0.466 m** astern | **-0.100 m** |
+| median of per person minima | +0.121 m | +0.042 m |
+
+**The stops nearly tripled and that is the fix working**, the same reading as
+V-46's twenty five fold rise: the vehicle previously drove past returns three
+centimetres from its flank without seeing them, because the filter had already
+deleted them. It now stops for them. The cost is explicit: **eliminating the
+deep penetrations costs about five percent of cycle time.**
+
+**The deepest penetration improved by a factor of 4.7**, and where it happened
+is the part that matters. The control's worst was `walker_bay` reaching 466 mm
+inside the footprint at -139 degrees, astern, which is the flank band the
+bounding box blanked. The treated arm's worst was 100 mm at +78 degrees.
+
+### What this measurement does NOT support
+
+**One run per arm.** V-47 used three runs per planner and still refused to
+claim a difference in path quality because the ranges overlapped. The same
+discipline applies here and the same restraint is owed:
+
+- The **stop count** is mechanism, not noise. 38.5 against 102.7 with a
+  known cause and a second treated run at 91.7 is a real effect.
+- **2 of 3 against 3 of 3 cycles is not a result.** V-44 recorded 12 of 12
+  across five runs; a single incomplete cycle is inside that variance.
+- **3 contacts against 1 is not a result either**, and the direction of the
+  median per person minimum is against it: people came NEARER on average in
+  the treated arm, +0.042 m against +0.121 m. The plausible reading is that a
+  vehicle stopping 2.7 times as often stands still more, and people walk past
+  a stationary vehicle closely. That is a reading. Nothing here measures it.
+
+What is measured, and is enough: the deep penetrations that motivated V-39 are
+gone, no arm had the vehicle drive into anybody, and the geometry that allowed
+them is closed.
+
 ### What shaping does not fix, stated rather than buried
 
 Inside the pod's own x span the blind edge is the pod edge, so the band there
@@ -3472,3 +3526,68 @@ a protective field is safe.
 `test_registration.py` walks the source tree rather than any list, so a new
 test file is covered the day it is written, and it checks both directions: a
 file with no registration, and a registration with no file.
+
+---
+
+## V-51. Every contact in both arms was a person walking into a stationary vehicle
+
+Four contacts across the two V-49 arms, and the probe said "DRIVING INTO THEM"
+about the first one because the vehicle was moving at 0.03 m/s.
+
+That label was wrong, and the number it fed was the headline safety claim.
+
+### What the probe could and could not tell
+
+`measure_contacts.py` compared the vehicle's own speed against 0.02 m/s and
+called anything above it a contact the vehicle drove into. A vehicle creeping
+at 0.03 m/s while a person walks into it at 0.91 m/s is above that threshold.
+The vehicle's speedometer says how fast it was going; it cannot say who closed
+the distance, and those are different questions with the same units.
+
+Each person's velocity now comes from the ground truth poses and both
+velocities are projected onto the line between the two bodies, so the closing
+rate splits into a share each. An unknown velocity, which is what the first
+ground truth frame for a body gives, returns zero for both rather than
+crediting the other party with all of the closing.
+
+### What that changed
+
+| | control | treated |
+|---|---|---|
+| contacts | 3 | 1 |
+| with the vehicle "moving" by the old rule | 0 | 0 |
+| **the vehicle drove into** | **0** | **0** |
+| the person walked into | 2 | 1 |
+| neither closing, drift or a pose jump | 1 | 0 |
+
+Every contact in 248 000 samples across both arms was a person walking into a
+vehicle that was stationary. Not one was the safety layer failing to stop.
+
+That is a weaker claim than "zero collisions" and it is the true one. These
+pedestrians do not avoid the vehicle, by design, because a crowd that dodges
+never tests anything, and they carry no collision geometry, so nothing in the
+physics would stop them anyway.
+
+### The rear geometry, which is what prompted the question
+
+The first contact was at +139 degrees, astern. Every polygon active while
+driving forward has its rear edge at exactly the chassis face:
+
+    stop_030   active +0.05..+0.30 m/s   rear edge -0.2950   chassis -0.2950
+    stop_080   active +0.30..+0.80 m/s   rear edge -0.2950
+    stop_140   active +0.80..+1.40 m/s   rear edge -0.2950
+    stop_150   active +1.40..+1.50 m/s   rear edge -0.2950
+
+Zero rearward margin, by construction. That looks like a defect and is not
+one: a vehicle driving forward should not hold a protective stop for something
+behind it, and the classifier agrees, reporting 29 rear stops in the treated
+run of which **29 were while turning on the spot and 0 while driving forward**.
+
+The contact happened at 0.03 m/s, which is below `stop_030`'s lower bound, so
+a rotation polygon with 74.5 mm of rear margin was the active one. The person
+crossed it at 0.91 m/s. A protective field stops the vehicle; it cannot stop a
+person, and there is nothing to fix here.
+
+**Recorded because the question was real and the answer took a measurement.**
+The alternative was to argue it from geometry, which is what V-46 did when it
+concluded V-39 needed new hardware.
