@@ -3960,3 +3960,108 @@ never cross checked, and every one of these was caught the same way: by
 printing the components beside the conclusion, and by asking what else would
 have to be true. The 872 ms could not coexist with a 52 ms command cadence.
 Nothing but the log said so.
+
+---
+
+## V-57. `ros2 launch` returns 0 whatever its nodes did, and the test for that could not tell
+
+V-40 was a survey that failed and declared success. The same defect was found
+in the mission, fixed, asserted, and the fix did not work.
+
+### The first attempt
+
+`transport_task` already returns non-zero when a cycle does not complete.
+`ros2 launch` was swallowing it, so `transport.launch.py` gained
+`on_exit=Shutdown()` with a comment stating that this "makes the launch service
+adopt the process's return code".
+
+It does not. Measured directly, with a launch file whose only process exits 3:
+
+    $ ros2 launch exit_test.launch.py; echo $?
+    0
+
+A run completing **0 of 3 cycles having driven 0.0 m** still ended with
+`mission exited 0`.
+
+### Why the test passed anyway
+
+```python
+assert 'on_exit=Shutdown()' in launch, (
+    'transport.launch.py does not shut the launch service down when the '
+    'task exits, so ros2 launch swallows its return code')
+```
+
+The string was present. The string was always going to be present, because the
+same commit that added the assertion added the line. **The test asserted the
+author's intent back to the author.**
+
+That is every other defect in this project restated: V-49's xfail nobody read,
+V-50's unregistered files, V-52's four probes on one clock and six on another,
+V-55's claim that a tool could validate something it cannot. Each was correct
+about the case its author had in mind and blind to whether it worked.
+
+### The fix, and the shape of its test
+
+The mission prints `N of M cycle(s) completed`, which is authoritative and
+already there. `mission_verdict()` in `run_stack.sh` reads it and returns
+non-zero when `N < M`, and 2 when the mission never reported at all, because a
+mission that produced no summary is the case that looks most like success in a
+log nobody reads.
+
+The test **executes** the helper against five logs rather than grepping the
+script for a string:
+
+    3 of 3   -> 0
+    0 of 3   -> 1
+    2 of 3   -> 1
+    no line  -> 2
+    two lines, last wins
+
+A string is not behaviour, and the behaviour was wrong for as long as the
+string was present.
+
+---
+
+## V-58. `Start occupied` is a deadlock with no recovery
+
+Found while running a control arm, not while looking for it.
+
+    GridBased plugin failed to plan from (4.68, 5.68) to (-2.00, 0.00):
+      "Start occupied"
+
+Three cycles, three failures, **3 seconds each, 0.0 m driven**. The vehicle
+finished its survey in a pose whose own cell reads as occupied in the global
+costmap, and from there:
+
+- the planner refuses to produce a path from an occupied start
+- so no command reaches the wheels
+- so the vehicle does not move
+- so the start remains occupied
+
+Nothing in the mission breaks that loop. It retries the same goal from the same
+pose and fails identically.
+
+V-47 recorded `Start occupied` twice across nine SmacPlanner2D runs and treated
+it as tolerable because the planner re-planned. That reading was luck: those
+two occurrences happened while the vehicle was moving, so the next cycle began
+from a different cell. **A vehicle that stops there stays there.**
+
+### Not the same thing as being stuck
+
+The vehicle is not physically trapped, which is what makes this worth a
+finding. It has clear floor around it and a working drive. What it lacks is any
+behaviour that moves it a few centimetres so the planner will engage, and Nav2
+ships one: the `backup` and `spin` recoveries are configured in this stack and
+are not reached, because the failure is a planning refusal rather than a
+navigation failure the behaviour tree routes to recovery.
+
+### Not fixed here, and why that is stated rather than quietly deferred
+
+The obvious fix, clearing the robot's own footprint from the costmap before
+planning, is the kind of change that trades a stall for a collision risk, and
+this project has V-42 and V-45 to show what happens when a safety related
+change is made from arithmetic rather than measurement. It needs a run to
+justify it and it is not what the current task is measuring.
+
+Recorded here so the next `0 of 3 cycles` is recognised in seconds rather than
+diagnosed again.

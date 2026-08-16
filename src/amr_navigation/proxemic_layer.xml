@@ -1,0 +1,10 @@
+<library path="amr_proxemic_layer">
+  <class type="amr_navigation::ProxemicLayer" base_class_type="nav2_costmap_2d::Layer">
+    <description>
+      Pays a cost for passing close to a tracked person. Never marks a cell
+      lethal or inscribed: a person standing in a doorway must not close the
+      only route, because aborting a mission is worse behaviour than passing
+      them politely.
+    </description>
+  </class>
+</library>

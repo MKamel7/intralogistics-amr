@@ -18,7 +18,7 @@ V-55.
 
 The two figures differ because `colcon test` also runs each package's lint
 tests. What matters is that neither runs FEWER pytest cases than the other,
-which for most of this project's life was untrue. See V-50. 56 numbered findings in
+which for most of this project's life was untrue. See V-50. 58 numbered findings in
 `docs/validation.md`.
 
 That test figure was 289 two days ago and the suite has not grown by 182

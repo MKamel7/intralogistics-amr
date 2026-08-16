@@ -534,7 +534,7 @@ global_costmap:
       # diameter 1.0021 m, so an inscribed radius of 0.2950 m leaves 1.34 - 2 x
       # 0.2950 m of free band in a median aisle.
       footprint_padding: 0.0
-      plugins: ["static_layer", "obstacle_layer", "voxel_layer", "inflation_layer"]
+      plugins: ["static_layer", "obstacle_layer", "voxel_layer", "proxemic_layer", "inflation_layer"]
       # KEEPOUT ZONES, the permanent no-go areas over the racking.
       #
       # A costmap FILTER rather than a layer, because it is not an observation.
@@ -645,6 +645,34 @@ global_costmap:
           obstacle_min_range: 0.15
           raytrace_max_range: 5.0
           raytrace_min_range: 0.15
+      proxemic_layer:
+        plugin: "amr_navigation::ProxemicLayer"
+        # THE COST OF PASSING SOMEBODY CLOSELY, which nothing else in this
+        # stack charges. People are already obstacles: the scan sees them, the
+        # obstacle layer marks them, and that is why the vehicle has never
+        # driven into anybody, V-51. What it does not do is prefer the wider
+        # way round, because a person passed at 40 mm and one passed at 900 mm
+        # cost the planner the same. The proxemic figures in V-43 exist to make
+        # that difference measurable and this layer is what moves them.
+        topic: people_tracks
+        # CONFIRMED TRACKS, not raw detections. The detector's precision is
+        # 0.615 against a recall of 0.988, V-36, so the raw stream carries
+        # false positives that would put phantom cost in the middle of an
+        # aisle. A confirmed track has survived association across frames,
+        # which is the cheapest filter available and the one already built.
+        # 1.2000 m: the personal space boundary at the lower end of the range
+        # Hall's proxemics puts at 0.45 to 1.2 m, taken at the top because a
+        # 0.6 m wide vehicle passing at 1.2 m leaves about 0.9 m of clear
+        # floor. Beyond this the cost is exactly zero rather than merely small,
+        # which is the reason it is not a Gaussian: a cost that never reaches
+        # zero contributes to every cell from every person and degenerates the
+        # planner's tie breaking.
+        radius: 1.2000
+        # 200 against the inscribed value of 253. Deliberately below it: this
+        # layer states a preference, not a geometric impossibility, and a
+        # person standing in a doorway must not close the only route. Aborting
+        # a mission is worse behaviour than passing somebody politely.
+        peak_cost: 200
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         # 0.5510 m: the circumscribed radius 0.5010 m plus a 0.05 m clearance
@@ -736,7 +764,7 @@ local_costmap:
       # diameter 1.0021 m, so an inscribed radius of 0.2950 m leaves 1.34 - 2 x
       # 0.2950 m of free band in a median aisle.
       footprint_padding: 0.0
-      plugins: ["obstacle_layer", "voxel_layer", "inflation_layer"]
+      plugins: ["obstacle_layer", "voxel_layer", "proxemic_layer", "inflation_layer"]
       # KEEPOUT ZONES, the permanent no-go areas over the racking.
       #
       # A costmap FILTER rather than a layer, because it is not an observation.
@@ -840,6 +868,34 @@ local_costmap:
           obstacle_min_range: 0.15
           raytrace_max_range: 5.0
           raytrace_min_range: 0.15
+      proxemic_layer:
+        plugin: "amr_navigation::ProxemicLayer"
+        # THE COST OF PASSING SOMEBODY CLOSELY, which nothing else in this
+        # stack charges. People are already obstacles: the scan sees them, the
+        # obstacle layer marks them, and that is why the vehicle has never
+        # driven into anybody, V-51. What it does not do is prefer the wider
+        # way round, because a person passed at 40 mm and one passed at 900 mm
+        # cost the planner the same. The proxemic figures in V-43 exist to make
+        # that difference measurable and this layer is what moves them.
+        topic: people_tracks
+        # CONFIRMED TRACKS, not raw detections. The detector's precision is
+        # 0.615 against a recall of 0.988, V-36, so the raw stream carries
+        # false positives that would put phantom cost in the middle of an
+        # aisle. A confirmed track has survived association across frames,
+        # which is the cheapest filter available and the one already built.
+        # 1.2000 m: the personal space boundary at the lower end of the range
+        # Hall's proxemics puts at 0.45 to 1.2 m, taken at the top because a
+        # 0.6 m wide vehicle passing at 1.2 m leaves about 0.9 m of clear
+        # floor. Beyond this the cost is exactly zero rather than merely small,
+        # which is the reason it is not a Gaussian: a cost that never reaches
+        # zero contributes to every cell from every person and degenerates the
+        # planner's tie breaking.
+        radius: 1.2000
+        # 200 against the inscribed value of 253. Deliberately below it: this
+        # layer states a preference, not a geometric impossibility, and a
+        # person standing in a doorway must not close the only route. Aborting
+        # a mission is worse behaviour than passing somebody politely.
+        peak_cost: 200
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         # See the global costmap's inflation layer for the derivation.
