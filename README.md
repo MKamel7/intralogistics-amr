@@ -8,7 +8,7 @@ layer that sits after the planner and can override it.
 name outran the code; there is no traffic controller and no task allocation. A fleet layer is
 listed under Roadmap and is claimed nowhere else.
 
-**Status: one platform validated end to end, with 58 recorded findings.** This README documents
+**Status: one platform validated end to end, with 59 recorded findings.** This README documents
 what exists and what is measured, not what is planned. Every figure below is traceable to an entry
 in `docs/validation.md`; anything not built is under Roadmap and is claimed nowhere else.
 
@@ -448,7 +448,11 @@ What is left, in the order it would be worth doing:
    constant rather than a correction, so nothing has written it, and whoever does should run a cycle
    afterwards: V-42 and V-45 are what enlarging a protective field costs and neither was predicted
    from arithmetic.
-2. **A human-aware costmap layer**, scored against the proxemic figures already being measured.
+2. **Resolve whether the proxemic layer helps.** It is built, tested and shipped DISABLED, because
+   four runs could not show an effect: the within-arm spread of the metric is 224 mm against an
+   effect of a few tens of millimetres, and the best social score of the four belongs to the run
+   where the vehicle never moved. Settling it needs a metric normalised by exposure and three runs
+   per configuration, as V-47 did for the planners. See V-59.
 3. **Precision docking**, once localisation is good enough to support the claim.
 4. **Physical load transfer**, so that something is actually carried.
 

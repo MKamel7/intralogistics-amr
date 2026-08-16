@@ -15,6 +15,7 @@ if(BUILD_TESTING)
   find_package(ament_cmake_pytest REQUIRED)
   ament_add_pytest_test(test_stations test/test_stations.py)
   ament_add_pytest_test(test_transport_limits test/test_transport_limits.py)
+  ament_add_pytest_test(test_stuck_start_recovery test/test_stuck_start_recovery.py)
 endif()
 
 ament_package()

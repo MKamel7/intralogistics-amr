@@ -2,9 +2,9 @@
 
 ## Read this first
 
-**516 tests pass under `colcon test` with 5 documented skips, ruff is clean,
+**530 tests pass under `colcon test` with 5 documented skips, ruff is clean,
 every world parses and every model it includes is installed, and the container
-builds from a clean base and runs the same suite to the same result: 408
+builds from a clean base and runs the same suite to the same result: 413
 passed and 5 skipped, on the host and in the container, verified after
 `amr_vda5050` changed build type.**
 
@@ -18,7 +18,7 @@ V-55.
 
 The two figures differ because `colcon test` also runs each package's lint
 tests. What matters is that neither runs FEWER pytest cases than the other,
-which for most of this project's life was untrue. See V-50. 58 numbered findings in
+which for most of this project's life was untrue. See V-50. 59 numbered findings in
 `docs/validation.md`.
 
 That test figure was 289 two days ago and the suite has not grown by 182

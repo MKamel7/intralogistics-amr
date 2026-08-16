@@ -380,8 +380,13 @@ def main():
     # produced by generating both ways and measuring each. Without the flag the
     # control arm would be a hand edit of a generated file, which this project
     # does not do, or a stashed template, which nobody could reproduce.
-    ap.add_argument('--proxemic', default='on', choices=('on', 'off'),
-                    help='human aware costmap layer; off is the control arm')
+    # DEFAULT OFF, because four runs could not show that it helps. The effect
+    # it was built to produce is smaller than the run to run spread of the
+    # metric that would show it, 224 mm, and the best social score of the four
+    # belongs to the run where the vehicle never moved. See V-59. It is kept,
+    # tested and available, and it is not claimed.
+    ap.add_argument('--proxemic', default='off', choices=('on', 'off'),
+                    help='human aware costmap layer; unproven, see V-59')
     ap.add_argument('--out', type=Path)
     args = ap.parse_args()
 

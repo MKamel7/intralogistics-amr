@@ -62,7 +62,8 @@ import rclpy
 import yaml
 from ament_index_python.packages import get_package_share_directory
 from action_msgs.msg import GoalStatus
-from nav2_msgs.action import NavigateToPose
+from geometry_msgs.msg import Point
+from nav2_msgs.action import BackUp, NavigateToPose
 from nav2_msgs.msg import CollisionMonitorState
 from nav_msgs.msg import Odometry
 from rcl_interfaces.msg import Parameter, ParameterType, ParameterValue
@@ -127,6 +128,9 @@ class TransportTask(Node):
             raise SystemExit(f'route names stations that do not exist: {missing}')
 
         self.nav = ActionClient(self, NavigateToPose, 'navigate_to_pose')
+        # THE RECOVERY FOR A PLANNER THAT WILL NOT START. See nudge().
+        self.backup = ActionClient(self, BackUp, 'backup')
+        self.nudges = 0
         self.state_pub = self.create_publisher(String, '/mission/state', 10)
 
         self.odom_total = 0.0
@@ -308,6 +312,41 @@ class TransportTask(Node):
             return False
         return True
 
+    def nudge(self):
+        """Reverse 0.15 m so the planner has a different cell to start from.
+
+        Returns True if the vehicle actually moved. A nudge that did not move
+        the vehicle has not changed the condition that caused the refusal, and
+        retrying after it would be the same failure with an extra step.
+
+        The count is reported in the summary rather than kept quiet: a recovery
+        that fires constantly is a different problem wearing a solution.
+        """
+        if not self.backup.wait_for_server(timeout_sec=5.0):
+            self.get_logger().warn('nudge: no backup action server')
+            return False
+        before = self.odom_total
+        goal = BackUp.Goal()
+        goal.target = Point(x=0.15)
+        goal.speed = 0.1
+        send = self.backup.send_goal_async(goal)
+        if not self.wait_for(send.done, 10.0, 'nudge acceptance'):
+            return False
+        handle = send.result()
+        if not handle.accepted:
+            self.get_logger().warn('nudge: rejected')
+            return False
+        result = handle.get_result_async()
+        if not self.wait_for(result.done, 20.0, 'nudge'):
+            handle.cancel_goal_async()
+            return False
+        moved = self.odom_total - before
+        self.nudges += 1
+        self.get_logger().warn(
+            f'nudged out of a stuck start, moved {moved:.3f} m '
+            f'(nudge {self.nudges})')
+        return moved > 0.01
+
     # ---- the task -------------------------------------------------------
 
     def run(self):
@@ -335,7 +374,32 @@ class TransportTask(Node):
                     f'cycle {index}: driving to {name} '
                     f'({"laden" if self.carrying else "empty"})')
                 t0 = time.monotonic()
+                leg_start = self.odom_total
                 arrived = self.drive_to(station)
+
+                # V-58. A leg that failed having driven NOTHING is the
+                # signature of "Start occupied": the planner refuses because
+                # the vehicle's own cell reads as occupied, so no command
+                # reaches the wheels, so the vehicle does not move, so the
+                # start stays occupied. Retrying from the same pose is
+                # guaranteed to fail and the mission used to do exactly that,
+                # three times, three seconds apart, 0.0 m driven.
+                #
+                # DISTANCE IS THE DISCRIMINATOR, and it is what makes this
+                # bounded. A leg that moved is a leg where the planner engaged,
+                # and whatever went wrong there is not a refusal to start; a
+                # nudge would be the wrong answer and is not attempted.
+                #
+                # The nudge is the `backup` behaviour this stack already
+                # configures, so the collision monitor is active throughout and
+                # stop_reverse is the one polygon with real rearward margin,
+                # 0.4560 m against a chassis half length of 0.2950. A 0.15 m
+                # reverse sits well inside it. Nothing new is introduced whose
+                # safety would have to be established.
+                if not arrived and (self.odom_total - leg_start) < 0.05:
+                    if self.nudge():
+                        arrived = self.drive_to(station)
+
                 self.cycle.legs.append((name, time.monotonic() - t0, arrived))
                 if not arrived:
                     self.publish_state(f'cycle {index}: failed to reach {name}')
@@ -398,6 +462,11 @@ class TransportTask(Node):
             f'({held / dur * 100:.0f} percent of the cycle)')
         self.get_logger().info(
             '  the last two are the price of sharing a floor with people')
+        # Reported even when zero, because "no nudges" and "nudges not counted"
+        # look identical in a log otherwise, and V-58 was only found because a
+        # run reported 0 of 3 cycles rather than staying quiet.
+        self.get_logger().info(
+            f'  nudged out of a stuck start {self.nudges} time(s)')
         self.get_logger().info('=' * 68)
 
 

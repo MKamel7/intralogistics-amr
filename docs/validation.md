@@ -4065,3 +4065,100 @@ justify it and it is not what the current task is measuring.
 
 Recorded here so the next `0 of 3 cycles` is recognised in seconds rather than
 diagnosed again.
+
+---
+
+## V-59. The proxemic layer is unproven, and the metric cannot currently prove it
+
+A costmap layer that charges the planner for passing close to a person was
+built, tested, and measured against a control arm. **The measurement does not
+support any claim about it, in either direction.**
+
+### The four runs
+
+| run | median per person minimum | cycles completed | layer |
+|---|---|---|---|
+| 1 | **+0.484 m** | 0 of 3 | off |
+| 2 | +0.085 m | 1 of 3 | off |
+| 3 | +0.084 m | 2 of 3 | on |
+| 4 | +0.308 m | 3 of 3 | on |
+
+**The best social score belongs to the run where the vehicle never moved.**
+Run 1 completed no cycles, drove 0.0 m on every leg, and therefore kept a
+median of 484 mm from everybody. `measure_social.py` says this in its own
+output and it was still nearly read past:
+
+    A vehicle in another aisle is not being polite, it is being absent.
+
+### What that does to the comparison
+
+The two arms with the layer ON produced +0.084 and +0.308. **A within-arm
+spread of 224 mm**, against a between-arm difference the layer was supposed to
+produce of a few tens of millimetres. The effect being looked for is an order
+of magnitude smaller than the noise it would have to be seen through.
+
+The confound is not subtle once stated: the metric is a distance measured over
+time spent near people, and how much time the vehicle spends near people
+depends on how far it drove, which varied from 0 to 3 cycles across four runs
+of an identical protocol.
+
+### The threshold was set without knowing the variance
+
+Before the second arm ran, a criterion was written down: the median must
+improve by more than 20 mm. That was the right instinct and the wrong number,
+chosen from what seemed a meaningful distance rather than from any knowledge of
+the spread. Setting a detection threshold below the noise floor makes a
+measurement that cannot fail to be interesting and cannot be trusted either
+way.
+
+**The variance should have been measured first**, by running the same
+configuration twice, which is exactly what runs 3 and 4 accidentally were.
+
+### What is claimed about the layer
+
+Nothing, beyond that it loads and does arithmetic that has been checked:
+
+- it loads in both costmaps with its parameters correct
+- `proxemicCost` has seven tests covering the shape, the monotonicity, the
+  zero at the radius, and the cap below the inscribed value
+- both arms generate from `--proxemic on|off` and the control differs from the
+  committed configuration by nothing but an unreferenced block
+
+It **ships disabled** on that basis. A feature whose only evidence is that it
+compiles is the thing this project criticises elsewhere, and turning it on by
+default would be claiming an improvement that four runs failed to show.
+
+### The arithmetic that suggests it could not have worked as built
+
+Independently of the noise, the layer is dominated where it matters. A person
+is already a lethal obstacle from the scan, so the inflation layer covers them
+to 0.4634 m:
+
+| distance | inflation cost | proxemic cost |
+|---|---|---|
+| 0.30 m | 241 | 112 |
+| 0.40 m | 178 | 89 |
+| 0.46 m | 149 | 76 |
+| 0.50 m | 0 | 68 |
+| 0.80 m | 0 | 22 |
+| 1.00 m | 0 | 6 |
+
+Inside 0.46 m inflation wins, and that is the band where clearance is decided.
+Outside it the squared falloff leaves 6 to 68 against a scale of 254, which is
+unlikely to buy a longer route. **The squared profile was chosen to be soft
+near the edge and is too soft to compete with what was already there.**
+
+That is a hypothesis with an obvious test, a linear profile, and it is NOT
+being run: with a noise floor of 224 mm no single pair of runs could tell the
+difference, and changing the shape until the number moves is how a result gets
+manufactured.
+
+### What would actually settle it
+
+1. Make the metric comparable: normalise clearance by exposure, or compare only
+   runs that completed the same number of cycles.
+2. Measure the within-arm variance deliberately, three runs per configuration
+   at least, as V-47 did for the planners.
+3. Then, and only then, decide whether the profile needs changing.
+
+Recorded as unfinished rather than presented as a feature.
