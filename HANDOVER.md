@@ -315,10 +315,15 @@ cover the racking, so the cameras are not load-bearing for that case.
 Every item below is something this project can state a reason for, not a wish
 list. Nothing here is claimed anywhere else in the repository.
 
-**1. Attribute the latency tail.** p50 68 ms against p99 1260 ms. Until it is
-attributed no protective field can honestly be sized on it. The candidates are
-the executor contention behind the 380 ms MPPI iterations in V-37 and the scan
-merger lag behind the transient source rejections in V-41.
+**1. Fix the executor stall.** The tail is attributed, so this is no longer
+"find out where it comes from". V-53 puts it entirely AFTER the collision
+monitor decides: the sensor half never exceeded 72 ms across 302 samples and
+was 24 ms during a 980 ms event, which rules out the scan merger lag of V-41.
+The control half is bimodal, 291 samples under one 4 ms physics step and one at
+904 ms with nothing between, which is a starved callback rather than a slow
+path. What is left is the cause and the fix: the MPPI iteration cost of V-37,
+and the executor the stack runs on. Until then `control_latency` keeps its
+0.10 s and the tail is documented rather than designed around.
 
 **2. A human-aware costmap layer.** People are detected, tracked and scored,
 and the planner routes around them as ordinary obstacles. It does not yet pay a

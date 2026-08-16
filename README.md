@@ -439,11 +439,18 @@ way the error points.
 
 What is left, in the order it would be worth doing:
 
-1. **Attribute the latency tail.** p50 68 ms against p99 1260 ms is a starved control path, not a
-   slow one. Until it is attributed, no protective field can be honestly sized on it.
+1. **Fix the executor stall.** V-53 attributed the latency tail: it is entirely after the collision
+   monitor decides, and the control half is bimodal, 291 samples under one 4 ms physics step and one
+   at 904 ms with nothing in between. That is a starved callback, not a slow control path. The
+   candidates are the MPPI iteration cost of V-37 and the single-threaded executor the stack runs on.
+   Until it is fixed, `control_latency` keeps its 0.10 s and the tail is documented rather than
+   designed around.
 2. **A human-aware costmap layer**, scored against the proxemic figures already being measured.
 3. **Precision docking**, once localisation is good enough to support the claim.
 4. **Physical load transfer**, so that something is actually carried.
+5. **The MiR250's self filter.** V-39 is closed on the MP-400 and deliberately open on the MiR250:
+   11 mm of the 40 mm measured on that vehicle is not explained by its pod geometry and nobody has
+   identified it. It needs measuring on that platform, not reasoning about from this one.
 
 Not on this list: a fleet layer. The project runs one vehicle and says so.
 
