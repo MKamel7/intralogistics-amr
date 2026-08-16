@@ -35,6 +35,23 @@ occasionally starved rather than one that is slow, and sizing a field on the tai
 0.6 m to it. V-42 and V-45 are what happens when a protective field is enlarged without measuring
 the cost.
 
+### Planner comparison
+
+Nine runs, three per planner, same track and scenario (V-47):
+
+| planner | cycles | cycle time (s) | distance (m) |
+|---|---|---|---|
+| **SmacPlanner2D** | **9 of 9** | 192.8 [123 to 231] | 70.2 [50.3 to 78.6] |
+| NavFn | 8 of 9 | 219.4 [86 to 289] | 70.8 [38.5 to 80.9] |
+| ThetaStar | 6 of 9 | 209.5 [142 to 236] | 75.0 [62.0 to 81.3] |
+
+Every range overlaps, so no claim is made that any planner produces shorter or faster paths. What
+separates them is what they refuse: ThetaStar rejected a start pose in an inflated cell 98 times,
+where SmacPlanner2D tolerates it and re-plans. This vehicle demonstrably comes to rest in inscribed
+cells, so the planner is kept **on tolerance, not on path quality**. Hybrid-A* is excluded because
+it plans under a turning radius a differential drive does not have, and a table where the project's
+own planner beats a strawman is worth less than no table.
+
 ## Why this exists
 
 Most ROS 2 navigation projects stop at "the robot reaches the goal". The things that decide whether

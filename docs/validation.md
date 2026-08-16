@@ -3183,3 +3183,60 @@ percent of cycle time.** That is a figure a safety assessor can evaluate, which
 The probe's own caveat stands and is worth repeating: the pedestrians here
 carry no collision geometry, so zero contacts is evidence the stack kept clear,
 not evidence that anything would have stopped it if the stack had not.
+
+---
+
+## V-47. Three planners, and the thing that separates them is not path quality
+
+Nine runs, three per planner, same platform, same track, same scenario, twenty
+seven cycles attempted in total.
+
+| planner | cycles | cycle time (s) | distance (m) | protective stops |
+|---|---|---|---|---|
+| **SmacPlanner2D** | **9 of 9** | 192.8 [123 to 231] sd 48.5 | 70.2 [50.3 to 78.6] | 36.6 |
+| NavFn | 8 of 9 | 219.4 [86 to 289] sd 59.6 | 70.8 [38.5 to 80.9] | 33.1 |
+| ThetaStar | 6 of 9 | 209.5 [142 to 236] sd 33.9 | 75.0 [62.0 to 81.3] | 42.0 |
+
+**Every range overlaps on time and on distance.** With three runs each, this
+data does not support a claim that any of them produces shorter or faster
+paths, and none is made. The medians differ by less than their own spreads.
+
+### What does separate them
+
+Reliability, and the mechanism is visible in what each planner refuses:
+
+| planner | refusals across three runs |
+|---|---|
+| SmacPlanner2D | 31 `no valid path found`, 2 `Start occupied` |
+| NavFn | 1 `Failed to create plan with tolerance of: 0.250000` |
+| ThetaStar | **98** `Either of the start or goal pose are an obstacle`, 68 `Could not generate path`, 5 goals `in lethal cost` |
+
+**ThetaStar refuses to plan from a start pose in an inflated cell.**
+SmacPlanner2D tolerates it and re-plans. That is the whole difference on this
+track, because this vehicle demonstrably comes to rest in inscribed cells: V-31
+had it planning from inside a wall, V-45 had two cells baked into the map under
+its own footprint, and the costmap marks a cell 99 whenever a lethal cell lies
+within the inscribed radius.
+
+So the choice is not "which planner finds better paths". It is **which planner
+tolerates the state this vehicle actually ends up in**, and on a floor shared
+with people that state is common rather than exceptional.
+
+### Why Hybrid-A* is absent
+
+It plans in x, y and heading under a minimum turning radius, which is what an
+Ackermann vehicle needs and what a differential drive does not have. It would
+forbid the spot turn every corner in this building depends on. Including it
+would have produced a table where the project's own planner beat a strawman,
+and a comparison that has been rigged is worth less than no comparison.
+
+### What this does not settle
+
+Three runs per planner is thin, and the overlapping ranges say so. The
+reliability difference is 9 against 6 out of nine cycles, which is large enough
+to act on and not large enough to quote a rate for. NavFn at 8 of 9 sits between
+them and is not distinguishable from either.
+
+The honest summary is that **SmacPlanner2D is kept, on tolerance rather than on
+path quality**, and that the comparison's main product is the mechanism rather
+than the ranking.
