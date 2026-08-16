@@ -65,11 +65,20 @@ contention that produced 380 ms MPPI iterations in V-37, and the scan merger
 lag that produced transient source rejections in V-41. Nothing distinguished
 them, and no protective field can honestly be sized on an unattributed tail.
 
-So each sample is now split at the collision monitor, which is the one point in
-the chain that announces itself:
+So each sample is also split at the collision monitor, which is the one point
+in the chain that announces itself:
 
-    sensor half    scan stamp        -> monitor says STOP
-    control half   monitor says STOP -> the command reaches the wheels
+    sensor half    this node sees the scan  -> this node sees the STOP
+    control half   this node sees the STOP  -> this node sees the command
+
+MEASURED AT THIS NODE, ON RECEPTION, AND THAT IS DELIBERATE. The split does
+not sum to the total above and is not meant to. `CollisionMonitorState` carries
+no header, so the only time available for the decision is when this node
+received it. Anchoring one half on that and the other on generation stamps
+produced a sensor half larger than the total on nearly every sample and a
+control half clamped to zero. Measuring all three on reception makes the
+probe's own subscription delay common to them, which is what a split needs and
+a total does not.
 
 A tail in the SENSOR half is the scan pipeline: transport, the merge, the
 monitor's own cycle. A tail in the CONTROL half is downstream of a decision
@@ -127,7 +136,9 @@ class LatencyProbe(Node):
         self.stop_eps = self.declare_parameter('stop_epsilon', 0.02).value
 
         self.last_scan = None        # stamp of the most recent scan
+        self.last_scan_rx = None     # ...and when this node received it
         self.pending = None          # stamp of the scan that triggered a stop
+        self.pending_rx = None       # ...and when this node received that one
         self.decided = None          # when the monitor announced that stop
         self.polygon = ''            # which field fired, for context
         self.stopping = False
@@ -181,6 +192,7 @@ class LatencyProbe(Node):
     def _scan(self, msg):
         self.last_scan = stamp_s(msg.header)
         now = self._now()
+        self.last_scan_rx = now
         self.scan_arrivals.append(now)
         self.scan_arrivals = [a for a in self.scan_arrivals if now - a <= 2.0]
 
@@ -199,6 +211,7 @@ class LatencyProbe(Node):
         stopping = msg.action_type == CollisionMonitorState.STOP
         if stopping and not self.stopping and self.last_scan is not None:
             self.pending = self.last_scan
+            self.pending_rx = self.last_scan_rx
             self.decided = self._now()
             self.polygon = msg.polygon_name
         self.stopping = stopping
@@ -218,15 +231,36 @@ class LatencyProbe(Node):
                 # The split. `decided` is on the same clock as `now`, while
                 # `pending` is a message STAMP; both are the simulated clock,
                 # so the subtraction is meaningful.
-                sensor = max(0.0, self.decided - self.pending)
-                control = max(0.0, dt - sensor)
+                # BOTH HALVES IN RECEPTION TIME, and that is not an
+                # approximation of the total above, it is a different
+                # quantity measured on purpose.
+                #
+                # `dt` is generation stamp to generation stamp: the scan's
+                # own stamp to the command's own stamp. That is the number
+                # a protective field is sized by and it stays as it is.
+                #
+                # The split cannot use it. CollisionMonitorState carries no
+                # header, so the only time available for the decision is
+                # when THIS node received it, which includes the probe's own
+                # subscription delay. Mixing that with generation stamps
+                # produced a sensor half LARGER than the total on nearly
+                # every sample, and a control half clamped to zero, which is
+                # how the mistake announced itself.
+                #
+                # Measured at the same node, on the same clock, the probe's
+                # delay is common to all three and the split is honest about
+                # what it is: where the time went between this node seeing
+                # the scan and this node seeing the command that acted on it.
+                sensor = max(0.0, self.decided - self.pending_rx)
+                control = max(0.0, now - self.decided)
                 self.parts.append((
                     dt, sensor, control,
                     self._widest_gap(self.scan_arrivals, now),
                     self._widest_gap(self.cmd_arrivals, now)))
                 self.get_logger().info(
-                    f'  sample {len(self.samples)}: {dt * 1000:.1f} ms '
-                    f'= {sensor * 1000:.1f} sensor + {control * 1000:.1f} '
+                    f'  sample {len(self.samples)}: {dt * 1000:.1f} ms; '
+                    f'split {(sensor + control) * 1000:.1f} = '
+                    f'{sensor * 1000:.1f} sensor + {control * 1000:.1f} '
                     f'control ({self.polygon or "field"})')
             else:
                 # Out of range means the pairing is wrong, not that the system
@@ -294,6 +328,9 @@ class LatencyProbe(Node):
         print(f'  ATTRIBUTION, over {len(self.parts)} split sample(s)')
         sensor = [r[1] for r in self.parts]
         control = [r[2] for r in self.parts]
+        print('    measured at this node on reception, so these do NOT sum to')
+        print('    the totals above, which are generation stamp to generation')
+        print('    stamp. The split is for attribution, the total is the figure.')
         print(f'    sensor half   p50 {statistics.median(sensor) * 1000:7.1f} ms   '
               f'max {max(sensor) * 1000:7.1f} ms')
         print(f'    control half  p50 {statistics.median(control) * 1000:7.1f} ms   '

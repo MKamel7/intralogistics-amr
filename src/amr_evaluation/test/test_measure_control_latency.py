@@ -87,3 +87,36 @@ def test_the_attribution_reports_no_tail_rather_than_inventing_one():
     text = PROBE.read_text()
     assert 'NO TAIL IN THIS RUN' in text
     assert 'not evidence the tail is gone' in text
+
+
+def test_the_split_is_anchored_on_reception_not_on_stamps():
+    """The mistake this file has already made once.
+
+    CollisionMonitorState carries no header, so the decision time is when the
+    probe received it. Anchoring the other half on a generation stamp mixes two
+    quantities that differ by the probe's own subscription delay, which at this
+    scale is comparable to the thing being measured: the sensor half came out
+    LARGER than the total on nearly every sample and the control half clamped
+    to zero. That is how it announced itself, and only because both were
+    printed side by side.
+    """
+    text = PROBE.read_text()
+    assert 'self.decided - self.pending_rx' in text, (
+        'the sensor half is not anchored on when this node received the scan, '
+        'so it is a reception time minus a generation stamp')
+    assert 'now - self.decided' in text, (
+        'the control half is not anchored on this node receiving the command')
+    assert 'do NOT sum to' in text, (
+        'the report does not say that the split and the total are different '
+        'quantities, which invites exactly the subtraction that broke it')
+
+
+def test_the_total_still_comes_from_message_stamps():
+    """The published figure must not drift onto reception times.
+
+    V-44 sized every protective field discussion on a stamp to stamp interval.
+    Reception times include this probe's own delay and would inflate it.
+    """
+    text = PROBE.read_text()
+    assert 'dt = stamp_s(msg.header) - self.pending' in text, (
+        'the headline latency is no longer a message stamp difference')
