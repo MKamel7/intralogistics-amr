@@ -1,24 +1,65 @@
 # Handover
 
-## Session of 13 August 2026, evening. Read this first
+## Read this first
 
-**261 tests pass, ruff is clean, `gz sdf` validates both worlds, and the
-MiR250 is untouched at 3 of 3 cycles on the generated track.**
+**334 tests pass, 2 strict xfails, ruff is clean, `gz sdf` validates both
+worlds, and the container builds from a clean base and runs the same suite to
+the same result.** 48 numbered findings in `docs/validation.md`.
 
-The headline is that the MP-400 was never broken in the way five hypotheses
-assumed. `config/controllers.yaml` was a single hand written file of MiR250
-wheel geometry loaded by every vehicle, so the MP-400 integrated odometry with
-a wheel radius 33 percent too large and a track 18 percent too narrow. SLAM
-fought that on every update, the map came out sheared, and the planner refused
-to plan from a pose it believed was inside a wall.
+The project is **one vehicle**, the MP-400 class, and it says so everywhere.
+The repository was renamed from `intralogistics-amr-fleet` to
+`intralogistics-amr` because the old name claimed a fleet that does not exist
+and is not coming.
 
-Fixing it moved the platform from 0 m driven with every goal aborted to
-completing transport cycles, and fixed three things nobody was looking at: the
-map became orthogonal, the survey started converging, and pedestrians moved for
-the first time in the project's history.
+### What is measured
 
-Start with `docs/findings.md`, then V-31 through V-37 in `docs/validation.md`,
-which are this session's results. V-33 is the one to read if you only read one.
+| | result | where |
+|---|---|---|
+| transport cycles | 12 of 12 across five runs | V-44 |
+| contact with people | 0, closest approach +0.022 m | V-46 |
+| cost of that safety | 36 protective stops per cycle, 2 % of cycle time | V-46 |
+| localisation | p50 0.027 m driving, 0.055 m parked | V-37 |
+| odometry against truth | ratio 1.025 | V-33 |
+| people tracking | precision 0.615, recall 0.988, 0 ID switches | V-36 |
+| sensor to command latency | p50 68 ms, p95 796 ms against a 0.10 s estimate | V-44 |
+| planner choice | SmacPlanner2D 9 of 9, NavFn 8 of 9, ThetaStar 6 of 9 | V-47 |
+
+### The three things most worth knowing
+
+**1. The latency estimate is refuted and deliberately not fixed.** Every
+protective field is sized through ISO 13855 by `control_latency: 0.10`, marked
+NOT YET MEASURED. Measured, it is p50 68 ms and p95 796 ms, which at the
+commissioned 0.75 m/s is 522 mm of travel the fields do not carry. The p95 is
+NOT written into the spec, because a p50 of 68 against a p99 of 1260 is a
+control path that is occasionally starved rather than one that is slow, and
+sizing a field on that tail would add roughly 0.6 m to it. V-42 and V-45 are
+what happens when a field is enlarged without measuring the cost.
+
+**2. V-39 is open and two attempts to close it made things worse.** The scan
+merger's self filter blanks a region larger than the vehicle, so the forward
+protective fields had 5.1 mm of lateral coverage. Enlarging the fields trapped
+the MP-400 against a rack (V-42) and dropped the MiR250 from 3 of 3 to 2 of 9
+(V-45); both were reverted. Measuring the filter margin instead got it from
+5.1 mm to 33.1 mm and took contacts from six to zero (V-46). The remaining gap
+to the 50 mm a field needs requires a smaller scanner pod, which is hardware.
+
+**3. Nothing here has ever hit a person, and that claim is weaker than it
+sounds.** The pedestrians carry no collision geometry, deliberately, so a
+person cannot be struck in this simulation. Contact is therefore measured
+geometrically by `tools/measure_contacts.py` against the ground truth oracle,
+and zero contacts is evidence the stack kept clear, not evidence that anything
+would have stopped it.
+
+### The MiR250
+
+Its spec and generated configuration are kept, and the tests run over both
+platforms, which is what caught V-33. **It is not a validated runtime target
+and no cycle count is claimed for it.** Its last measured state on the track is
+0 of 3, with the planner refusing to plan from an inscribed start caused by two
+cells baked into the SLAM map 0.14 m from the vehicle centre, inside its own
+footprint, with the nearest live scan return 1.182 m away and localisation at
+0.032 m. That evidence is recorded so it survives the decision to stop chasing
+it.
 
 ### The four faults that were all the same shape
 
@@ -147,19 +188,32 @@ around it. A safety layer sits after the planner and can override it.
 
 This is the deliverable. Everything below is improvement, not repair.
 
-## The test suite is GREEN, and the second platform runs
+## The test suite
 
-    145 tests, 0 failures
+    334 passed, 2 xfailed
 
-The five `mp400_class` failures are fixed and the platform is CONFIGURED but
-NOT VALIDATED. It brings up, passes all preflight checks, and drives on its
-own footprint, fields, speed limits and acceleration. It then completes 1 of 5
-transport cycles against the MiR250's 4 of 5, and the cause is open. See V-25,
-and do not describe this platform as working.
+**The two xfails are load bearing and must not be deleted.** Both are `strict`,
+so the moment either defect is genuinely fixed the test XPASSes and fails the
+build until the marker is removed. They mark V-39, the protective fields lying
+inside the sensor's blind zone, on both platforms.
 
-The suite grew from 77 to 145 collectable tests because `test_fields.py` now
-runs over every platform spec rather than the MiR250 alone, plus new
-`test_nav2_config.py` and `test_transport_limits.py`.
+Run everything with ROS and the workspace sourced, or 14 description tests
+error on a missing `xacro` rather than failing. Use the shared helper rather
+than sourcing by hand, because `set -u` across the ROS setup scripts aborts on
+`AMENT_TRACE_SETUP_FILES` and that trap has caught three scripts here:
+
+    . tools/ros_env.sh
+    python3 -m pytest src -q
+
+Or in the container, from a clean base, to the same result:
+
+    docker build -t amr . && docker run --rm amr
+
+**Before starting anything that launches a simulator, check what is running.**
+`pgrep -f run_stack` matches the shell asking the question, which has produced
+a wrong answer three times, once costing a whole measurement:
+
+    tools/whats_running.sh
 
 Run everything with ROS and the workspace sourced, or 14 description tests
 error on a missing `xacro` rather than failing:
@@ -205,68 +259,48 @@ as new.
 `--cameras off` is the fleet tier and roughly halves CPU load. The keepout zones
 cover the racking, so the cameras are not load-bearing for that case.
 
-## The plan, in order
+## What is left
 
-**1. The second platform is CONFIGURED. It is not validated. Half a day.**
-   The plumbing is done: the five failures are fixed, `nav2.yaml` is generated
-   per platform from `config/nav2.yaml.in` by
-   `amr_navigation/tools/generate_nav2.py`, the collision monitor is generated
-   and selected per platform too, the transport task takes its acceleration
-   limits from the spec, and all three have tests. See V-23 and V-24.
+Every item below is something this project can state a reason for, not a wish
+list. Nothing here is claimed anywhere else in the repository.
 
-   WHAT IS LEFT IS THE PART THAT MATTERS. The MP-400 completes 1 of 5 transport
-   cycles against a same-day MiR250 control of 5 of 5, so the fault is the
-   platform's and not the rig's. It drives 2 to 4 times the distance between the
-   same two stations and is wildly variable, 36 to 72 m per cycle against the
-   MiR250's 15 to 21 m.
+**1. Close V-39 properly.** The forward protective fields have 33 mm of lateral
+coverage where they need 50. Two attempts by resizing fields are recorded as
+failures (V-42, V-45) and shrinking the self filter margin got most of the way
+(V-46). The rest is a smaller scanner pod, which is hardware, and a
+configuration file cannot assert its way out of it.
 
-   V-25 has the evidence. FOUR hypotheses are tested and refuted: that it wedges
-   in gaps too small for it, the self filter, the inflation radius and the scan
-   plane height. The cause is still unknown.
+**2. Attribute the latency tail.** p50 68 ms against p99 1260 ms. Until it is
+attributed no protective field can honestly be sized on it. The candidates are
+the executor contention behind the 380 ms MPPI iterations in V-37 and the scan
+merger lag behind the transient source rejections in V-41.
 
-   What is localised is WHERE it fails. Across thirteen cycles it reaches
-   `goods_in` reliably in a time comparable to the MiR250 and fails approaching
-   `dispatch`, six times against three. The first "Start occupied" refusal was
-   0.70 m from the dispatch station. Both parameter experiments changed global
-   settings, which is probably why neither moved anything.
+**3. A human-aware costmap layer.** People are detected, tracked and scored,
+and the planner routes around them as ordinary obstacles. It does not yet pay a
+cost for passing close to one, which is exactly what the proxemic figures in
+V-43 exist to make measurable.
 
-   Start with `tools/track_goal.py` on a failing dispatch leg against the
-   MiR250's successful one, and look at the approach pose in stations.yaml,
-   which was authored for the MiR250 and is enforced to 0.25 rad by the goal
-   checker.
+**4. Precision docking**, once localisation supports the claim, and **physical
+load transfer**, so that something is actually carried. A cycle currently loads
+and unloads as a mission state with a dwell.
 
-   Two smaller things from the same work:
+**5. Saved map plus AMCL.** Every mission still pays for a survey first. A
+commissioned vehicle surveys once, saves, and localises. The `amcl` block is
+already in the Nav2 configuration and unused.
 
-   The MP-400's `self_filter_margin` and its four corridor targets are carried
-   across from the MiR250 rather than measured on this vehicle, and
-   `corridor_width_dynamic` sizes a protective field. Measure them before this
-   platform is run in anger.
+### Deliberately not on this list
 
-   `mir250_class.yaml` holds a mapping under `platform:` and `mp400_class.yaml`
-   holds a bare string. Nothing reads it, which is why no test caught it, and
-   the generators take the name from the filename instead. Worth making
-   consistent before a third platform.
+**A fleet layer.** Cancelled. The VDA 5050 vehicle interface stays because it
+is the half an integrator connects to and it is tested end to end against a
+broker; a dispatcher with one robot behind it would be a claim without a
+measurement.
 
-   The MP-400's commissioned speed is 0.75 m/s, half its rating, by the same
-   rule the MiR250 gets. Its acceleration limits are now equal laden and
-   unladen because its manual publishes one rating, so the load switching is a
-   no-op there. Both are decisions rather than measurements.
+**HuNavSim.** Aborted on evidence in V-48: its Gazebo wrapper depends on
+`gazebo_ros`, which is Classic, which is end of life and not packaged for
+Jazzy. Adopting it means writing a new Harmonic system plugin to replace a
+pedestrian system that already works and is measured.
 
-**2. Close the credibility gaps. Half a day.**
-   `control_latency` is estimated and feeds protective field sizing directly. It
-   is the first thing a functional safety reviewer will ask about. Measure it end
-   to end: inject a step command, timestamp scan to command to wheel response,
-   take the distribution rather than the mean.
-   Then switch protective field sets with load state, which the transport task's
-   docstring records as an open coupling.
-
-**3. Explain the variance. Half a day.**
-   Cycle times run 70 to 176 s on identical journeys, always with a slow
-   `goods_in` leg. Use `tools/track_goal.py` on a slow one against a fast one.
-
-**4. Portfolio pass. Half a day.**
-   README, a figure or two from the RViz navigation layout, and decide whether
-   the repo goes public.
+**The MiR250 as a running vehicle.** See above.
 
 ## Things that are NOT true, despite having been said
 
