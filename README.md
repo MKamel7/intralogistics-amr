@@ -8,7 +8,7 @@ layer that sits after the planner and can override it.
 name outran the code; there is no traffic controller and no task allocation. A fleet layer is
 listed under Roadmap and is claimed nowhere else.
 
-**Status: one platform validated end to end, with 46 recorded findings.** This README documents
+**Status: one platform validated end to end, with 50 recorded findings.** This README documents
 what exists and what is measured, not what is planned. Every figure below is traceable to an entry
 in `docs/validation.md`; anything not built is under Roadmap and is claimed nowhere else.
 
@@ -25,6 +25,7 @@ in `docs/validation.md`; anything not built is under Roadmap and is claimed nowh
 | odometry against ground truth | ratio 1.025 | V-33 |
 | people tracking | precision 0.615, recall 0.988, 0 ID switches | V-36 |
 | sensor to command latency | p50 68 ms, **p95 796 ms** against a 0.10 s estimate | V-44 |
+| protective field coverage outside the sensor's blind zone | **55.1 mm** against the 50 mm needed | V-49 |
 
 The last row is the one to read twice. The specification carries
 `control_latency: 0.10 # NOT YET MEASURED`, every protective field is sized by it through
@@ -390,6 +391,20 @@ Tests, no ROS needed:
 python3 -m pytest src/amr_description/test -q
 ```
 
+The whole suite, the way the build runs it:
+
+```bash
+colcon test && colcon test-result
+```
+
+`colcon test` reports more than `pytest src` because it also runs each
+package's lint tests. What it must never report is FEWER pytest cases, and for
+most of this project's life it did: 289 against 337, because eleven test files
+were never registered with `ament_add_pytest_test` and one package was the
+wrong build type. All eleven were passing, which is why it went unnoticed for
+the whole project. `test_registration.py` now walks the source tree and fails
+if a test file exists that the build does not run. See V-50.
+
 ## How this is built
 
 Decisions that were expensive to make are recorded as [ADRs](docs/adr/). Ten exist so far, one of them still Proposed. Each
@@ -422,15 +437,11 @@ way the error points.
 
 What is left, in the order it would be worth doing:
 
-1. **Close V-39.** The self filter blanks a region larger than the vehicle, so the forward
-   protective fields have 33 mm of lateral coverage where they need 50. Two attempts to fix it by
-   resizing fields both made things worse in measured ways (V-42, V-45), and shrinking the filter
-   margin got it from 5 mm to 33 (V-46). The rest needs a smaller scanner pod, which is hardware.
-2. **Attribute the latency tail.** p50 68 ms against p99 1260 ms is a starved control path, not a
+1. **Attribute the latency tail.** p50 68 ms against p99 1260 ms is a starved control path, not a
    slow one. Until it is attributed, no protective field can be honestly sized on it.
-3. **A human-aware costmap layer**, scored against the proxemic figures already being measured.
-4. **Precision docking**, once localisation is good enough to support the claim.
-5. **Physical load transfer**, so that something is actually carried.
+2. **A human-aware costmap layer**, scored against the proxemic figures already being measured.
+3. **Precision docking**, once localisation is good enough to support the claim.
+4. **Physical load transfer**, so that something is actually carried.
 
 Not on this list: a fleet layer. The project runs one vehicle and says so.
 

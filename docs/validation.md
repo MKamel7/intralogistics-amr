@@ -3145,9 +3145,18 @@ plus the 3.0 mm of further self observation actually measured.
 
 **A 6.5 times improvement, and V-39 is still open.** 33.1 mm is short of the
 50 mm a field needs for a person entering it to produce the two returns
-`min_points` requires. Closing it properly needs a smaller pod or a different
-mounting, which is a hardware change and not something a configuration file can
-assert its way out of.
+`min_points` requires.
+
+> **This conclusion was wrong, and V-49 corrects it.** What was written here
+> was that closing the rest needs a smaller pod or a different mounting, which
+> is a hardware change and not something a configuration file can assert its
+> way out of. That reasoning took the SHAPE of the self filter as fixed and
+> only asked how large its margin should be. The filter is a bounding box, the
+> pods are at the corners, and shaping one to the other closes V-39 in
+> software. The sentence is left standing above rather than edited away,
+> because the mistake it records is the useful part: five hypotheses were
+> refuted on this defect by measuring, and the sixth was accepted by
+> assumption.
 
 The MiR250 keeps 0.060, which is its own measured figure. The two platforms
 differ by 800 by 580 mm against 590 by 559 mm, and the whole reason this
@@ -3288,3 +3297,178 @@ distribution is a finding about the ecosystem, not a failure of the spike.
 instead**, in `tools/measure_social.py`, and they produced the table in V-43
 without an external dependency. The metrics were always the value; the
 framework was never the point.
+
+---
+
+## V-49. The self filter was shaped like a box, and the vehicle is not a box
+
+V-39 had been open for the whole project. It is the one where the scan merger
+deletes a region larger than the vehicle, and the forward protective fields
+sit inside the region it deleted, so the fields cover ground the sensor is not
+allowed to report on.
+
+Five hypotheses were refuted on it by measurement. The sixth was accepted
+without any.
+
+### What was assumed
+
+Every attempt at V-39 asked the same question: how large should
+`self_filter_margin` be. V-43 measured the pods and found 28.7 mm. V-46 got
+the margin from 0.060 to 0.032 and the lateral band from 5.1 mm to 33.1 mm,
+then concluded that the remaining 16.9 mm needed a smaller pod, which is
+hardware. V-42 and V-45 had already tried to buy the band by enlarging the
+FIELDS instead, and both were measured to be worse than the defect: the MP-400
+was trapped against a rack with 1057 commands in and 0 out, and the MiR250
+dropped from 3 of 3 cycles to 2 of 9.
+
+What none of them questioned is that the filter is a rectangle:
+
+```cpp
+return std::abs(x) <= half_length_ && std::abs(y) <= half_width_;
+```
+
+### The measurement that reopened it
+
+```
+chassis half extents                    0.2950 x 0.2795
+pod centre                              (0.2576, 0.2421)  half extent 0.0661
+pod outer edge                          0.3082      28.7 mm proud
+pod x span                              0.1915 .. 0.3237
+bounding box filter blanks              |y| < 0.3115 EVERYWHERE
+vehicle half width at mid side          0.2795
+```
+
+The pods stand proud at the two diagonal CORNERS and nowhere else. They occupy
+132 mm of a 590 mm side. A bounding box sized to contain them blanks 28.7 mm
+along the whole flank in order to cover 132 mm of it, and the flank is where
+the forward fields need their lateral coverage.
+
+### The fix
+
+`FootprintFilter` takes the pods as boxes at their own positions. The margin
+then only has to clear the chassis, and falls to the 10 mm that carries the
+3.0 mm of self observation measured on this platform in V-46.
+
+| | margin 0.060 | margin 0.032 (V-46) | shaped (V-49) |
+|---|---|---|---|
+| blind zone along the flank | 0.3395 | 0.3115 | **0.2895** |
+| forward field lateral band | 5.1 mm | 33.1 mm | **55.1 mm** |
+| fields resized | no | no | **no** |
+
+**No protective field changed.** Not "changed only slightly": the regenerated
+`collision_monitor.mp400_class.yaml` is byte identical to the committed one,
+which `git diff` reports as no change at all. The fields are pure ISO 13855
+stopping distances and the margin never entered them, because `observable()`
+was reverted to an identity function after V-42 and V-45. The whole of the
+55.1 mm came from the blind zone shrinking underneath fields that did not move.
+
+That is the part worth keeping: V-42 and V-45 both failed because they moved
+the fields, and mobility is what a field costs when it is wrong. Shrinking the
+filter where the vehicle is genuinely smaller takes nothing away from anything.
+
+### What shaping does not fix, stated rather than buried
+
+Inside the pod's own x span the blind edge is the pod edge, so the band there
+is 36.4 mm, not 55.1 mm. That shadow is real, it is 132 mm wide out of 590,
+and no filter shape removes it, because a corner scanner cannot see past its
+own housing. `test_the_pod_shadow_is_recorded_rather_than_ignored` asserts its
+size so it cannot drift unnoticed and so the flank figure is never read as if
+it applied along the whole side.
+
+### The MiR250 keeps its bounding box, deliberately
+
+Its 0.060 m is not a pod derivation. It came from returns at a fixed 0.440 m
+from centre, 12 of 12 protective stops in one run, minimum equal to median
+equal to maximum, absent from both costmaps. Its own pod geometry only reaches
+0.4287 m, so 11 mm of that measurement is something on the vehicle nobody has
+identified. Shrinking that margin on the strength of an MP-400 result is
+exactly the mistake V-45 punished. **V-39 stays open on the MiR250**, recorded
+in `UNSHAPED_SELF_FILTER` in two test modules, and the entry is asserted to be
+stale the moment that platform declares pods.
+
+### What the test suite gained
+
+The strict `xfail` on `test_the_protective_fields_are_not_inside_the_self_filter`
+came off, and turning it into a real assertion immediately found a bug in the
+test itself. It read `points[0]` of each polygon. For a REVERSE field the first
+vertex is the front corner, which sits on the chassis by construction, so the
+test had been measuring the end of the polygon the field does not extend from
+and reporting a 151 mm reach as a negative one. The xfail had been hiding it.
+
+**A test that is expected to fail is not being read.** That is the second
+finding here and it is the more general one.
+
+---
+
+## V-50. Eleven test files were never run by the build, and they were all passing
+
+Found while retiring the V-39 xfail, which is the same shape of defect and is
+what made it worth looking.
+
+`colcon test` reported 289 tests. A direct `pytest src` reported 337. Nobody
+had put the two numbers side by side.
+
+To be exact about the blast radius, because the first version of this entry
+overstated it: the container runs `python3 -m pytest src -q`, so it collected
+all of them. What did not run them is `colcon test`, which is the build's own
+notion of whether the workspace passes, and the command anybody wiring up CI
+would reach for first.
+
+### What was actually running
+
+| | pytest cases | run by |
+|---|---|---|
+| `pytest src -q` | 337 | a person by hand, and the container |
+| `colcon test` | 289 | the build itself |
+
+(`colcon test` also runs each package's lint tests, so its total is larger than
+its pytest count. That is what made the gap easy to miss: the headline number
+from `colcon test` was bigger, and bigger looked fine.)
+
+The gap is **eleven test files across three packages** that exist in `test/`
+and were never registered with `ament_add_pytest_test`:
+
+```
+amr_evaluation  test_container, test_measure_contacts, test_measure_localisation,
+                test_measure_path_efficiency, test_measure_slip,
+                test_measure_social, test_occlusion, test_run_stack
+amr_navigation  test_survey_exit
+amr_sim         test_pedestrian_behaviours, test_pedestrian_recovery
+```
+
+Among them: every probe that produces a safety number, and the test that
+asserts the survey exits non-zero when a station is off the map, which is V-40.
+
+**They were all passing.** That is why it survived the whole project. A failing
+unregistered test would have been caught the first time somebody ran pytest by
+hand; a passing one is invisible from both directions.
+
+### A twelfth, failing the other way
+
+`amr_vda5050` was the only `ament_python` package. `colcon test` ran pytest in
+a directory where it collected nothing, exited 5, and reported the package as
+**FAILED** on every build, while its nineteen protocol tests passed under a
+direct run. A red package that nobody could explain and a green suite that was
+missing a seventh of itself, at the same time, for the same reason.
+
+It is `ament_cmake` now, like the other eight, and
+`test_every_package_is_ament_cmake` keeps it that way, because uniform build
+types are what make the registration check sufficient.
+
+### The pattern, which is the finding
+
+Three defects in this project have the same shape:
+
+| | the check | why it never fired |
+|---|---|---|
+| V-49 | the field coverage test | `strict xfail`, so nobody read it, and it had a bug |
+| V-50 | eleven test files | never registered, so the build never ran them |
+| V-50 | `amr_vda5050` | wrong build type, so pytest collected nothing |
+
+**A check that does not run is worse than no check, because it is counted.**
+The test suite figure is what a reader trusts when deciding whether a change to
+a protective field is safe.
+
+`test_registration.py` walks the source tree rather than any list, so a new
+test file is covered the day it is written, and it checks both directions: a
+file with no registration, and a registration with no file.

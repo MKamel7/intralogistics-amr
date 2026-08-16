@@ -4,7 +4,7 @@
 
 **334 tests pass, 2 strict xfails, ruff is clean, `gz sdf` validates both
 worlds, and the container builds from a clean base and runs the same suite to
-the same result.** 48 numbered findings in `docs/validation.md`.
+the same result.** 50 numbered findings in `docs/validation.md`.
 
 The project is **one vehicle**, the MP-400 class, and it says so everywhere.
 The repository was renamed from `intralogistics-amr-fleet` to
@@ -35,13 +35,16 @@ control path that is occasionally starved rather than one that is slow, and
 sizing a field on that tail would add roughly 0.6 m to it. V-42 and V-45 are
 what happens when a field is enlarged without measuring the cost.
 
-**2. V-39 is open and two attempts to close it made things worse.** The scan
+**2. V-39 is closed, and two attempts to close it first made things worse.** The scan
 merger's self filter blanks a region larger than the vehicle, so the forward
 protective fields had 5.1 mm of lateral coverage. Enlarging the fields trapped
 the MP-400 against a rack (V-42) and dropped the MiR250 from 3 of 3 to 2 of 9
 (V-45); both were reverted. Measuring the filter margin instead got it from
-5.1 mm to 33.1 mm and took contacts from six to zero (V-46). The remaining gap
-to the 50 mm a field needs requires a smaller scanner pod, which is hardware.
+5.1 mm to 33.1 mm and took contacts from six to zero (V-46). Shaping the filter
+to the vehicle rather than to its bounding box closed it at 55.1 mm, with no
+field resized (V-49). It had been called a hardware limit for three findings,
+because every attempt asked how LARGE the margin should be and none asked what
+SHAPE the filter was.
 
 **3. Nothing here has ever hit a person, and that claim is weaker than it
 sounds.** The pedestrians carry no collision geometry, deliberately, so a
@@ -190,12 +193,22 @@ This is the deliverable. Everything below is improvement, not repair.
 
 ## The test suite
 
-    334 passed, 2 xfailed
+    337 passed, 5 skipped
 
-**The two xfails are load bearing and must not be deleted.** Both are `strict`,
-so the moment either defect is genuinely fixed the test XPASSes and fails the
-build until the marker is removed. They mark V-39, the protective fields lying
-inside the sensor's blind zone, on both platforms.
+**There are no xfails left, and the way the last two went is the point.** Both
+were `strict` and both marked V-39, the protective fields lying inside the
+sensor's blind zone. Turning them into real assertions in V-49 immediately
+found a bug in one of the tests: it read `points[0]` of each polygon, which for
+a REVERSE field is the front corner sitting on the chassis by construction, so
+it had been reporting a 151 mm reach as a negative one. A test that is expected
+to fail is not being read.
+
+**The five skips are load bearing and must not be deleted.** Three are the
+MiR250's self filter, which is still a bounding box on purpose: 11 mm of the
+40 mm measured on that vehicle is not explained by its pod geometry and nobody
+has identified it, so V-39 stays open there. `UNSHAPED_SELF_FILTER` in
+`amr_description/test/test_platform_spec.py` carries the reasoning, and each
+entry asserts itself stale the moment that platform declares pods.
 
 Run everything with ROS and the workspace sourced, or 14 description tests
 error on a missing `xacro` rather than failing. Use the shared helper rather
@@ -240,7 +253,7 @@ Read V-23 before trusting any other figure in that spec.
 ## Running it
 
     tools/run_stack.sh --cameras off --run mission --cycles 5
-    tools/run_stack.sh --platform mp400_class --cameras off   # the second platform
+    tools/run_stack.sh --platform mir250_class --cameras off  # the second platform
     tools/run_stack.sh --test-track            # the datasheet-sized track
     tools/run_stack.sh --run survey            # map the building
     tools/preflight.py                          # 21 health checks, ~15 s
@@ -264,27 +277,21 @@ cover the racking, so the cameras are not load-bearing for that case.
 Every item below is something this project can state a reason for, not a wish
 list. Nothing here is claimed anywhere else in the repository.
 
-**1. Close V-39 properly.** The forward protective fields have 33 mm of lateral
-coverage where they need 50. Two attempts by resizing fields are recorded as
-failures (V-42, V-45) and shrinking the self filter margin got most of the way
-(V-46). The rest is a smaller scanner pod, which is hardware, and a
-configuration file cannot assert its way out of it.
-
-**2. Attribute the latency tail.** p50 68 ms against p99 1260 ms. Until it is
+**1. Attribute the latency tail.** p50 68 ms against p99 1260 ms. Until it is
 attributed no protective field can honestly be sized on it. The candidates are
 the executor contention behind the 380 ms MPPI iterations in V-37 and the scan
 merger lag behind the transient source rejections in V-41.
 
-**3. A human-aware costmap layer.** People are detected, tracked and scored,
+**2. A human-aware costmap layer.** People are detected, tracked and scored,
 and the planner routes around them as ordinary obstacles. It does not yet pay a
 cost for passing close to one, which is exactly what the proxemic figures in
 V-43 exist to make measurable.
 
-**4. Precision docking**, once localisation supports the claim, and **physical
+**3. Precision docking**, once localisation supports the claim, and **physical
 load transfer**, so that something is actually carried. A cycle currently loads
 and unloads as a mission state with a dwell.
 
-**5. Saved map plus AMCL.** Every mission still pays for a survey first. A
+**4. Saved map plus AMCL.** Every mission still pays for a survey first. A
 commissioned vehicle surveys once, saves, and localises. The `amcl` block is
 already in the Nav2 configuration and unused.
 

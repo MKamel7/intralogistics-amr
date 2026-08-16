@@ -33,6 +33,23 @@ from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
 
 
+def pod_params(v):
+    """The scanner pods as parallel lists, or empty lists if there are none.
+
+    The two pods sit at diagonally opposite corners, which is what the pair of
+    signs encodes. A platform whose spec carries no pod geometry gets empty
+    lists and therefore the plain bounding envelope, which is the behaviour
+    every platform had before V-39.
+    """
+    if 'self_pod_x' not in v:
+        return {'self_pod_x': [], 'self_pod_y': [], 'self_pod_half': []}
+    return {
+        'self_pod_x': [v['self_pod_x'], -v['self_pod_x']],
+        'self_pod_y': [v['self_pod_y'], -v['self_pod_y']],
+        'self_pod_half': [v['self_pod_half'], v['self_pod_half']],
+    }
+
+
 def generate_launch_description():
     desc_share = FindPackageShare('amr_description')
     sim_share = FindPackageShare('amr_sim')
@@ -249,9 +266,13 @@ def generate_launch_description():
                 # protective fields are only about 65 mm wider than the chassis
                 # to begin with. That was V-39. The pods go in separately.
                 'footprint_margin': v['self_filter_margin'],
-                'self_pod_x': [v['self_pod_x'], -v['self_pod_x']],
-                'self_pod_y': [v['self_pod_y'], -v['self_pod_y']],
-                'self_pod_half': [v['self_pod_half'], v['self_pod_half']],
+                # OPTIONAL, and the MiR250 is why. A platform that has not
+                # had its pods measured declares none, the lists go out empty,
+                # and the filter is the plain envelope it always was. Reading
+                # these unconditionally raised KeyError on that platform and
+                # nothing caught it, because the launch is only exercised for
+                # the platform that has them.
+                **pod_params(v),
             }])]
 
     scan_merger = OpaqueFunction(function=make_scan_merger)
