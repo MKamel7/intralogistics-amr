@@ -42,7 +42,19 @@ def pod_params(v):
     every platform had before V-39.
     """
     if 'self_pod_x' not in v:
-        return {'self_pod_x': [], 'self_pod_y': [], 'self_pod_half': []}
+        # OMITTED, NOT EMPTY. ros2 launch cannot pass an empty list as a
+        # parameter: it infers the element type from the contents, and an
+        # empty list has none, so it raises
+        #   Expected 'value' to be one of [float, int, str, bool, bytes],
+        #   but got '()' of type '<class 'tuple'>'
+        # and the whole launch dies before the simulator starts. The first
+        # version of this returned empty lists and was no better than the
+        # KeyError it replaced; it was caught by running the platform that
+        # has no pods, which is the only thing that could have caught it.
+        #
+        # The node declares these with empty defaults, so omitting them
+        # entirely gives the plain bounding envelope, which is the intent.
+        return {}
     return {
         'self_pod_x': [v['self_pod_x'], -v['self_pod_x']],
         'self_pod_y': [v['self_pod_y'], -v['self_pod_y']],

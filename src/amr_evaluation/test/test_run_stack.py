@@ -252,3 +252,33 @@ def test_a_failed_mission_does_not_report_success():
     assert 'on_exit=Shutdown()' in launch, (
         'transport.launch.py does not shut the launch service down when the '
         'task exits, so ros2 launch swallows its return code')
+
+
+def test_readiness_waits_are_tied_to_this_runs_bringup():
+    """A node on the ROS graph is not evidence that THIS run put it there.
+
+    Measured: a bringup died instantly on a bad parameter, its orchestrator sat
+    in wait_active for three minutes, a second run was started in the meantime,
+    and the first then reported "slam active" and carried on driving the second
+    run's stack. Two orchestrators, one simulator, and neither log says
+    anything is wrong. Every number either run produced would have been a
+    measurement of the other.
+
+    `ros2 lifecycle get` cannot tell them apart, so the wait watches the
+    bringup process it belongs to instead.
+    """
+    t = text()
+    assert 'BRINGUP_PID=$!' in t, (
+        'the bringup launch pid is not captured, so no wait can tell whether '
+        'the stack it is waiting for is still being brought up')
+
+    gate = t.index('wait_active() {')
+    body = t[gate:t.index('\n}\n', gate)]
+    assert 'kill -0 "$BRINGUP_PID"' in body, (
+        'wait_active does not check that the bringup is still alive, so a '
+        'dead launch is indistinguishable from a slow one')
+
+    # And the capture must come before the first wait, or it guards nothing.
+    assert t.index('BRINGUP_PID=$!') < t.index('wait_active /slam_toolbox'), (
+        'the pid is captured after the first readiness wait, which is after '
+        'the window it exists to protect')

@@ -135,8 +135,23 @@ wait_active() {  # node, timeout seconds
   # the word it was looking for. Measured on an MP-400 bringup: the script said
   # "collision_monitor active" at 18:41:25 and preflight found it inactive
   # sixty seconds later, having never been anything else.
+  #
+  # AND IT MUST BE THIS RUN'S NODE. `ros2 lifecycle get` asks the ROS graph,
+  # which has no idea which run put a node on it. Measured: a bringup died
+  # instantly on a bad parameter, its orchestrator waited here for three
+  # minutes, a SECOND run was started in the meantime, and the first one then
+  # reported "slam active" and carried on driving the second run's stack. Two
+  # orchestrators, one simulator, and neither log says anything is wrong.
+  #
+  # So the wait also watches the bringup process it belongs to. If that has
+  # exited, no node on the graph can be ours and waiting longer only makes the
+  # collision more likely.
   local end=$((SECONDS + ${2:-180}))
   until timeout 8 ros2 lifecycle get "$1" 2>/dev/null | grep -qE '^active'; do
+    if [ -n "${BRINGUP_PID:-}" ] && ! kill -0 "$BRINGUP_PID" 2>/dev/null; then
+      say "BRINGUP EXITED while waiting for $1; see $RUN/robot.log"
+      return 1
+    fi
     [ $SECONDS -gt $end ] && return 1
     sleep 3
   done
@@ -213,6 +228,11 @@ say "starting: platform=$PLATFORM world=$WORLD cameras=$CAMERAS rviz=$RVIZ task=
 ros2 launch amr_bringup robot.launch.py platform:=$PLATFORM world:=$WORLD \
      x:=$SPAWN_X y:=$SPAWN_Y \
      gui:=true rviz:=$RVIZ cameras:=$CAMERAS > "$RUN/robot.log" 2>&1 &
+# Every readiness wait below is conditional on this still being alive. A launch
+# that dies on a bad parameter does so in under a second, long before any node
+# could have come up, and without this the script cannot tell that from a slow
+# start.
+BRINGUP_PID=$!
 
 wait_active /slam_toolbox 200 && say "slam active" || { say "SLAM FAILED"; exit 1; }
 

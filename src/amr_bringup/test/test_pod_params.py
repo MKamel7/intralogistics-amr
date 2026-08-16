@@ -43,17 +43,24 @@ def test_every_platform_produces_pod_parameters(path):
     v = yaml.safe_load(path.read_text())['values']
     pods = load().pod_params(v)
 
+    if 'self_pod_x' not in v:
+        # OMITTED, NOT EMPTY, and the difference is the whole of this test.
+        # ros2 launch infers a parameter's element type from its contents and
+        # an empty list has none, so passing one raises before the simulator
+        # starts. The first attempt at making pods optional returned empty
+        # lists and failed exactly as hard as the KeyError it replaced.
+        assert pods == {}, (
+            f'{path.stem} declares no pod geometry, so the launch must omit '
+            f'these parameters entirely rather than pass {pods}; ros2 launch '
+            f'rejects an empty list because it cannot infer its type')
+        return
+
     assert set(pods) == {'self_pod_x', 'self_pod_y', 'self_pod_half'}
     n = len(pods['self_pod_x'])
     assert all(len(pods[k]) == n for k in pods), (
         f'{path.stem} produces pod lists of different lengths, which the scan '
         f'merger rejects at construction')
-
-    if 'self_pod_x' not in v:
-        assert n == 0, (
-            f'{path.stem} declares no pod geometry but the launch invented '
-            f'{n} of them')
-        return
+    assert n > 0, f'{path.stem} declares pods but produces none'
 
     # Declared pods must be the diagonal pair, and must be real boxes. A pod
     # with a non-positive half extent filters nothing while the chassis margin
@@ -77,3 +84,51 @@ def test_a_platform_with_pods_declares_all_three(path):
     keys = [k for k in ('self_pod_x', 'self_pod_y', 'self_pod_half') if k in v]
     assert len(keys) in (0, 3), (
         f'{path.stem} declares {keys} and not the rest of the pod geometry')
+
+
+def to_ros_parameters(d):
+    """Put a parameter dict through exactly what launch_ros does to it.
+
+    normalize, then evaluate, then convert to rclpy Parameters. The type error
+    that killed the control run happens in the last of the three, so a test
+    that stops after the first two proves nothing.
+    """
+    import launch
+    import launch_ros.utilities as u
+    ctx = launch.LaunchContext()
+    evaluated = u.evaluate_parameters(ctx, u.normalize_parameters([d]))
+    return u.to_parameters_list(ctx, 'scan_merger', '/', evaluated)
+
+
+@pytest.mark.parametrize('path', platforms(), ids=lambda p: p.stem)
+def test_the_parameters_survive_launch_type_inference(path):
+    """The check that was missing, and the reason two attempts at this failed.
+
+    Both previous versions of pod_params were verified by reading what they
+    returned, which is not the same as verifying that ros2 launch accepts it.
+    The first raised KeyError on a platform with no pods. The second returned
+    empty lists, and launch rejected them for having no inferable element type,
+    thirty seconds into a bringup and with the same practical result.
+
+    Neither was caught by a test of the function, because the function was
+    fine both times. This runs the real conversion instead.
+    """
+    v = yaml.safe_load(path.read_text())['values']
+    pods = load().pod_params(v)
+    if not pods:
+        return
+    params = to_ros_parameters(pods)
+    assert len(params) == len(pods), (
+        f'{path.stem} pod parameters did not all survive conversion')
+
+
+def test_an_empty_list_is_still_rejected_by_launch():
+    """Pinning the failure mode, so the comment explaining the omission cannot
+    quietly rot.
+
+    If a future launch_ros starts accepting empty lists this fails, and the
+    omission in pod_params can be revisited deliberately rather than by
+    somebody guessing why it is written that way.
+    """
+    with pytest.raises(TypeError, match='Expected .value. to be one of'):
+        to_ros_parameters({'self_pod_x': []})
