@@ -12,6 +12,10 @@ listed under Roadmap and is claimed nowhere else.
 what exists and what is measured, not what is planned. Every figure below is traceable to an entry
 in `docs/validation.md`; anything not built is under Roadmap and is claimed nowhere else.
 
+**A 30 second demo is at [docs/media/demo.mp4](docs/media/demo.mp4)**, showing a transport cycle, a
+load set down at the dispatch station, and the navigation view. It runs at about 2.3 times real time
+for a reason recorded beside it, and it does not show docking, because docking does not work.
+
 **If you have five minutes, read [docs/findings.md](docs/findings.md) instead of this file.** It is
 the nine faults worth knowing about, each with the number attached and the wrong explanation that
 held for a while. Two of them are claims this project made and later retracted, five of the faults
