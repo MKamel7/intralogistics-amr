@@ -486,7 +486,8 @@ def record(shots, size, rate, duration, outdir):
                 self.rows[n] = csv.writer(fh)
                 self.rows[n].writerow(['frame', 'sim_t', 'visible', 'dist_m',
                                        'px_across', 'speed_mps', 'veh_x',
-                                       'veh_y', 'action', 'polygon'])
+                                       'veh_y', 'action', 'polygon',
+                                       'person_m'])
                 self.create_subscription(
                     Image, f'/film/{n}',
                     lambda m, n=n: self._frame(m, n), IMG_QOS)
@@ -513,6 +514,13 @@ def record(shots, size, rate, duration, outdir):
                                      '/collision_monitor_state',
                                      self._monitor, 20)
 
+            # NEAREST PERSON, so that avoiding one can be selected rather
+            # than asserted. A vehicle driving past somebody and a vehicle
+            # driving down an empty aisle look identical in the speed log, and
+            # the difference is the whole claim.
+            self.person = None
+            self.people = {}
+
             self.veh = None          # (x, y, z)
             self.speed = 0.0
             self.prev = None         # (t, x, y)
@@ -524,13 +532,23 @@ def record(shots, size, rate, duration, outdir):
             self.t_first = None
             self.t_last = None
 
+        def _nearest_person(self):
+            if self.veh is None or not self.people:
+                return None
+            return min(math.dist((x, y), (self.veh[0], self.veh[1]))
+                       for x, y in self.people.values())
+
         def _monitor(self, msg):
             self.action = ACTION.get(msg.action_type, 'unknown')
             self.polygon = msg.polygon_name or ''
 
         def _truth(self, msg):
             for tf in msg.transforms:
-                if tf.child_frame_id != VEHICLE:
+                cid = tf.child_frame_id
+                if cid.startswith('walker') or 'worker' in cid:
+                    self.people[cid] = (tf.transform.translation.x,
+                                        tf.transform.translation.y)
+                if cid != VEHICLE:
                     continue
                 p = tf.transform.translation
                 t = (tf.header.stamp.sec + tf.header.stamp.nanosec * 1e-9)
@@ -566,16 +584,18 @@ def record(shots, size, rate, duration, outdir):
             s = self.shots[name]
             if self.veh is None:
                 self.rows[name].writerow([i, f'{t:.3f}', 0, '', '', '', '', '',
-                                          self.action, self.polygon])
+                                          self.action, self.polygon, ''])
                 return
             # 0.55 m: the vehicle's own diagonal half extent, so `px_across`
             # is roughly how many pixels of frame the vehicle occupies.
             vis, dist, px = frustum(s['pos'], s['yaw'], s['pitch'], s['fov'],
                                     aspect, self.veh, 0.55)
+            pd = self._nearest_person()
             self.rows[name].writerow([
                 i, f'{t:.3f}', int(vis), f'{dist:.3f}', f'{px * w:.1f}',
                 f'{self.speed:.3f}', f'{self.veh[0]:.3f}', f'{self.veh[1]:.3f}',
-                self.action, self.polygon])
+                self.action, self.polygon,
+                '' if pd is None else f'{pd:.3f}'])
 
         def close(self):
             for n, wr in self.writers.items():
@@ -936,6 +956,66 @@ def events(outdir, want, min_px, max_px, lead):
     return found
 
 
+def avoids(outdir, want, min_px, max_px, near, keep_moving):
+    """Windows where the vehicle passes CLOSE TO A PERSON without stopping.
+
+    The protective stop beat was cut because it showed the system at its
+    least impressive: a robot halted by somebody walking in front of it, which
+    is correct behaviour and reads on screen as a robot that cannot cope. What
+    the human aware layer actually does is keep going and leave room, and that
+    is the harder thing to show because a vehicle driving past a person and a
+    vehicle driving down an empty aisle look the same in a speed log.
+
+    So the recorder logs the distance to the nearest person with every frame,
+    and this asks for the case that makes the claim: a person within `near`
+    metres at some point in the window, the vehicle in frame, and the vehicle
+    NEVER dropping below `keep_moving` while they are near each other. A window
+    containing a halt is rejected, because that is the other beat, the one that
+    was cut.
+
+    Ranked by how close the pass was: the closest genuine pass is the one worth
+    showing, and the distance is printed so the caption can quote it.
+    """
+    found = []
+    for name, rows in sorted(logs(outdir).items()):
+        ts = [float(r['sim_t']) for r in rows]
+        if len(ts) < 2 or ts[-1] - ts[0] < want:
+            continue
+        for start, stop in slices(ts, want, 0.5):
+            win = rows[start:stop]
+            if len(win) < max(4, want * 3):
+                continue
+            vis = [r for r in win if r['visible'] == '1' and r['px_across']]
+            if len(vis) < 0.75 * len(win):
+                continue
+            ds = [float(r['person_m']) for r in win if r.get('person_m')]
+            if len(ds) < 0.5 * len(win):
+                continue
+            closest = min(ds)
+            if closest > near:
+                continue
+            # Never stops WHILE the person is close. A halt somewhere else in
+            # the window is a different story and belongs to a different beat.
+            stalled = any(float(r['speed_mps'] or 9.0) < keep_moving
+                          for r in win
+                          if r.get('person_m')
+                          and float(r['person_m']) <= near)
+            if stalled:
+                continue
+            px = sum(float(r['px_across']) for r in vis) / len(vis)
+            sp = sum(float(r['speed_mps'] or 0) for r in win) / len(win)
+            if not min_px <= px <= max_px:
+                continue
+            found.append((-closest, name, ts[start] - ts[0], px, sp, closest))
+    found.sort(reverse=True)
+    print(f'\n{"cam":8s} {"ss":>7s} {"closest":>8s} {"m/s":>6s} {"px":>6s}')
+    for _, name, ss, px, sp, closest in found[:15]:
+        print(f'{name:8s} {ss:7.1f} {closest:7.2f}m {sp:6.2f} {px:6.0f}')
+    if not found:
+        print('no window with a close pass that kept moving')
+    return found
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument('--platform', default='mp400_class')
@@ -960,6 +1040,11 @@ def main():
                          '"aisle:12.5:8,pass:40:7" as camera:start_s:length_s. '
                          'Start is measured from the first frame of that '
                          'camera, which is what --report prints.')
+    ap.add_argument('--avoids', action='store_true',
+                    help='list windows where the vehicle passes close to a '
+                         'person without stopping')
+    ap.add_argument('--near', type=float, default=2.0,
+                    help='--avoids: how close counts as a close pass, metres')
     ap.add_argument('--events', action='store_true',
                     help='list windows where the collision monitor fired and '
                          'the vehicle was in frame, for the safety beat')
@@ -994,6 +1079,10 @@ def main():
                 made.append(dest)
         print('\n'.join(made))
         return 0 if made else 1
+
+    if args.avoids:
+        return 0 if avoids(outdir, args.want, args.min_px, args.max_px,
+                           args.near, 0.05) else 1
 
     if args.events:
         return 0 if events(outdir, args.want, args.min_px, args.max_px,

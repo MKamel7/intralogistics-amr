@@ -28,9 +28,9 @@
     "kind": "beat",
     "rule": "rviz",
     "label": "Nav2 planning",
-    "ss": 205.0,
+    "ss": 20.9,
     "seconds": 8.0,
-    "why": "959 grabs spanning 418 s"
+    "why": "1228 grabs spanning 417 s"
   },
   {
     "beat": 4,
@@ -54,34 +54,21 @@
   {
     "beat": 6,
     "kind": "card",
-    "head": "People share the aisle"
+    "head": "It gives people room"
   },
   {
     "beat": 7,
     "kind": "beat",
-    "rule": "event",
-    "cam": "aisle",
-    "label": "Protective stop",
-    "pinned": true,
-    "source": "film2",
+    "rule": "avoid",
+    "cam": "pass",
+    "label": "Passing a person",
+    "pinned": false,
+    "source": "film3",
     "fell_back": false,
-    "ss": 37.0,
+    "ss": 103.4,
     "seconds": 8.0,
-    "why": "stop on the protective field, 82 frames at rest, 108 px across, 100% in frame, confirmed by eye",
-    "stop_intervals": [
-      [
-        1.26,
-        2.26
-      ],
-      [
-        3.87,
-        4.87
-      ],
-      [
-        7.0,
-        8.0
-      ]
-    ]
+    "why": "passed a person at 0.64 m without stopping, mean 0.30 m/s, 249 px across",
+    "stop_intervals": []
   },
   {
     "beat": 8,

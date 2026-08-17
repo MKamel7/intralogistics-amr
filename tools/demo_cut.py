@@ -92,19 +92,18 @@ STRUCTURE = [
          fallback_label='Surveying, second view',
          fallback_note='a different tripod, no load aboard'),
 
-    dict(kind='card', seconds=3.5,
-         head='People share the aisle',
-         sub='The badge marks frames the collision monitor logged as a stop, '
-             'while the vehicle is measured at rest'),
+    dict(kind='card', seconds=4.0,
+         head='It gives people room',
+         sub='A human aware costmap layer keeps the vehicle out of personal '
+             'space instead of waiting until a field trips',
+         body=['Time spent in intimate space, layer on: 5.00 %,',
+               'against 7.33 % with it off (V-64).']),
 
-    dict(kind='beat', rule='event', seconds=8.0, source=1,
-         label='Protective stop',
-         note='a worker crosses; the vehicle holds',
-         # A worker walks between the lens and the vehicle and it stays
-         # stopped for 3.2 s. The window this replaced had thirteen frames the
-         # monitor called stop and a speed that never fell below 0.44 m/s, so
-         # the badge sat over a vehicle driving straight through.
-         pin='aisle:37.0'),
+    # Source 2: the only recording whose frame log carries the distance to
+    # the nearest person, which is what makes this beat selectable at all.
+    dict(kind='beat', rule='avoid', seconds=8.0, source=2,
+         label='Passing a person',
+         note='keeps moving, leaves room'),
 
     dict(kind='card', seconds=6.0,
          head='Measured, not asserted',
@@ -280,6 +279,42 @@ def concat(parts, dest):
     return ok
 
 
+def busiest_window(srcdir, rows, want, skip=0.0):
+    """Start offset of the `want` second window with the most on-screen change.
+
+    Change is measured on heavily downsampled greyscale, because the question
+    is whether the picture is moving, not what it shows.
+    """
+    import cv2
+    import numpy as np
+    ts = [float(r['sim_t']) for r in rows]
+    small = []
+    for r in rows:
+        img = cv2.imread(os.path.join(srcdir, f"{int(r['frame']):05d}.png"),
+                         cv2.IMREAD_GRAYSCALE)
+        small.append(None if img is None
+                     else cv2.resize(img, (64, 40)).astype(np.int16))
+    diff = [0.0]
+    for a, b in zip(small, small[1:]):
+        diff.append(0.0 if a is None or b is None
+                    else float(np.abs(b - a).mean()))
+    best, best_ss = -1.0, skip
+    for lo in range(len(ts)):
+        if ts[lo] - ts[0] < skip:
+            continue
+        if ts[lo] - ts[0] + want > ts[-1] - ts[0]:
+            break
+        hi = lo
+        while hi + 1 < len(ts) and ts[hi + 1] <= ts[lo] + want:
+            hi += 1
+        if hi - lo < 4:
+            continue
+        score = sum(diff[lo:hi + 1]) / (hi - lo)
+        if score > best:
+            best, best_ss = score, ts[lo] - ts[0]
+    return best_ss
+
+
 def rviz_clip(srcdir, ss, seconds, rate, dest, f):
     """Conform a window of RViz grabs onto the same uniform grid as the rest.
 
@@ -437,6 +472,11 @@ def main():
     ap.add_argument('--min-px', type=float, default=110.0)
     ap.add_argument('--max-px', type=float, default=680.0)
     ap.add_argument('--min-speed', type=float, default=0.25)
+    ap.add_argument('--rviz-skip', type=float, default=5.0,
+                    help='seconds to ignore at the start of the RViz capture, '
+                         'where the goal arrow is placed by hand')
+    ap.add_argument('--near', type=float, default=2.0,
+                    help='how close a pass has to be to count as one')
     args = ap.parse_args()
 
     f = film()
@@ -499,7 +539,23 @@ def main():
                 print(f'beat {i}: RViz capture spans only {span:.1f} s; '
                       f'dropping it')
                 continue
-            ss = max(0.0, (span - want) / 2.0)
+            # THE WINDOW WHERE SOMETHING HAPPENS. Taking a fixed position in
+            # the capture is a guess about when the robot was driving: the
+            # middle showed a half explored building, and the end, once the
+            # goals had finished, is a complete map with a parked robot and
+            # nothing moving on it. Both are the same mistake the shot
+            # selector exists to prevent, made about a different recording.
+            #
+            # So the frames are asked directly. The window whose consecutive
+            # grabs differ the most is the one with a plan being redrawn and a
+            # robot crossing the map, and it is found the same way as every
+            # other beat here: by measuring, not by choosing a timestamp.
+            # SKIP THE OPENING, where the goal is placed. The 2D Goal Pose
+            # arrow is a person reaching into the scene with a mouse, and a
+            # demo of autonomous navigation should not open on the hand that
+            # set the destination. The plan and the drive that follow are the
+            # part that is about the robot.
+            ss = busiest_window(args.rviz, rr, want, args.rviz_skip)
             clip, bad = rviz_clip(args.rviz, ss, want, RATE,
                                   tag + '_raw.mp4', f)
             if bad:
@@ -549,6 +605,19 @@ def main():
             why = why + ', confirmed by eye'
             stops = (stop_intervals(rows, ts, ss, want)
                      if spec['rule'] == 'event' else ())
+        elif spec['rule'] == 'avoid':
+            cands = f.avoids(srcdir, want, args.min_px, args.max_px,
+                             args.near, 0.05)
+            cands = [c for c in cands if not overlaps(srcdir, c[1], c[2], want)]
+            if not cands:
+                print(f'beat {i}: no close pass that kept moving; dropping '
+                      f'the beat rather than showing an ordinary drive-by')
+                continue
+            _, cam, ss, px, sp, closest = cands[0]
+            why = (f'passed a person at {closest:.2f} m without stopping, '
+                   f'mean {sp:.2f} m/s, {px:.0f} px across')
+            note = f'{note}, closest {closest:.2f} m'
+            stops = ()
         elif spec['rule'] == 'motion':
             cands = f.report(srcdir, RATE, want, args.min_px,
                              args.min_speed, args.max_px)
