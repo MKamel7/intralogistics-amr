@@ -834,7 +834,27 @@ def events(outdir, want, min_px, max_px, lead):
     is the approach and the stop together. Starting it on the stop itself gives
     a clip of a vehicle that is already stationary, which is the mistake the
     first cut of this video made in a different form.
+
+    AND THE VEHICLE HAS TO ACTUALLY COME TO REST. This gate was missing, and
+    the video shipped without it: the chosen window had thirteen frames the
+    monitor called `stop` and a ground truth speed that never fell below
+    0.44 m/s, so a badge reading PROTECTIVE STOP sat over a vehicle driving
+    past at three quarters of a metre a second. The monitor asserting stop and
+    the vehicle stopping are different events. Most assertions are momentary,
+    which is what `103 protective stops per cycle, 7 % of cycle time` in the
+    README describes, and a viewer cannot see one.
+
+    So an episode qualifies only if the speed drops below HALT_SPEED for at
+    least HALT_MIN seconds inside the window, and episodes rank by how long the
+    vehicle is genuinely held. Selecting on the log alone was not enough; the
+    log was right and the claim was still false.
     """
+    # AND IT HAS TO BE DRIVING FIRST. Requiring a halt alone swung the
+    # selection to the other extreme: the best scoring window had the vehicle
+    # at rest for all eight seconds, which is a photograph of a parked robot,
+    # not a vehicle being stopped. The beat is approach then stop, so a window
+    # must contain both.
+    HALT_SPEED, HALT_MIN, MOVE_SPEED, MOVE_MIN = 0.05, 0.5, 0.20, 1.5
     found = []
     for name, rows in sorted(logs(outdir).items()):
         ts = [float(r['sim_t']) for r in rows]
@@ -878,11 +898,26 @@ def events(outdir, want, min_px, max_px, lead):
             hi = next((k for k in range(lo, len(ts))
                        if ts[k] - t0 >= ss + want), len(ts) - 1)
             win = rows[lo:hi + 1]
+            wts = ts[lo:hi + 1]
+            # The longest run inside the window during which the vehicle is
+            # genuinely at rest. This is what the viewer can see; `held` is
+            # only what the monitor said.
+            halt, run_from, moving = 0.0, None, 0.0
+            for k, (r, tt) in enumerate(zip(win, wts)):
+                s = float(r['speed_mps'] or 9.0)
+                if s < HALT_SPEED:
+                    run_from = tt if run_from is None else run_from
+                    halt = max(halt, tt - run_from)
+                else:
+                    run_from = None
+                if s > MOVE_SPEED and k:
+                    moving += tt - wts[k - 1]
             vis = [r for r in win if r['visible'] == '1' and r['px_across']]
-            if len(win) >= max(4, want * 3) and len(vis) >= 0.6 * len(win):
+            if (len(win) >= max(4, want * 3) and len(vis) >= 0.6 * len(win)
+                    and halt >= HALT_MIN and moving >= MOVE_MIN):
                 px = sum(float(r['px_across']) for r in vis) / len(vis)
                 if min_px <= px <= max_px:
-                    found.append((-SEVERITY.get(act, 99), held,
+                    found.append((-SEVERITY.get(act, 99), halt, held,
                                   len(vis) / float(len(win)), name, ss, act,
                                   poly, px))
             i = j
@@ -890,14 +925,14 @@ def events(outdir, want, min_px, max_px, lead):
     # alone put a one frame stop above a stop that held the vehicle for a
     # second and a half, and only the second one can be seen.
     found.sort(reverse=True)
-    print(f'\n{"cam":8s} {"ss":>7s} {"action":>9s} {"held":>6s} {"px":>6s} '
-          f'{"inframe":>8s}  polygon')
-    for _, held, frac, name, ss, act, poly, px in found[:18]:
-        print(f'{name:8s} {ss:7.1f} {act:>9s} {held:5.1f}s {px:6.0f} '
-              f'{frac * 100:7.0f}%  {poly}')
+    print(f'\n{"cam":8s} {"ss":>7s} {"action":>9s} {"halt":>6s} {"held":>6s} '
+          f'{"px":>6s} {"inframe":>8s}  polygon')
+    for _, halt, held, frac, name, ss, act, poly, px in found[:18]:
+        print(f'{name:8s} {ss:7.1f} {act:>9s} {halt:5.1f}s {held:5.1f}s '
+              f'{px:6.0f} {frac * 100:7.0f}%  {poly}')
     if not found:
-        print('no monitor event with the vehicle in frame; '
-              'the run may not have had one')
+        print('no window where the monitor fired AND the vehicle came to '
+              'rest in frame')
     return found
 
 

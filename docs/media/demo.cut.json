@@ -21,10 +21,24 @@
   {
     "beat": 2,
     "kind": "card",
-    "head": "First it maps the building, then it works in it"
+    "head": "It plans, it does not follow a line"
   },
   {
     "beat": 3,
+    "kind": "beat",
+    "rule": "rviz",
+    "label": "Nav2 planning",
+    "ss": 205.0,
+    "seconds": 8.0,
+    "why": "959 grabs spanning 418 s"
+  },
+  {
+    "beat": 4,
+    "kind": "card",
+    "head": "It carries the load"
+  },
+  {
+    "beat": 5,
     "kind": "beat",
     "rule": "motion",
     "cam": "bay",
@@ -38,39 +52,39 @@
     "stop_intervals": []
   },
   {
-    "beat": 4,
+    "beat": 6,
     "kind": "card",
     "head": "People share the aisle"
   },
   {
-    "beat": 5,
+    "beat": 7,
     "kind": "beat",
     "rule": "event",
     "cam": "aisle",
     "label": "Protective stop",
     "pinned": true,
-    "source": "film",
+    "source": "film2",
     "fell_back": false,
-    "ss": 316.4,
+    "ss": 37.0,
     "seconds": 8.0,
-    "why": "stop on the protective field over 13 frames, 178 px across, 96% in frame, confirmed by eye",
+    "why": "stop on the protective field, 82 frames at rest, 108 px across, 100% in frame, confirmed by eye",
     "stop_intervals": [
       [
-        0.71,
-        1.71
+        1.26,
+        2.26
       ],
       [
-        3.88,
-        7.25
+        3.87,
+        4.87
       ],
       [
-        7.61,
+        7.0,
         8.0
       ]
     ]
   },
   {
-    "beat": 6,
+    "beat": 8,
     "kind": "card",
     "head": "Measured, not asserted"
   }

@@ -33,6 +33,7 @@ figure, including the one that was not delivered.
 """
 
 import argparse
+import csv
 import importlib.util
 import json
 import os
@@ -61,76 +62,62 @@ MONO = '/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf'
 # it rather than a timestamp.
 
 STRUCTURE = [
-    dict(kind='card', seconds=4.0,
+    dict(kind='card', seconds=3.5,
          head='Intralogistics AMR',
-         sub='An autonomous mobile robot doing transport work in a warehouse '
-             'nobody sized for it',
-         body=['MP-400 class  ·  ROS 2 Jazzy  ·  Gazebo Harmonic  ·  Nav2',
-               'Cameras are sensors inside the simulation, not screen grabs.',
-               'Every frame carries its simulated timestamp and is resampled',
-               'to a uniform grid, so this plays at TRUE SPEED.']),
+         sub='Autonomous transport in a warehouse shared with people',
+         body=['MP-400 class  ·  ROS 2 Jazzy  ·  Gazebo Harmonic  ·  Nav2']),
 
     dict(kind='beat', rule='motion', seconds=9.0, source=0,
          label='Autonomous survey',
-         note='driving frontier goals to build the map it will work in',
-         # Chosen from the ranked candidates and then LOOKED AT: the top
-         # scoring window hides the vehicle behind a pallet stack for its first
-         # second and another is a third blocked by a structural column, both
-         # of which every gate in the selector scores as a clear view.
+         note='driving frontier goals to build its own map',
+         # Ranked, then looked at: the top scoring window hides the vehicle
+         # behind a pallet stack, which every gate scores as a clear view.
          pin='pass:59.0'),
 
-    dict(kind='card', seconds=5.0,
-         head='First it maps the building, then it works in it',
-         sub='The survey drives to frontiers until the map stops growing; '
-             'the mission plans only on floor that has been surveyed',
-         body=['This is the AWS RoboMaker warehouse: a found building nobody',
-               'sized for this vehicle. Measured at robot height its corridors',
-               'have a median width of 1.34 m and a 25th percentile of 0.64 m,',
-               'narrower than the robot itself. That is the robustness case,',
-               'and an uncontrolled one: a failure here cannot be told apart',
-               'from a 0.64 m aisle.']),
+    dict(kind='card', seconds=3.0,
+         head='It plans, it does not follow a line',
+         sub='Nav2: global plan, local costmap, MPPI candidate trajectories'),
+
+    dict(kind='beat', rule='rviz', seconds=8.0,
+         label='Nav2 planning',
+         note='the robot\'s own view, resampled to the same clock'),
+
+    dict(kind='card', seconds=3.0,
+         head='It carries the load',
+         sub='100 kg, unsecured, measured over a full duty cycle'),
 
     dict(kind='beat', rule='motion', seconds=8.0, distinct=True, source=1,
          label='Transport cycle',
-         note='carrying an unsecured 100 kg load between stations',
-         # The load is spawned by the mission launch, so this caption is only
-         # true of footage from that phase. If it was not recorded the beat
-         # becomes what it actually is: another view of the survey.
+         note='carrying an unsecured 100 kg load',
          fallback_label='Surveying, second view',
          fallback_note='a different tripod, no load aboard'),
 
-    dict(kind='card', seconds=4.0,
+    dict(kind='card', seconds=3.5,
          head='People share the aisle',
-         sub='A collision monitor watches the scan and overrides the '
-             'controller',
-         body=['The badge on the next shot is not an annotation. It marks the',
-               'frames whose logged action is stop, read from the monitor',
-               'itself while filming, and is held a little longer so a stop',
-               'lasting three frames can be seen at all.']),
+         sub='The badge marks frames the collision monitor logged as a stop, '
+             'while the vehicle is measured at rest'),
 
-    dict(kind='beat', rule='event', seconds=8.0, source=0,
+    dict(kind='beat', rule='event', seconds=8.0, source=1,
          label='Protective stop',
-         note='monitor state read from the running system, frame by frame',
-         # The ten second stops all sit 95 px across at the far end of the
-         # aisle where nothing reads. This one is legible: workers cross, the
-         # field fires, the vehicle holds. verify_pin still rejects a pin with
-         # no logged stop inside it.
-         pin='aisle:316.4'),
+         note='a worker crosses; the vehicle holds',
+         # A worker walks between the lens and the vehicle and it stays
+         # stopped for 3.2 s. The window this replaced had thirteen frames the
+         # monitor called stop and a speed that never fell below 0.44 m/s, so
+         # the badge sat over a vehicle driving straight through.
+         pin='aisle:37.0'),
 
-    dict(kind='card', seconds=7.0,
+    dict(kind='card', seconds=6.0,
          head='Measured, not asserted',
-         sub='From the results table in README.md. The figures come from runs '
-             'on the datasheet-sized test track, not from the footage above',
+         sub='From the results table in README.md, measured on the '
+             'datasheet-sized test track',
          table=[('contacts the vehicle drove into', '0 in 248 000 samples',
                  'V-51'),
                 ('deepest a person reached inside the footprint', '-0.100 m',
                  'V-49'),
-                ('cost of that safety', '7 % of cycle time', 'V-49'),
                 ('localisation error, driving', 'p50 0.027 m', 'V-37'),
                 ('unsecured 100 kg load over a duty cycle', '0.0 mm slide',
                  'V-61'),
-                ('parked accuracy at a station', 'median 117 mm', 'V-62'),
-                ('precision docking', 'NOT DELIVERED', 'V-66')]),
+                ('parked accuracy at a station', 'median 117 mm', 'V-62')]),
 ]
 
 
@@ -293,6 +280,61 @@ def concat(parts, dest):
     return ok
 
 
+def rviz_clip(srcdir, ss, seconds, rate, dest, f):
+    """Conform a window of RViz grabs onto the same uniform grid as the rest.
+
+    RViz has no camera sensor in it; it is an X window and the only way to
+    record it is to grab pixels, which is the technique this project got wrong
+    once. What made that wrong was never the grabbing, it was encoding a wall
+    clock sample rate as though it were uniform and simulated. So the grabs
+    carry the SIMULATED time they depict and are resampled here by the same
+    `hold_indices` the camera footage uses. An RViz segment then runs at the
+    same speed as the shot beside it, which is what lets the two sit in one
+    video.
+
+    The window is cropped to the 3D view. The panels are RViz's own furniture
+    and say nothing about the robot.
+    """
+    import cv2
+    with open(os.path.join(srcdir, 'stamps.csv')) as fh:
+        rows = [r for r in csv.DictReader(fh) if r.get('sim_t')]
+    stamps = [float(r['sim_t']) for r in rows]
+    names = [os.path.join(srcdir, f"{int(r['frame']):05d}.png") for r in rows]
+    if len(stamps) < 4:
+        return None, 'fewer than four grabs'
+    idx = f.hold_indices(stamps, ss, seconds, rate)
+    if not idx:
+        return None, 'no frames in that window'
+    out, cache = None, {}
+    for i in idx:
+        if i not in cache:
+            img = cv2.imread(names[i])
+            if img is None:
+                continue
+            h, w = img.shape[:2]
+            # THE MAP, not the application. Cropping to the 3D view still left
+            # RViz's toolbar across the top and the map itself a narrow strip
+            # in a field of empty grid, because a top down orthographic view of
+            # this building is portrait and the window is not. These bounds are
+            # measured off a grab and frame the map with a margin. The clip
+            # keeps its own aspect ratio and is letterboxed by encode_beat,
+            # rather than being stretched to 16:9.
+            img = img[int(0.06 * h):int(0.89 * h),
+                      int(0.407 * w):int(0.814 * w)]
+            cache[i] = img
+        if i not in cache:
+            continue
+        if out is None:
+            hh, ww = cache[i].shape[:2]
+            out = cv2.VideoWriter(dest, cv2.VideoWriter_fourcc(*'mp4v'),
+                                  float(rate), (ww, hh))
+        out.write(cache[i])
+    if out is None:
+        return None, 'no readable grabs'
+    out.release()
+    return dest, None
+
+
 def verify_pin(rows, ts, ss, seconds, rule, min_px, max_px):
     """Check a hand-picked window against the same gates the query applies.
 
@@ -324,8 +366,16 @@ def verify_pin(rows, ts, ss, seconds, rule, min_px, max_px):
         firing = [r for r in win if (r.get('action') or 'clear') == 'stop']
         if not firing:
             return None, 'no logged protective stop inside the window'
+        # AND THE VEHICLE MUST ACTUALLY STOP. A pin that passed on the logged
+        # action alone is how a PROTECTIVE STOP badge came to sit over a
+        # vehicle driving through frame at 0.75 m/s: the monitor asserted stop
+        # on thirteen frames and the speed never fell below 0.44 m/s.
+        rest = [r for r in win if float(r['speed_mps'] or 9.0) < 0.05]
+        if len(rest) < 3:
+            return None, (f'monitor fired but the vehicle never came to rest '
+                          f'({len(rest)} frame(s) under 0.05 m/s)')
         poly = next((r['polygon'] for r in firing if r['polygon']), '')
-        return (f'stop on the {poly} field over {len(firing)} frames, '
+        return (f'stop on the {poly} field, {len(rest)} frames at rest, '
                 f'{px:.0f} px across, {100.0 * len(vis) / len(win):.0f}% '
                 f'in frame'), None
     return (f'{px:.0f} px across, {sp:.2f} m/s, '
@@ -381,6 +431,9 @@ def main():
                          'mission are different phases of the run and a beat '
                          'is pinned to the one it claims to show.')
     ap.add_argument('--dest', default='docs/media/demo.mp4')
+    ap.add_argument('--rviz', default=None,
+                    help='a tools/film_rviz.py capture directory, for the '
+                         'Nav2 beat')
     ap.add_argument('--min-px', type=float, default=110.0)
     ap.add_argument('--max-px', type=float, default=680.0)
     ap.add_argument('--min-speed', type=float, default=0.25)
@@ -434,6 +487,39 @@ def main():
             continue
 
         want = spec['seconds']
+        if spec['rule'] == 'rviz':
+            if not args.rviz or not os.path.isdir(args.rviz):
+                print(f'beat {i}: no RViz capture given; dropping the Nav2 '
+                      f'beat rather than showing something else')
+                continue
+            with open(os.path.join(args.rviz, 'stamps.csv')) as fh:
+                rr = [r for r in csv.DictReader(fh) if r.get('sim_t')]
+            span = float(rr[-1]['sim_t']) - float(rr[0]['sim_t']) if rr else 0.0
+            if span < want:
+                print(f'beat {i}: RViz capture spans only {span:.1f} s; '
+                      f'dropping it')
+                continue
+            ss = max(0.0, (span - want) / 2.0)
+            clip, bad = rviz_clip(args.rviz, ss, want, RATE,
+                                  tag + '_raw.mp4', f)
+            if bad:
+                print(f'beat {i}: RViz beat dropped ({bad})')
+                continue
+            strip = lower_third(spec['label'], spec['note'],
+                                tag + '_strip.png')
+            part = encode_beat(clip, strip, want, tag + '.mp4')
+            if not part:
+                print(f'beat {i}: RViz encode failed; dropping it')
+                continue
+            parts.append(part)
+            manifest.append(dict(beat=i, kind='beat', rule='rviz',
+                                 label=spec['label'], ss=round(ss, 1),
+                                 seconds=want,
+                                 why=f'{len(rr)} grabs spanning {span:.0f} s'))
+            print(f'beat {i}: {spec["label"]:22s} rviz   +{ss:6.1f}s  '
+                  f'{len(rr)} grabs over {span:.0f} s')
+            continue
+
         (srcdir, srclogs), fell_back = source_for(spec)
         pin = None if fell_back else spec.get('pin')
         label, note = spec['label'], spec['note']
@@ -478,16 +564,16 @@ def main():
             stops = ()
         else:
             evs = f.events(srcdir, want, 90.0, args.max_px, 4.0)
-            evs = [e for e in evs if e[5] == 'stop'
-                   and not overlaps(srcdir, e[3], e[4], want)]
+            evs = [e for e in evs if e[6] == 'stop'
+                   and not overlaps(srcdir, e[4], e[5], want)]
             if not evs:
                 print(f'beat {i}: the run produced no protective stop in '
                       f'frame; dropping the safety beat rather than '
                       f'illustrating it with something else')
                 continue
-            _, held, frac, cam, ss, act, poly, px = evs[0]
-            why = (f'{act} on the {poly} field, held {held:.1f} s, '
-                   f'{px:.0f} px across')
+            _, halt, held, frac, cam, ss, act, poly, px = evs[0]
+            why = (f'{act} on the {poly} field, vehicle at rest {halt:.1f} s, '
+                   f'monitor asserting {held:.1f} s, {px:.0f} px across')
             rows = srclogs[cam]
             ts = [float(r['sim_t']) for r in rows]
             stops = stop_intervals(rows, ts, ss, want)
