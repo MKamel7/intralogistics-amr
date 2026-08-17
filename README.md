@@ -8,7 +8,7 @@ layer that sits after the planner and can override it.
 name outran the code; there is no traffic controller and no task allocation. A fleet layer is
 listed under Roadmap and is claimed nowhere else.
 
-**Status: one platform validated end to end, with 63 recorded findings.** This README documents
+**Status: one platform validated end to end, with 64 recorded findings.** This README documents
 what exists and what is measured, not what is planned. Every figure below is traceable to an entry
 in `docs/validation.md`; anything not built is under Roadmap and is claimed nowhere else.
 
@@ -34,6 +34,7 @@ in `docs/validation.md`; anything not built is under Roadmap and is claimed nowh
 | why it stays on | the stop peaks at **14.9 m/s2** but only for a **4 ms** step, and slip goes as time squared | V-61 |
 | parked accuracy at a station | median **117 mm**, worst 212 mm against a 200 mm tolerance | V-62 |
 | heading error when the goal needs a turn | up to the yaw tolerance, **signed by the rotation** | V-63 |
+| time in intimate space, human aware layer on | **5.00 %** against 7.33 with it off, for 6 % of survey time | V-64 |
 
 The latency row was wrong for most of this project's life and the correction is worth reading.
 It said p95 796 ms and called the spec estimate refuted, on the strength of 43 samples pooled from
@@ -454,22 +455,16 @@ What is left, in the order it would be worth doing:
    constant rather than a correction, so nothing has written it, and whoever does should run a cycle
    afterwards: V-42 and V-45 are what enlarging a protective field costs and neither was predicted
    from arithmetic.
-2. **Resolve whether the proxemic layer helps.** It is built, tested and shipped DISABLED, because
-   four runs could not show an effect: the within-arm spread of the metric is 224 mm against an
-   effect of a few tens of millimetres, and the best social score of the four belongs to the run
-   where the vehicle never moved. Settling it needs a metric normalised by exposure and three runs
-   per configuration, as V-47 did for the planners. See V-59.
-3. **Precision docking**, once localisation is good enough to support the claim.
-4. **Precision docking, and it is NOT reachable from the map frame.** Measured: the vehicle parks
+2. **Precision docking, and it is NOT reachable from the map frame.** Measured: the vehicle parks
    a median 117 mm from the station, worst 212 mm against a 200 mm goal tolerance, because a
    tolerance governs where the vehicle BELIEVES it is and the localisation error adds on top.
    Docking needs about 10 mm; the localisation floor is 55 mm, so a perfect controller would still
    be five times too coarse. It needs a dock the vehicle can SEE, which makes the error a sensor
    error rather than a localisation one. See V-62.
-5. **Tighten `xy_goal_tolerance` toward the localisation floor**, which should roughly halve the
+3. **Tighten `xy_goal_tolerance` toward the localisation floor**, which should roughly halve the
    parked error for the cost of one number, and must be measured rather than assumed: a tolerance
    below what the controller can achieve buys goal-reached timeouts instead of accuracy.
-6. **Tighten `yaw_goal_tolerance` for orientation critical work.** V-63 established that a goal
+4. **Tighten `yaw_goal_tolerance` for orientation critical work.** V-63 established that a goal
    needing a turn inherits an error up to the tolerance, always opposing the rotation, so the
    tolerance IS the error rather than a bound on a random one. Tightening it trades accuracy
    against the time spent creeping the last few degrees, which on a differential drive is the

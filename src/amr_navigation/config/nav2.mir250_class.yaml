@@ -534,7 +534,7 @@ global_costmap:
       # diameter 1.0021 m, so an inscribed radius of 0.2950 m leaves 1.34 - 2 x
       # 0.2950 m of free band in a median aisle.
       footprint_padding: 0.0
-      plugins: ["static_layer", "obstacle_layer", "voxel_layer", "inflation_layer"]
+      plugins: ["static_layer", "obstacle_layer", "voxel_layer", "proxemic_layer", "inflation_layer"]
       # KEEPOUT ZONES, the permanent no-go areas over the racking.
       #
       # A costmap FILTER rather than a layer, because it is not an observation.
@@ -764,7 +764,7 @@ local_costmap:
       # diameter 1.0021 m, so an inscribed radius of 0.2950 m leaves 1.34 - 2 x
       # 0.2950 m of free band in a median aisle.
       footprint_padding: 0.0
-      plugins: ["obstacle_layer", "voxel_layer", "inflation_layer"]
+      plugins: ["obstacle_layer", "voxel_layer", "proxemic_layer", "inflation_layer"]
       # KEEPOUT ZONES, the permanent no-go areas over the racking.
       #
       # A costmap FILTER rather than a layer, because it is not an observation.

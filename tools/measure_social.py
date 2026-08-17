@@ -227,8 +227,40 @@ class SocialProbe(Node):
                   f'{spd:5.2f}  {ttc_s}    {frac("intimate"):6.1f}% '
                   f'{frac("personal"):7.1f}% {frac("social"):6.1f}%')
 
+        # THE HEADLINE IS EXPOSURE WEIGHTED, and the extrema below it are not.
+        #
+        # This file has argued since it was written that the denominator
+        # matters more than the count, and then printed the closest approach
+        # and the median of the per person minima as its summary. Those are
+        # EXTREMA: they can only grow as a run gets longer, so a run that
+        # drove further looks worse at identical behaviour.
+        #
+        # V-59 compared two configurations on the median of minima and could
+        # not separate them, because the within-arm spread was 224 mm against
+        # an effect of tens of millimetres. On the weighted zone share below
+        # the same four runs separate cleanly. The metric was the problem, not
+        # the measurement.
+        total_seen = sum(self.seen.values())
+        if total_seen > 0:
+            share = {}
+            for zone in ('intimate', 'personal', 'social'):
+                secs = sum(self.zone_time.get(n, {}).get(zone, 0.0)
+                           for n in self.seen)
+                share[zone] = 100.0 * secs / total_seen
+            print()
+            print(f'  EXPOSURE WEIGHTED, over {total_seen:.0f} s of being near '
+                  f'somebody:')
+            print(f'    intimate {share["intimate"]:5.2f}%   '
+                  f'personal {share["personal"]:5.2f}%   '
+                  f'social {share["social"]:5.2f}%')
+            print('  This is the figure to compare between runs. It does not')
+            print('  grow with the length of the run.')
+
         gaps = list(self.min_gap.values())
         print()
+        print('  The next two are EXTREMA and grow with exposure, so they')
+        print('  describe THIS run and do not compare across runs of')
+        print('  different length. See V-59.')
         print(f'  closest anyone came        {min(gaps):+.3f} m')
         print(f'  median of per person minima {statistics.median(gaps):+.3f} m')
         intruded = [n for n, z in self.zone_time.items() if z.get('intimate', 0) > 0]

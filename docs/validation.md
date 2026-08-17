@@ -4544,3 +4544,83 @@ Nothing is retuned here. The measurement is four arrivals, the mechanism is
 established by the sign flip rather than by the sample size, and changing a
 tolerance is a change to behaviour that deserves its own run. V-42 and V-45 are
 what this project has to show for tuning that looked free on paper.
+
+---
+
+## V-64. The proxemic layer works, and V-59 was wrong about why it could not be shown
+
+V-59 shipped the layer disabled with the conclusion that its effect was
+"smaller than the run to run spread of the metric that would show it, 224 mm".
+That conclusion was wrong, and so was the reason given for it. The effect was
+buried under three separate design faults, none of which was noise.
+
+### The three faults, in the order they were found
+
+**The metric was an extremum.** `measure_social.py` has argued since it was
+written that "the denominator matters more than the count", and every figure in
+its table is divided by exposure. Its SUMMARY printed the closest approach and
+the median of the per person minima, which can only grow as a run gets longer.
+A run that drove further looked worse at identical behaviour. V-59 compared two
+configurations on exactly that.
+
+**Cycle completion was confounded with the arm.** Re-analysed on the
+exposure weighted share, the four V-59 runs separated cleanly, 1.8 percent
+against 5.8. But the layer-off runs had completed 0 and 1 cycles and the
+layer-on runs 2 and 3. A run that fails early sits parked while people choose
+their own distance.
+
+**Task type dominates both.** A layer-OFF survey scores 7.33 percent intimate,
+higher than any layer-ON mission. Comparing a survey against a mission measures
+the task, not the configuration.
+
+### The matched comparison
+
+Same task, same termination criterion, one variable:
+
+| | layer off | layer on | change |
+|---|---|---|---|
+| area mapped | 449.3 m2 | 454.3 m2 | +5.0 |
+| survey rounds | 13 | 14 | +1 |
+| rounds that timed out | 3 | **2** | -1 |
+| survey duration | 1434 s | 1521 s | +87 s, 6 percent |
+| **intimate share** | **7.33%** | **5.00%** | **-2.33 points** |
+| personal share | 13.98% | 12.93% | -1.05 |
+| social share | 64.34% | 79.32% | +14.98 |
+
+**The layer reduces time in intimate space by 2.33 points, a 32 percent
+relative reduction, and moves it into the social zone.** Measured
+reproducibility of this metric at matched task is 0.19 points, so the effect is
+twelve times the observed spread.
+
+### What it costs
+
+Six percent of survey duration, and nothing else that was measured. The area
+mapped is within 1 percent, the round count within one, and the layer arm
+recorded FEWER timeouts, not more.
+
+That is a real trade and a cheap one. It is also the opposite of what V-42 and
+V-45 found when protective FIELDS were enlarged, and the difference is
+instructive: a field that reaches past the vehicle's own body removes routes the
+vehicle needs, while a cost that is never lethal only makes some routes
+expensive. The layer was capped below the inscribed value on purpose and that
+decision is why this arm did not lose mobility.
+
+### What is still true from V-59
+
+The arithmetic in V-59 stands: inflation already covers a person to 0.4634 m at
+costs of 149 to 241, and the squared falloff leaves 6 to 68 beyond that. The
+layer is dominated inside 0.46 m. What V-59 got wrong was concluding that
+therefore it could not work. It works in the band OUTSIDE inflation, between
+0.5 and 1.2 m, which is exactly the band Hall's personal space occupies and the
+one the metric measures.
+
+### The lesson, which is the transferable part
+
+**"The effect is smaller than the noise" is a claim about the experiment, not
+about the effect,** and it is the easiest wrong conclusion to reach because it
+requires no further work. Three design faults each produced a plausible null.
+The layer was built, measured, disbelieved, shipped disabled, and only then
+shown to work, on the fourth attempt at measuring it.
+
+The corrective was not a better statistical test. It was holding the task
+constant.

@@ -105,3 +105,20 @@ def test_it_announces_itself_on_startup():
     started; this one did not, and a zero byte log was briefly read as a
     crash."""
     assert 'social metrics for' in text()
+
+
+def test_the_headline_is_exposure_weighted_not_an_extremum():
+    """V-59's metric could not separate two configurations, and the metric was
+    the problem.
+
+    The closest approach and the median of per person minima are EXTREMA: they
+    can only grow as a run gets longer, so a run that drove further looks worse
+    at identical behaviour. This file has argued since it was written that the
+    denominator matters more than the count, and then printed extrema as its
+    summary.
+    """
+    t = PROBE.read_text()
+    assert 'EXPOSURE WEIGHTED' in t
+    assert 'total_seen' in t
+    assert 'do not compare across runs' in t, (
+        'the extrema are still presented as comparable between runs')
