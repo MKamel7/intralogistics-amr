@@ -4386,3 +4386,89 @@ that was the only duration to hand, and the error entered as a square.
 V-52 was a clock nobody checked. V-56 was a pairing nobody checked. This was a
 duration nobody checked. In each case the measured part was right and the
 assumed part carried the error, which is why the results looked plausible.
+
+---
+
+## V-62. A goal tolerance is not an accuracy specification, and precision docking is not reachable from the map frame
+
+The roadmap carried "precision docking, once localisation is good enough to
+support the claim" for most of this project's life. This measures whether it
+is, before anything is built, because the alternative is arguing from
+arithmetic and V-46 is what that costs.
+
+### Measured, six arrivals over three cycles
+
+| station | n | median | worst | worst heading |
+|---|---|---|---|---|
+| goods_in | 3 | 88 mm | 113 mm | **26.9 deg** |
+| dispatch | 3 | 152 mm | **212 mm** | 2.9 deg |
+| both | 6 | **117 mm** | 212 mm | |
+
+True error, from the ground truth oracle, against the station poses in the same
+file the mission drives to.
+
+### The tolerances were exceeded, and that is not a fault
+
+    xy_goal_tolerance    200 mm     worst measured  212 mm
+    yaw_goal_tolerance  14.3 deg    worst measured  26.9 deg
+
+**A goal tolerance governs where the vehicle BELIEVES it is.** The true error
+is that belief plus the localisation error underneath it, and the two add
+rather than cancel. A stack configured to park within 200 mm parks within
+212 mm of the real station, and one configured to 14.3 degrees ends up 26.9
+degrees out.
+
+Nothing is misbehaving. The number in the configuration file simply does not
+mean what its name suggests, and it is quoted in exactly the places a reader
+would take it for an accuracy figure.
+
+### What this says about docking
+
+Precision docking needs roughly 10 mm.
+
+| | |
+|---|---|
+| measured median today | 117 mm, about twelve times too coarse |
+| localisation floor | 55 mm, about five times too coarse |
+
+The floor is the part that matters. **Tightening the tolerance cannot reach
+it**, because at zero tolerance the vehicle still parks where it believes the
+station is, and it is wrong about that by the parked localisation error of
+0.055 m from V-37.
+
+So docking by map frame goal is impossible on this stack by a factor of five,
+and it would still be impossible with a perfect controller.
+
+### What would work, stated rather than built
+
+A dock the vehicle can SEE. Aligning to a feature in the scan makes the error a
+sensor error rather than a localisation error, and this scanner resolves a few
+millimetres at these ranges. That is what precision docking means in
+intralogistics: a V plate, a reflector pair, or a shaped recess, and a
+controller that closes on the FEATURE rather than on a pose in a map.
+
+That is not built here, this world contains no dock structure to align to, and
+the README says the vehicle parks by navigation goal. The gap now has a number
+attached instead of an intuition.
+
+### The cheap improvement that is available, and its ceiling
+
+Tightening `xy_goal_tolerance` toward the localisation floor should roughly
+halve the parked error, 117 mm to something near 60 mm, by editing one value.
+It is worth doing and worth MEASURING rather than assuming, because a tolerance
+tightened below what the controller can actually achieve buys goal-reached
+timeouts instead of accuracy, and this project has V-42 and V-45 as evidence
+that a change which looks free on paper is not.
+
+It is not done here. Docking was the question, the answer is that the map frame
+cannot deliver it, and tightening a tolerance is a different piece of work that
+deserves its own measurement rather than being smuggled in alongside a finding.
+
+### An asymmetry worth chasing
+
+The heading error at `goods_in` is an order of magnitude worse than at
+`dispatch`, 26.9 degrees against 2.9, and all three samples are negative and
+growing across the run. That is a pattern rather than noise and it has no
+explanation yet. It is recorded here rather than left in a log, because a
+systematic drift in one station's approach is the kind of thing that turns out
+to matter.

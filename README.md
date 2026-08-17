@@ -8,7 +8,7 @@ layer that sits after the planner and can override it.
 name outran the code; there is no traffic controller and no task allocation. A fleet layer is
 listed under Roadmap and is claimed nowhere else.
 
-**Status: one platform validated end to end, with 61 recorded findings.** This README documents
+**Status: one platform validated end to end, with 62 recorded findings.** This README documents
 what exists and what is measured, not what is planned. Every figure below is traceable to an entry
 in `docs/validation.md`; anything not built is under Roadmap and is claimed nowhere else.
 
@@ -32,6 +32,7 @@ in `docs/validation.md`; anything not built is under Roadmap and is claimed nowh
 | deceleration in a protective stop | **3.5 to 4.1 m/s2**, against the 2.4 the fields assume | V-60 |
 | an unsecured 100 kg load, over a duty cycle | **0.0 mm** of slide, **3.8 deg** of rotation, none lost | V-61 |
 | why it stays on | the stop peaks at **14.9 m/s2** but only for a **4 ms** step, and slip goes as time squared | V-61 |
+| parked accuracy at a station | median **117 mm**, worst 212 mm against a 200 mm tolerance | V-62 |
 
 The latency row was wrong for most of this project's life and the correction is worth reading.
 It said p95 796 ms and called the spec estimate refuted, on the strength of 43 samples pooled from
@@ -458,9 +459,17 @@ What is left, in the order it would be worth doing:
    where the vehicle never moved. Settling it needs a metric normalised by exposure and three runs
    per configuration, as V-47 did for the planners. See V-59.
 3. **Precision docking**, once localisation is good enough to support the claim.
-4. **Precision docking**, once localisation is good enough to support the claim. Parked
-   localisation is p50 0.055 m, so the honest expectation is that it is not, and the finding would
-   be that rather than a working dock.
+4. **Precision docking, and it is NOT reachable from the map frame.** Measured: the vehicle parks
+   a median 117 mm from the station, worst 212 mm against a 200 mm goal tolerance, because a
+   tolerance governs where the vehicle BELIEVES it is and the localisation error adds on top.
+   Docking needs about 10 mm; the localisation floor is 55 mm, so a perfect controller would still
+   be five times too coarse. It needs a dock the vehicle can SEE, which makes the error a sensor
+   error rather than a localisation one. See V-62.
+5. **Tighten `xy_goal_tolerance` toward the localisation floor**, which should roughly halve the
+   parked error for the cost of one number, and must be measured rather than assumed: a tolerance
+   below what the controller can achieve buys goal-reached timeouts instead of accuracy.
+6. **Explain the heading asymmetry at `goods_in`**, 26.9 degrees worst against 2.9 at `dispatch`,
+   with all three samples negative and growing across the run. A pattern, not noise, and unexplained.
 
 Not on this list: a fleet layer. The project runs one vehicle and says so.
 

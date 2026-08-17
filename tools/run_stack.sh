@@ -37,6 +37,7 @@
 #   tools/run_stack.sh --physical-load           carry it as a box that can fall off
 #   tools/run_stack.sh --run mission --braking   also measure stopping distance
 #   tools/run_stack.sh --physical-load --load    also measure whether it stays on
+#   tools/run_stack.sh --run mission --docking   also measure parked accuracy
 #   tools/run_stack.sh --no-gate              measure anyway if preflight fails
 #   tools/run_stack.sh --platform mir250_class the second platform
 #   tools/run_stack.sh --test-track            the datasheet-sized test track
@@ -88,6 +89,7 @@ PAYLOAD=0.0
 BRAKING=false
 PHYSICAL_LOAD=false
 LOADPROBE=false
+DOCKING=false
 GATE=true
 CYCLES=2
 
@@ -110,6 +112,7 @@ while [ $# -gt 0 ]; do
     --braking) BRAKING=true; shift ;;
     --physical-load) PHYSICAL_LOAD=true; shift ;;
     --load) LOADPROBE=true; shift ;;
+    --docking) DOCKING=true; shift ;;
     --no-gate) GATE=false; shift ;;
     -h|--help)
       # The usage block is the comment header of this file, so there is one
@@ -381,6 +384,17 @@ fi
 # estimate and the deceleration comes from a single published rating that the
 # MP-400 manual does not distinguish by load, so a laden run measures an
 # assumption nobody has tested.
+# HOW ACCURATELY IT PARKS, against the station poses the generator wrote and
+# the mission drives to, so the probe and the mission cannot disagree about
+# where a station is.
+if [ "$DOCKING" = true ]; then
+  python3 -u tools/measure_docking.py --ros-args -p duration_s:=2400.0 \
+          -p stations_file:="$STATIONS" \
+          > "$RUN/docking.log" 2>&1 &
+  DCK=$!
+  say "docking probe running against $STATIONS"
+fi
+
 # WHETHER THE CARGO STAYS WHERE IT WAS PUT. The load rides on friction alone,
 # so this is a result rather than an assumption, and it is the question a real
 # deployment asks before it asks about cycle times.
@@ -592,6 +606,11 @@ if [ "$LOADPROBE" = true ]; then
   kill -INT ${LDP:-} 2>/dev/null
   wait ${LDP:-} 2>/dev/null
   say "load probe done; see $RUN/load.log"
+fi
+if [ "$DOCKING" = true ]; then
+  kill -INT ${DCK:-} 2>/dev/null
+  wait ${DCK:-} 2>/dev/null
+  say "docking probe done; see $RUN/docking.log"
 fi
 if [ "$TRACK" = true ]; then
   wait ${TRK:-} 2>/dev/null
