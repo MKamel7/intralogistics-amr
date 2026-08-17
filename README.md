@@ -31,6 +31,7 @@ in `docs/validation.md`; anything not built is under Roadmap and is claimed nowh
 | braking distance, laden and unladen | **9 mm** median both, 85 to 97 mm worst, n=859 | V-60 |
 | deceleration in a protective stop | **3.5 to 4.1 m/s2**, against the 2.4 the fields assume | V-60 |
 | an unsecured 100 kg load, over a duty cycle | **0.0 mm** of slide, **3.8 deg** of rotation, none lost | V-61 |
+| why it stays on | the stop peaks at **14.9 m/s2** but only for a **4 ms** step, and slip goes as time squared | V-61 |
 
 The latency row was wrong for most of this project's life and the correction is worth reading.
 It said p95 796 ms and called the spec estimate refuted, on the strength of 43 samples pooled from
@@ -457,11 +458,9 @@ What is left, in the order it would be worth doing:
    where the vehicle never moved. Settling it needs a metric normalised by exposure and three runs
    per configuration, as V-47 did for the planners. See V-59.
 3. **Precision docking**, once localisation is good enough to support the claim.
-4. **Explain why the load does not slide.** V-61 predicted 11.5 mm of creep per hard stop from
-   `mu * g` against the measured deceleration, and measured 0.0 mm of translation with 3.8 degrees
-   of rotation instead. The candidates are that the deceleration in V-60 is an average over the
-   stop rather than the peak, and that Gazebo's friction is a constraint solver rather than a
-   Coulomb model. Choosing between them needs a directed experiment, not another mission run.
+4. **Precision docking**, once localisation is good enough to support the claim. Parked
+   localisation is p50 0.055 m, so the honest expectation is that it is not, and the finding would
+   be that rather than a working dock.
 
 Not on this list: a fleet layer. The project runs one vehicle and says so.
 

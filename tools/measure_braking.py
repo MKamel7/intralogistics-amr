@@ -99,6 +99,16 @@ class BrakingProbe(Node):
 
         self.pos = None
         self.speed = 0.0
+        # THE PEAK DECELERATION, which is a different quantity from the one
+        # v^2/2d gives and is the one an unsecured load actually feels.
+        #
+        # V-61 predicted 11.5 mm of creep per hard stop from mu*g against the
+        # AVERAGE deceleration and measured none at all. An average over a
+        # stop says nothing about whether the load was ever above the friction
+        # limit at any instant, so this records the worst instantaneous rate
+        # seen during each braking event.
+        self.peak = 0.0
+        self.peaks = []
         self.last = None            # (x, y, t) for measured speed
         self.commanded = 0.0
         self.armed = None           # (x, y, t, speed at command)
@@ -131,8 +141,12 @@ class BrakingProbe(Node):
             if self.last is not None:
                 dt = now - self.last[2]
                 if dt > 1e-6:
+                    previous = self.speed
                     self.speed = math.hypot(p.x - self.last[0],
                                             p.y - self.last[1]) / dt
+                    if self.armed is not None:
+                        rate = (previous - self.speed) / dt
+                        self.peak = max(self.peak, rate)
             self.last = (p.x, p.y, now)
             self.pos = (p.x, p.y)
 
@@ -141,6 +155,8 @@ class BrakingProbe(Node):
                 if self.speed <= self.stopped_speed:
                     dist = math.hypot(p.x - ax, p.y - ay)
                     self.samples.append((dist, now - at, av))
+                    self.peaks.append(self.peak)
+                    self.peak = 0.0
                     self.get_logger().info(
                         f'  stop {len(self.samples)}: {dist * 1000:.0f} mm in '
                         f'{now - at:.2f} s from {av:.2f} m/s')
@@ -158,6 +174,7 @@ class BrakingProbe(Node):
                 self.armed_while_slow += 1
                 return
             self.armed = (self.pos[0], self.pos[1], self._now(), self.speed)
+            self.peak = 0.0
         elif self.commanded > self.stopped_speed and self.armed is not None:
             # Told to drive on before it finished stopping. Not a braking
             # event, and counting it would understate the distance.
@@ -192,6 +209,16 @@ class BrakingProbe(Node):
         fastest = max(self.samples, key=lambda s: s[2])
         print(f'  from the highest speed seen, {fastest[2]:.2f} m/s: '
               f'{fastest[0] * 1000:.0f} mm')
+        if self.peaks:
+            pk = sorted(p for p in self.peaks if p > 0.0)
+            if pk:
+                print()
+                print('  PEAK deceleration during the stop, which is what an')
+                print('  unsecured load feels, against the average that v^2/2d')
+                print('  gives and that V-61 built its prediction on:')
+                print(f'    p50 {statistics.median(pk):6.2f} m/s2   '
+                      f'max {max(pk):6.2f} m/s2   n={len(pk)}')
+                print('    a load at mu 0.35 slides above 3.43 m/s2')
         print()
         print('  This is the SERVICE stop the collision monitor commands, not')
         print('  an emergency stop, so it is the optimistic figure for a')

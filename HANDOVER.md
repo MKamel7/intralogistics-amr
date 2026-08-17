@@ -2,7 +2,7 @@
 
 ## Read this first
 
-**576 tests pass under `colcon test` with 5 documented skips, ruff is clean,
+**577 tests pass under `colcon test` with 5 documented skips, ruff is clean,
 every world parses and every model it includes is installed, and the container
 builds from a clean base and runs the same suite to the same result: 456 passed and 5 skipped, on the host and in the container, verified after
 `amr_vda5050` changed build type.**

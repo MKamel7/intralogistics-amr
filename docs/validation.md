@@ -4325,3 +4325,64 @@ data to a cargo tool. The `gz service` beneath it answers in milliseconds.
 That a cargo tool could kill the mission at all is the larger defect. Load
 handling is something the mission DOES, not something it depends on, and every
 simulator call now degrades to a warning.
+
+### V-61 continued: the prediction was wrong about duration, not about friction
+
+The open question was whether the load fails to slide because the deceleration
+never reaches the friction limit, or because Gazebo's friction is not Coulomb.
+Neither, and the answer came from measuring the quantity the prediction had
+assumed instead of measured.
+
+`measure_braking.py` now records the PEAK deceleration during each stop, which
+is what a load feels, alongside the average that `v^2 / 2d` gives:
+
+| | value |
+|---|---|
+| friction limit at mu 0.35 | 3.43 m/s2 |
+| peak deceleration, p50 | **3.06 m/s2** |
+| peak deceleration, max | **14.92 m/s2** |
+| samples | 252 |
+
+**Half the protective stops never reach the friction limit at all.** The
+average of 3.49 to 4.08 m/s2 in V-60 came from the fastest stops in the run,
+and V-61 applied it to every stop.
+
+That is not the main error though. The main error is duration:
+
+    excess 11.49 m/s2 for one 4 ms physics step   ->   0.092 mm
+    excess 11.49 m/s2 for two steps               ->   0.368 mm
+    excess 11.49 m/s2 for 190 ms, as predicted    ->  11.7 mm
+
+**V-61 assumed the excess lasted the whole stop.** A protective stop is a
+spike and a tail: the command goes to zero, the drive resists hard for a few
+milliseconds, and the rest of the stop is gentle. The load is above its
+friction limit for single physics steps, not for the 190 ms the prediction
+used, and the slip goes with the SQUARE of that time.
+
+Measured this run: **0.2 mm**, against 0.09 mm for one step and 0.37 mm for
+two. The arithmetic and the measurement now agree to within the number of
+steps the spike lasts.
+
+### What this changes about the safety argument
+
+Nothing about the fields, and one thing about the load.
+
+An unsecured load on this vehicle is safe **because the hard part of a
+protective stop is brief**, not because the stop is gentle: the peak reaches
+14.92 m/s2, which is four times the friction limit and would move a load
+decisively if it were sustained. A vehicle with a softer, longer stop of the
+same average could shed its cargo where this one does not.
+
+That is worth stating because it is the opposite of the intuition. The
+dangerous stop for a load is not the hardest one, it is the longest one above
+the limit.
+
+### The methodological point, which is the third of its kind
+
+The prediction had two free quantities, the excess and its duration, and only
+one of them was measured. The other was assumed to be the whole stop because
+that was the only duration to hand, and the error entered as a square.
+
+V-52 was a clock nobody checked. V-56 was a pairing nobody checked. This was a
+duration nobody checked. In each case the measured part was right and the
+assumed part carried the error, which is why the results looked plausible.

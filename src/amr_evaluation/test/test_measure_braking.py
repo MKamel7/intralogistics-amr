@@ -95,3 +95,19 @@ def test_it_says_this_is_the_optimistic_figure():
     exists to avoid making."""
     t = PROBE.read_text()
     assert 'optimistic figure' in t
+
+
+def test_the_peak_deceleration_is_measured_separately_from_the_average():
+    """V-61's prediction was built on the wrong one.
+
+    `v^2 / 2d` is an average over the whole stop. An unsecured load feels the
+    instantaneous rate, and a stop averaging 4 m/s2 can be gentle then hard, or
+    hard then gentle. The prediction of 11.5 mm of creep used the average and
+    measured none, so the peak is the quantity that discriminates.
+    """
+    t = PROBE.read_text()
+    assert 'self.peaks' in t and 'self.peak' in t
+    assert 'PEAK deceleration' in t, 'the peak is tracked but never reported'
+    assert 'slides above 3.43' in t, (
+        'the report does not put the peak next to the friction limit it has '
+        'to be compared with')
