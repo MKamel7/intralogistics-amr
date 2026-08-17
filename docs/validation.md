@@ -4467,8 +4467,80 @@ deserves its own measurement rather than being smuggled in alongside a finding.
 ### An asymmetry worth chasing
 
 The heading error at `goods_in` is an order of magnitude worse than at
-`dispatch`, 26.9 degrees against 2.9, and all three samples are negative and
-growing across the run. That is a pattern rather than noise and it has no
-explanation yet. It is recorded here rather than left in a log, because a
-systematic drift in one station's approach is the kind of thing that turns out
-to matter.
+`dispatch`, 26.9 degrees against 2.9, and all three samples are negative. That
+is a pattern rather than noise and it has no explanation yet.
+
+**V-63 explains it and corrects the "growing" reading.** `goods_in` needs a 180
+degree spot turn at the goal and `dispatch` needs none, the goal checker stops
+a rotation as soon as it is inside tolerance, and the error opposes the turn.
+The three negative samples happened to turn the same way; a later run turned
+the other way and the sign flipped with it.
+
+---
+
+## V-63. A goal that needs a turn inherits a signed error, and the sign follows the rotation
+
+V-62 left an anomaly: the parked heading error at `goods_in` was an order of
+magnitude worse than at `dispatch`, 26.9 degrees against 2.9, with all three
+samples negative. It was recorded as a pattern with no explanation.
+
+### The hypothesis, written before the measurement
+
+The route alternates between a station in the west, `goods_in` at x = -2.0, and
+one in the east, `dispatch` at x = +35.0. Both demand `yaw 0`, facing east.
+
+    arriving at goods_in   driven west, heading ~180, goal wants 0
+                           -> a 180 degree spot turn AT the goal
+    arriving at dispatch   driven east, heading ~0, goal wants 0
+                           -> no turn at all
+
+The goal checker accepts yaw within `yaw_goal_tolerance`, 14.3 degrees, so a
+rotation **stops the instant it is inside tolerance rather than completing**.
+That undershoots systematically, and the sign of the undershoot follows the
+direction of rotation.
+
+The competing explanation was an odometry yaw drift accumulating over the run,
+which the "all three negative and growing" reading suggested.
+
+### The measurement that separates them
+
+| station | turned | heading error | |
+|---|---|---|---|
+| goods_in | **+173.5 deg** | **-8.6 deg** | opposes the turn |
+| dispatch | +0.9 deg | -2.9 deg | no turn to speak of |
+| goods_in | **-173.9 deg** | **+10.7 deg** | opposes the turn |
+| dispatch | -2.6 deg | -2.4 deg | no turn to speak of |
+
+**The turn direction flipped between the two `goods_in` arrivals, and the error
+sign flipped with it.** An accumulating drift cannot do that: it would keep the
+same sign whichever way the vehicle rotated. Two of two arrivals that turned
+more than 20 degrees had an error opposing the turn.
+
+The V-62 reading of "all negative" was three samples that happened to turn the
+same way. It is corrected there.
+
+### What it means beyond one station
+
+This is a property of the stack, not a quirk of `goods_in`:
+
+**Any goal whose approach requires a turn inherits a heading error up to the
+yaw tolerance, always opposing the rotation.** It is a systematic bias rather
+than noise, so it does not average out over repeated cycles, and it is
+invisible to anything that only asks whether the goal was reached.
+
+Together with V-62 that makes the same point twice, in position and in
+heading: **a goal tolerance is a stopping condition, not an accuracy
+specification.** The vehicle is not trying to reach the goal and missing. It is
+stopping the moment it is allowed to.
+
+### What follows from it
+
+For orientation critical work, docking above all, the yaw tolerance IS the
+error and not a bound on a random one. Tightening it trades accuracy against
+the time spent creeping the last few degrees, and on a differential drive
+that final rotation is the slowest part of an approach.
+
+Nothing is retuned here. The measurement is four arrivals, the mechanism is
+established by the sign flip rather than by the sample size, and changing a
+tolerance is a change to behaviour that deserves its own run. V-42 and V-45 are
+what this project has to show for tuning that looked free on paper.

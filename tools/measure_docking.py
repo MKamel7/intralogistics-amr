@@ -95,6 +95,18 @@ class DockingProbe(Node):
 
         self.last = None
         self.speed = 0.0
+        # THE FINAL TURN, which is the quantity that discriminates.
+        #
+        # goods_in sits west and dispatch east on a route that alternates, so
+        # the vehicle arrives at goods_in having driven WEST and must end
+        # facing EAST: a 180 degree spot turn AT the goal. At dispatch it
+        # arrives already facing the right way and turns nothing.
+        #
+        # If a spot turn is what costs the accuracy, the error sign should
+        # follow the direction of that turn, because the goal checker stops the
+        # rotation as soon as it is inside tolerance and therefore undershoots.
+        # Recording the turn lets that be checked rather than argued.
+        self.yaw_history = []       # (t, yaw), a few seconds of it
         self.since = None          # when the vehicle stopped near a station
         self.at = None
         self.arrivals = {}         # station -> [(distance, heading error)]
@@ -122,6 +134,8 @@ class DockingProbe(Node):
                     self.speed = math.hypot(p.x - self.last[0],
                                             p.y - self.last[1]) / dt
             self.last = (p.x, p.y, now)
+            self.yaw_history.append((now, yaw))
+            self.yaw_history = [h for h in self.yaw_history if now - h[0] <= 12.0]
 
             near = None
             for name, (sx, sy, _syaw) in self.stations.items():
@@ -146,10 +160,18 @@ class DockingProbe(Node):
                 return                      # one record per arrival
             sx, sy, syaw = self.stations[near]
             d, dyaw = pose_error(p.x, p.y, yaw, sx, sy, syaw)
-            self.arrivals.setdefault(near, []).append((d, dyaw, self.since))
+            # How far it turned in the ten seconds before settling.
+            turn = 0.0
+            if len(self.yaw_history) > 1:
+                oldest = self.yaw_history[0][1]
+                turn = math.atan2(math.sin(yaw - oldest),
+                                  math.cos(yaw - oldest))
+            self.arrivals.setdefault(near, []).append(
+                (d, dyaw, self.since, turn))
             self.get_logger().info(
                 f'parked at {near}: {d * 1000:.0f} mm, '
-                f'{math.degrees(dyaw):+.1f} deg from the station pose')
+                f'{math.degrees(dyaw):+.1f} deg from the station pose, '
+                f'after turning {math.degrees(turn):+.1f} deg')
             return
 
     def _tick(self):
@@ -177,6 +199,20 @@ class DockingProbe(Node):
                   f'median {statistics.median(ds) * 1000:5.0f} mm  '
                   f'worst {max(ds) * 1000:5.0f} mm  '
                   f'heading worst {max(ys):4.1f} deg')
+        # DOES THE ERROR SIGN FOLLOW THE TURN? If a spot turn undershoots, the
+        # heading error opposes the direction of rotation on every sample where
+        # a real turn happened. Reported rather than asserted, because one run
+        # with six arrivals is a hypothesis test and not a proof.
+        turned = [a for v in self.arrivals.values() for a in v
+                  if len(a) > 3 and abs(math.degrees(a[3])) > 20.0]
+        if turned:
+            opposed = sum(1 for a in turned if a[1] * a[3] < 0)
+            print()
+            print(f'  of {len(turned)} arrival(s) that turned more than 20 deg '
+                  f'before settling,')
+            print(f'  {opposed} had a heading error OPPOSING the turn, which is '
+                  f'the signature')
+            print('  of a rotation stopped by a tolerance rather than completed.')
         allds = [a[0] for v in self.arrivals.values() for a in v]
         print(f'  median {statistics.median(allds) * 1000:.0f} mm, '
               f'worst {max(allds) * 1000:.0f} mm')

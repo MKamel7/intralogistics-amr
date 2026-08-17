@@ -79,3 +79,22 @@ def test_it_says_the_localisation_error_is_the_floor():
     """
     t = PROBE.read_text()
     assert 'cannot park more accurately' in t
+
+
+def test_the_final_turn_is_recorded():
+    """The quantity that discriminates the goods_in asymmetry.
+
+    goods_in sits west and dispatch east on an alternating route, so the
+    vehicle arrives at goods_in having driven west and must end facing east: a
+    180 degree spot turn AT the goal. At dispatch it turns nothing.
+
+    If the spot turn is what costs the accuracy, the heading error should
+    OPPOSE the direction of that turn, because the goal checker stops the
+    rotation as soon as it is inside tolerance and therefore undershoots.
+    Without recording the turn the two explanations are indistinguishable.
+    """
+    t = PROBE.read_text()
+    assert 'yaw_history' in t
+    assert 'after turning' in t, 'the turn is computed but never reported'
+    assert 'OPPOSING the turn' in t, (
+        'the report does not test the sign relationship the hypothesis rests on')

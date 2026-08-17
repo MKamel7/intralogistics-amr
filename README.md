@@ -8,7 +8,7 @@ layer that sits after the planner and can override it.
 name outran the code; there is no traffic controller and no task allocation. A fleet layer is
 listed under Roadmap and is claimed nowhere else.
 
-**Status: one platform validated end to end, with 62 recorded findings.** This README documents
+**Status: one platform validated end to end, with 63 recorded findings.** This README documents
 what exists and what is measured, not what is planned. Every figure below is traceable to an entry
 in `docs/validation.md`; anything not built is under Roadmap and is claimed nowhere else.
 
@@ -33,6 +33,7 @@ in `docs/validation.md`; anything not built is under Roadmap and is claimed nowh
 | an unsecured 100 kg load, over a duty cycle | **0.0 mm** of slide, **3.8 deg** of rotation, none lost | V-61 |
 | why it stays on | the stop peaks at **14.9 m/s2** but only for a **4 ms** step, and slip goes as time squared | V-61 |
 | parked accuracy at a station | median **117 mm**, worst 212 mm against a 200 mm tolerance | V-62 |
+| heading error when the goal needs a turn | up to the yaw tolerance, **signed by the rotation** | V-63 |
 
 The latency row was wrong for most of this project's life and the correction is worth reading.
 It said p95 796 ms and called the spec estimate refuted, on the strength of 43 samples pooled from
@@ -468,8 +469,11 @@ What is left, in the order it would be worth doing:
 5. **Tighten `xy_goal_tolerance` toward the localisation floor**, which should roughly halve the
    parked error for the cost of one number, and must be measured rather than assumed: a tolerance
    below what the controller can achieve buys goal-reached timeouts instead of accuracy.
-6. **Explain the heading asymmetry at `goods_in`**, 26.9 degrees worst against 2.9 at `dispatch`,
-   with all three samples negative and growing across the run. A pattern, not noise, and unexplained.
+6. **Tighten `yaw_goal_tolerance` for orientation critical work.** V-63 established that a goal
+   needing a turn inherits an error up to the tolerance, always opposing the rotation, so the
+   tolerance IS the error rather than a bound on a random one. Tightening it trades accuracy
+   against the time spent creeping the last few degrees, which on a differential drive is the
+   slowest part of an approach, so it needs measuring rather than assuming.
 
 Not on this list: a fleet layer. The project runs one vehicle and says so.
 
