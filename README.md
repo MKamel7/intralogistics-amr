@@ -12,6 +12,11 @@ listed under Roadmap and is claimed nowhere else.
 what exists and what is measured, not what is planned. Every figure below is traceable to an entry
 in `docs/validation.md`; anything not built is under Roadmap and is claimed nowhere else.
 
+**If you have five minutes, read [docs/findings.md](docs/findings.md) instead of this file.** It is
+the eight faults worth knowing about, each with the number attached and the wrong explanation that
+held for a while. Two of them are claims this project made and later retracted, and five of the
+faults were in the measuring instruments rather than in the robot.
+
 ### Measured, on the generated track, MP-400 class
 
 | | result | where |
@@ -346,8 +351,8 @@ src/amr_description   platform specs, xacro description, generated controllers
     amr_evaluation    scoring tools and the experiment runner
     amr_vda5050       VDA 5050 vehicle interface over MQTT
 tools/                the instruments: seven probes, the stack runner, teardown
-docs/validation.md    the laboratory notebook, 46 numbered findings
-docs/findings.md      four of them worth reading first, the short version
+docs/validation.md    the laboratory notebook, 64 numbered findings
+docs/findings.md      START HERE: the eight worth reading, with the numbers
 docs/adr              architecture decision records
 docs/architecture     arc42 architecture documentation
 docs/datasheets       archived source documents for every physical constant

@@ -1,14 +1,28 @@
-# Four faults that hid behind coherent explanations
+# Faults that hid behind coherent explanations
 
-`docs/validation.md` is the full record, and it is long because it is a
-laboratory notebook. This is the short version: four faults worth reading about,
-chosen because each one had a persuasive wrong explanation attached to it, and
-because none of them was an algorithm.
+`docs/validation.md` is the full record, 64 numbered findings and 4600 lines,
+and it is long because it is a laboratory notebook. This is the short version.
 
-That last point is the one worth arguing about in an interview. Nothing here was
-fixed by tuning a planner or picking a better controller. Every one was
-configuration, provenance or diagnostics lying across a layer boundary, which is
-what actually goes wrong on a real deployment.
+Every fault below had a persuasive wrong explanation attached to it, and none of
+them was an algorithm. That is the part worth arguing about in an interview:
+nothing here was fixed by tuning a planner or picking a better controller. They
+were configuration, provenance, and diagnostics lying across a layer boundary,
+which is what actually goes wrong on a deployment.
+
+## If you read nothing else
+
+| | the number | the mistake |
+|---|---|---|
+| Aisle width | median 1.34 m, p25 **0.64 m** | a datasheet corridor figure repeated until it sounded like a measurement of the building |
+| Scanner placement | correctly cited, **wrong sensor** | a provenance label is a claim about a PART, not about a document |
+| Self filter geometry | 33.1 mm to **55.1 mm** of field coverage, no field resized | called a hardware limit for three findings; the filter was a bounding box and the vehicle is not a box |
+| Test suite | `colcon test` ran 289 cases, `pytest` ran 337 | **eleven test files** were never run by the build, and all of them passed |
+| Latency, RETRACTED | p99 1260 ms became **p95 124 ms** | percentiles from 43 samples across runs of 6 to 17, with the probe's own "samples is thin" warning printed in the same output |
+| Goal tolerance | set to 200 mm, parks **212 mm** out | a tolerance is a stopping condition, not an accuracy specification |
+| Human aware layer, RETRACTED | shipped disabled, then **7.33 % to 5.00 %** | "the effect is smaller than the noise" is a claim about the experiment, not the effect |
+
+**Five of the faults were in the measuring instruments rather than in the
+robot.** That ratio is uncomfortable and it is the honest headline.
 
 ---
 
@@ -168,9 +182,148 @@ fail. A check nobody has seen fail is not a check.
 
 ---
 
+## 5. A safety defect called a hardware limit for three findings
+
+The scan merger deletes returns inside the vehicle, so it does not see its own
+body. The forward protective fields sit inside the region it deletes, which
+means they cover ground the sensor is not allowed to report on. Five hypotheses
+were refuted on it by measurement over three sessions. The sixth was accepted
+without any:
+
+> Closing the rest needs a smaller pod or a different mounting, which is a
+> hardware change and not something a configuration file can assert its way
+> out of.
+
+Every attempt had asked how LARGE the blind margin should be. None asked what
+SHAPE the filter was. It is a bounding box, and the scanner pods stand proud
+only at two diagonal corners, occupying 132 mm of a 590 mm side:
+
+| | margin 0.060 | 0.032 | shaped |
+|---|---|---|---|
+| forward field lateral coverage | 5.1 mm | 33.1 mm | **55.1 mm** |
+| fields resized | no | no | **no** |
+
+The regenerated field configuration is byte identical to the committed one, so
+the whole gain came from the blind zone shrinking underneath fields that did not
+move. Two earlier attempts had tried to buy the same coverage by enlarging the
+FIELDS and both measured worse than the defect: one trapped the vehicle against
+a rack with 1057 commands in and 0 out, the other dropped the second platform
+from 3 of 3 cycles to 2 of 9.
+
+**What caught it:** being asked whether any of the open findings were fixable,
+which forced the filter's implementation to be read rather than its parameter.
+
+Recorded as V-49, correcting V-46.
+
+---
+
+## 6. Eleven test files the build never ran
+
+`colcon test` reported 289 pytest cases. A direct `pytest src` reported 337.
+Nobody had put the two numbers side by side.
+
+The gap was eleven files that exist in `test/` and were never registered with
+`ament_add_pytest_test`: every probe that produces a safety number, and the test
+asserting the survey exits non-zero when a station is off the map.
+
+**All eleven passed.** That is why it survived the whole project. A failing
+unregistered test would have been caught the first time somebody ran pytest by
+hand; a passing one is invisible from both directions.
+
+A twelfth failed the other way. One package was the only `ament_python` one, so
+`colcon test` ran pytest where it collected nothing, exited 5, and reported the
+package FAILED on every build while its nineteen tests passed under a direct
+run. A red package nobody could explain and a green suite missing a seventh of
+itself, at the same time, for the same reason.
+
+The fix that generalises: **walk the tree instead of naming the files.** The
+replacement test discovers every test file in the source tree, so a new one is
+covered the day it is written.
+
+Recorded as V-50.
+
+---
+
+## 7. The instruments were wrong more often than the robot
+
+Four faults were found in the stack over three days. Five were found in the
+things measuring it.
+
+**The wrong clock.** Six probes read wall time in a world running on simulated
+time. Five used it only for their own run length, which is self consistent
+whichever clock it is, so no published figure moved. The sixth subtracted a
+clock reading from a message stamp and printed the epoch as a duration.
+
+**The wrong pairing, and this one had published numbers on it.** A latency
+sample was armed on a protective stop and closed when the vehicle stopped
+moving. It was armed even when the vehicle was already stationary, so nothing
+closed it until some later unrelated stop and the interval spanned two events
+that were never connected.
+
+| | n | p50 | p95 | max | sd |
+|---|---|---|---|---|---|
+| unguarded | 302 | 88 | 128 | **980** | 56 |
+| guarded | 397 | 84 | 124 | **144** | 24 |
+
+Twenty decisions per run were armed while stationary. Those twenty were the
+tail. The stamps had already said so and nobody had looked: at the 872 ms
+sample the command stream was publishing every 52 ms throughout and no arrival
+gap exceeded 72 ms, which makes a genuine 872 ms interval impossible.
+
+**The wrong statistic.** A social navigation probe argued in its own docstring
+that "the denominator matters more than the count" and divided every figure in
+its table by exposure, then printed the closest approach and the median of per
+person minima as its SUMMARY. Those are extrema and can only grow as a run gets
+longer, so a run that drove further looked worse at identical behaviour.
+
+**The wrong duration.** A prediction that an unsecured 100 kg load would creep
+11.5 mm per hard stop measured 0.0 mm. The friction arithmetic was right; the
+assumption that the deceleration exceeded the friction limit for the whole
+190 ms stop was not. A protective stop is a spike and a tail, the excess lasts
+single 4 ms physics steps, and slip goes with the square of that time.
+
+**The wrong reference frame.** A cargo box was placed at the vehicle's map frame
+pose and created at those coordinates in the WORLD frame, so it materialised
+outside the building and fell to the floor while the vehicle drove a full cycle
+carrying nothing. The mission log said "placed payload_0 on the plate".
+
+The common shape: **in each case the measured part was correct and the assumed
+part carried the error**, which is exactly why the results looked plausible.
+
+Recorded as V-52, V-56, V-61 and V-64.
+
+---
+
+## 8. What was retracted, and why that matters more than what was found
+
+Two of this project's headline claims were withdrawn after being measured
+properly.
+
+**"The latency estimate is refuted."** It was the first of three things the
+handover said were most worth knowing. The measurement behind it took p95
+796 ms and p99 1260 ms from 43 samples pooled across five runs of 17, 6, 7, 7
+and 6, and the probe printed `7 samples is thin. Prefer 20 or more before
+changing a spec.` in the same output. Guarded and re-measured over 397 samples
+the p95 is 124 ms against an estimate of 100. At the commissioned speed the
+estimate is short by 18 mm, not 522.
+
+**"The human aware costmap layer cannot be shown to help."** It shipped
+disabled on the conclusion that its effect was smaller than the spread of the
+metric. Three separate design faults each produced a plausible null: the metric
+was an extremum, cycle completion was confounded with the arm, and task type
+dominated both. Held to one task it reduces time in a person's intimate space
+from 7.33 % to 5.00 %, twelve times the reproducibility of the metric, for six
+percent of survey duration and no measured loss of mobility.
+
+Both retractions are written into `docs/validation.md` beside the original
+claim, with the wrong sentence left standing rather than edited away, because
+the mistake is the useful part.
+
+---
+
 ## What this adds up to
 
-The pattern across all four is the same, and it is not a coding pattern. It is
+The pattern is the same throughout, and it is not a coding pattern. It is
 that **a system can be wrong while every individual file is right**: a correctly
 transcribed datasheet row for the wrong part, a correctly derived limit
 overwritten by a correct-looking runtime call, a correctly worded check that
@@ -183,4 +336,9 @@ variance, which is the one this project learned last and most expensively.
 
 Two ADRs and one hypothesis in this repository were **rejected after the
 deciding measurement was taken and before a line of their implementation was
-written**. That is the habit the rest of it is built to support.
+written**. Two headline claims were **retracted** after being measured properly.
+That is the habit the rest of it is built to support.
+
+The defence that worked most often was not a technique. It was writing the
+decision rule down before the data arrived, and then honouring it when the
+number came back inconvenient.
