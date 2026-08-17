@@ -117,6 +117,13 @@ TURN_MARGIN = 0.10         # m
 # saying so plainly is more honest than dressing a body width up as a
 # calculation.
 PEDESTRIAN_WIDTH = 0.50    # m, a person standing
+
+# The delivery table, and the grid a delivered load lands on. The box is
+# 0.400 m square, from amr_sim/models/payload_klt/model.sdf, and four go on in
+# a 2 by 2 pattern. 50 mm of table beyond every box and 100 mm between
+# neighbours; see the derivation where `setdown` is computed.
+SETDOWN_TABLE = 1.00       # m, square
+SETDOWN_SLOT = 0.25        # m, from the centre to a slot centre
 PASSING_CLEARANCE = 0.20   # m, so passing is not a squeeze
 PASSING_ALLOWANCE = PEDESTRIAN_WIDTH + PASSING_CLEARANCE
 
@@ -588,14 +595,31 @@ def build_world(spec, platform):
     #
     # The adjacent delivery bays were the obvious home for it and are 4.18 m
     # away, which is a drive rather than a set down.
-    setdown = (INTERIOR_X - 2.5, bay_ys[1] + 1.4, 0.40)
+    # 1.5 m out, and the table is 1.0 m square. Both follow from the geometry
+    # rather than being chosen:
+    #
+    #   the box is 0.4 m and four of them go on in a 2 by 2 grid, so the slot
+    #   centres sit at +/- SETDOWN_SLOT and a box reaches SETDOWN_SLOT + 0.2
+    #   from the middle. At the first attempt the table was 0.8 m and the slot
+    #   0.2 m, which put the box edge at exactly 0.400 m on a table whose edge
+    #   was exactly 0.400 m. Flush. A rigid body resting with its contact patch
+    #   ending at the drop tips on any rotation or placement error, and nothing
+    #   in any log would say so.
+    #
+    #   at 1.0 m and 0.25 m there is 50 mm of table beyond every box and 100 mm
+    #   between neighbours.
+    #
+    #   the offset grew 1.4 -> 1.5 m to keep the clearance the smaller table
+    #   had: the table half width went 0.4 -> 0.5, so without it the inflated
+    #   obstacle would have crept 100 mm nearer the goal pose.
+    setdown = (INTERIOR_X - 2.5, bay_ys[1] + 1.5, 0.40)
     stations = {n: (x, y, yaw) for n, (x, y, yaw) in stations_world.items()}
 
     # The table itself: a low steel bench, tall enough that a load on it is
     # clear of the 0.110 m scan plane and therefore visible to the vehicle as
     # the obstacle it really is.
     models.append(box('delivery_table', setdown[0], setdown[1], setdown[2] / 2.0,
-                      0.80, 0.80, setdown[2], steel))
+                      SETDOWN_TABLE, SETDOWN_TABLE, setdown[2], steel))
 
     # ---- floor markings, painted not built --------------------------------
     # The home square under the spawn, and three delivery bays at the dispatch
@@ -973,6 +997,11 @@ def build_stations(derived, spec):
         # thickness above it.
         'setdown': {'x': round(sd[0], 3), 'y': round(sd[1], 3),
                     'top_z': round(sd[2], 3),
+                    # The mission reads this rather than deriving it, so the
+                    # table the generator built and the grid the loads land on
+                    # come from one number and cannot disagree.
+                    'slot': SETDOWN_SLOT,
+                    'table': SETDOWN_TABLE,
                     'note': 'world frame, for the simulator, not a nav goal'},
     }
 

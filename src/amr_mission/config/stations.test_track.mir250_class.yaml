@@ -27,6 +27,8 @@ route:
 - dispatch
 setdown:
   x: 39.5
-  y: 8.178
+  y: 8.278
   top_z: 0.4
+  slot: 0.25
+  table: 1.0
   note: world frame, for the simulator, not a nav goal

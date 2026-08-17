@@ -95,3 +95,75 @@ def test_self_contained_worlds_pass_the_sdf_validator(path):
                        capture_output=True, text=True, timeout=60)
     assert r.returncode == 0, (
         f'{path.name} failed sdf validation:\n{r.stderr[:2000]}')
+
+
+# ---------------------------------------------------------------------------
+# The delivery table, and whether a load set down on it stays there.
+
+def stations_for(world):
+    """The stations file the generator writes beside a generated world."""
+    import yaml
+    name = world.stem                       # test_track.<platform>
+    f = (PKG.parents[0] / 'amr_mission' / 'config' / f'stations.{name}.yaml')
+    return yaml.safe_load(f.read_text()) if f.is_file() else None
+
+
+def generated_worlds():
+    return [w for w in worlds() if w.stem.startswith('test_track.')]
+
+
+@pytest.mark.parametrize('world', generated_worlds(), ids=lambda w: w.stem)
+def test_a_delivered_load_sits_inside_the_table_edge(world):
+    """Flush is not on.
+
+    The first version put a 0.400 m box at a 0.200 m slot offset on a 0.800 m
+    table, so the box edge landed at exactly 0.400 m on a table whose edge was
+    exactly 0.400 m. A rigid body whose contact patch ends at the drop tips on
+    any rotation or placement error, and no log line would report a box that
+    slid off a table some seconds after a successful delivery.
+    """
+    st = stations_for(world)
+    if st is None or 'setdown' not in st:
+        pytest.skip(f'{world.stem} has no set down pose')
+    sd = st['setdown']
+    box = 0.400                             # amr_sim/models/payload_klt
+    margin = sd['table'] / 2.0 - sd['slot'] - box / 2.0
+    assert margin >= 0.02, (
+        f'a delivered load reaches {sd["slot"] + box / 2.0:.3f} m from the '
+        f'table centre on a table whose edge is at {sd["table"] / 2.0:.3f} m, '
+        f'leaving {margin * 1000:.0f} mm; it will tip')
+
+
+@pytest.mark.parametrize('world', generated_worlds(), ids=lambda w: w.stem)
+def test_delivered_loads_do_not_overlap_each_other(world):
+    """Four slots on one table, and a box is 0.4 m wide."""
+    st = stations_for(world)
+    if st is None or 'setdown' not in st:
+        pytest.skip(f'{world.stem} has no set down pose')
+    sd = st['setdown']
+    gap = 2.0 * sd['slot'] - 0.400
+    assert gap >= 0.0, (
+        f'neighbouring slots are {2 * sd["slot"]:.3f} m apart for a 0.400 m '
+        f'box, so two deliveries would be spawned intersecting')
+
+
+@pytest.mark.parametrize('world', generated_worlds(), ids=lambda w: w.stem)
+def test_the_table_is_clear_of_the_goal_pose(world):
+    """It is an obstacle, and the vehicle has to reach the station beside it.
+
+    The costmap inflates obstacles by the circumscribed radius plus a
+    clearance band. A table whose inflated cost reaches the goal pose makes
+    "Start occupied" happen on purpose, which is V-58 manufactured rather than
+    found.
+    """
+    st = stations_for(world)
+    if st is None or 'setdown' not in st:
+        pytest.skip(f'{world.stem} has no set down pose')
+    sd = st['setdown']
+    dispatch = next(s for s in st['stations'] if s['name'] == 'dispatch')
+    offset = abs(sd['y'] - dispatch['world_xy'][1])
+    inflation = 0.4634
+    clear = offset - sd['table'] / 2.0 - inflation
+    assert clear > 0.30, (
+        f'the table is {offset:.3f} m from the station, so its inflated cost '
+        f'stops {clear * 1000:.0f} mm short of the goal pose')

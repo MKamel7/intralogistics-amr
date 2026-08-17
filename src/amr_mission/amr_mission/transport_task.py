@@ -436,9 +436,14 @@ class TransportTask(Node):
                 'on the plate and is still being carried')
             return False
 
+        # THE SLOT OFFSET COMES FROM THE STATIONS FILE, not from a number
+        # typed here. The generator sizes the table and the grid together, and
+        # a second copy of 0.2 in this file is how the box edge came to sit
+        # exactly on the table edge with no margin at all.
+        step = float(self.setdown.get('slot', 0.25))
         slot = self.delivered % 4
-        dx = 0.2 if slot in (1, 2) else -0.2
-        dy = 0.2 if slot in (2, 3) else -0.2
+        dx = step if slot in (1, 2) else -step
+        dy = step if slot in (2, 3) else -step
         z = self.setdown['top_z'] + 0.101
 
         # THE GZ SERVICE DIRECTLY, not `ros2 run ros_gz_sim set_entity_pose`.
