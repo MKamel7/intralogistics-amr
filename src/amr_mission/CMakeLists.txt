@@ -5,6 +5,9 @@ find_package(ament_cmake REQUIRED)
 find_package(ament_cmake_python REQUIRED)
 
 ament_python_install_package(${PROJECT_NAME})
+install(PROGRAMS ${PROJECT_NAME}/dock_approach.py
+        DESTINATION lib/${PROJECT_NAME}
+        RENAME dock_approach)
 install(PROGRAMS ${PROJECT_NAME}/transport_task.py
         DESTINATION lib/${PROJECT_NAME}
         RENAME transport_task)
@@ -16,6 +19,7 @@ if(BUILD_TESTING)
   ament_add_pytest_test(test_stations test/test_stations.py)
   ament_add_pytest_test(test_transport_limits test/test_transport_limits.py)
   ament_add_pytest_test(test_stuck_start_recovery test/test_stuck_start_recovery.py)
+  ament_add_pytest_test(test_dock_approach test/test_dock_approach.py)
 endif()
 
 ament_package()

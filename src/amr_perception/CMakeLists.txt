@@ -30,6 +30,13 @@ target_include_directories(scan_merger PUBLIC
   $<INSTALL_INTERFACE:include>)
 ament_target_dependencies(scan_merger rclcpp sensor_msgs tf2 tf2_ros)
 
+add_executable(dock_detector src/dock_detector_node.cpp)
+target_include_directories(dock_detector PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+ament_target_dependencies(dock_detector
+  rclcpp sensor_msgs geometry_msgs std_msgs tf2)
+
 add_executable(leg_detector src/leg_detector_node.cpp)
 target_include_directories(leg_detector PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -46,7 +53,8 @@ ament_target_dependencies(people_tracker rclcpp vision_msgs geometry_msgs)
 
 install(TARGETS amr_perception_core
   ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
-install(TARGETS scan_merger leg_detector people_tracker DESTINATION lib/${PROJECT_NAME})
+install(TARGETS scan_merger leg_detector people_tracker dock_detector
+        DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/ DESTINATION include)
 
 if(BUILD_TESTING)
