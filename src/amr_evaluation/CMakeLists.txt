@@ -14,6 +14,7 @@ if(BUILD_TESTING)
   # hand. They were passing, which is why it went unnoticed for the whole
   # project, and is exactly why the gap is worth closing: a test nothing
   # runs is a test nothing can fail.
+  ament_add_pytest_test(test_film test/test_film.py)
   ament_add_pytest_test(test_experiment test/test_experiment.py)
   ament_add_pytest_test(test_container test/test_container.py)
   ament_add_pytest_test(test_measure_contacts test/test_measure_contacts.py)

@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<sdf version="1.10">
+  <!-- A CAMERA IN THE SCENE, NOT A SCREEN CAPTURE.
+       Recording the Gazebo window with import(1) gave 4.3 frames per second,
+       played at 10, so the footage was jerky and 2.3 times real time, and the
+       vehicle was a few dozen pixels wide because the window also contained an
+       entity tree and a physics panel.
+       A camera sensor publishes 30 fps at whatever resolution is asked for,
+       from an exact pose, with no user interface in the frame. It is also
+       repeatable: the same pose gives the same shot on any machine, which a
+       window grab never does.
+       No collision geometry and static, so it cannot be driven into and does
+       not appear in any scan. The scan plane is at 0.110 m and this sits at
+       1.6 m, so even with collision it would be invisible to the vehicle, but
+       leaving it out means there is nothing to argue about. -->
+  <model name="film_camera">
+    <static>true</static>
+    <link name="link">
+      <sensor name="camera" type="camera">
+        <camera>
+          <horizontal_fov>1.05</horizontal_fov>   <!-- 60 deg, a normal lens -->
+          <image>
+            <width>1280</width>
+            <height>720</height>
+            <format>R8G8B8</format>
+          </image>
+          <clip><near>0.1</near><far>60.0</far></clip>
+        </camera>
+        <always_on>1</always_on>
+        <update_rate>30</update_rate>
+        <visualize>false</visualize>
+        <topic>film</topic>
+      </sensor>
+    </link>
+  </model>
+</sdf>
