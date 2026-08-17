@@ -12,9 +12,19 @@ listed under Roadmap and is claimed nowhere else.
 what exists and what is measured, not what is planned. Every figure below is traceable to an entry
 in `docs/validation.md`; anything not built is under Roadmap and is claimed nowhere else.
 
-**A 30 second demo is at [docs/media/demo.mp4](docs/media/demo.mp4)**, showing a transport cycle, a
-load set down at the dispatch station, and the navigation view. It runs at about 2.3 times real time
-for a reason recorded beside it, and it does not show docking, because docking does not work.
+**A 52 second demo is at [docs/media/demo.mp4](docs/media/demo.mp4)**, showing the survey building
+its own map, Nav2 planning a goal across the finished one, a transport cycle carrying the rated
+load, and the vehicle passing a worker at 0.64 m without stopping. **It plays at true speed.** Every
+frame carries the simulated time it was rendered at and is resampled onto a uniform grid, so nothing
+in it is sped up or slowed down; the previous cut ran 2.3 times fast and looked entirely normal,
+which is why the timing is now measured rather than assumed. It does not show docking, because
+docking does not work.
+
+The cut is a program, not a list of timestamps: `tools/demo_cut.py` holds the structure as data and
+fills every shot by querying the recording's own per-frame log, so a beat that cannot be filled
+honestly is dropped rather than illustrated with something else. The pedestrian shot is selected by
+requiring a person within a metre and a speed that never drops, which is what separates giving
+somebody room from stopping in front of them.
 
 **If you have five minutes, read [docs/findings.md](docs/findings.md) instead of this file.** It is
 the nine faults worth knowing about, each with the number attached and the wrong explanation that
