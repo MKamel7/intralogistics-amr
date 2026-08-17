@@ -19,23 +19,35 @@
 # can comfortably get in, turn, and get out again. 8.1 m apart with 1.60 m of
 # clearance each, against an inscribed radius of 0.501 m.
 #
-# `approach_yaw` is the heading the vehicle should hold on arrival. A real
-# station has a fixed side you load from, so arriving backwards is wrong even
-# when the position is right.
+# `yaw` is the heading the vehicle should hold on arrival. A real station has a
+# fixed side you load from, so arriving backwards is wrong even when the
+# position is right.
+#
+# This key was called `approach_yaw` here, while the generated per-track files
+# and the reader both say `yaw`. That mismatch was invisible for as long as the
+# reader used `station.get('approach_yaw', 0.0)`, because the default quietly
+# supplied a plausible heading (V-65). Removing the default was the right fix
+# and it left THIS file, the one the default world uses, unable to be read at
+# all: the mission raises on its first goal.
+#
+# So the bug had two halves and only one of them was fixed. The half that got
+# attention was the one the test track exercised. This file is on the DEFAULT
+# path, which is what a reviewer runs first, and it went unnoticed because
+# every measured run passed --test-track.
 
 stations:
   - name: goods_in
     description: Inbound station on the southern main aisle
     x: -1.58
     y: -5.45
-    approach_yaw: 1.5708      # facing north, up the aisle
+    yaw:       1.5708      # facing north, up the aisle
     clearance: 1.60
 
   - name: dispatch
     description: Outbound station on the northern main aisle
     x: -0.83
     y: 2.65
-    approach_yaw: -1.5708     # facing south, back down the aisle
+    yaw:       -1.5708     # facing south, back down the aisle
     clearance: 1.63
 
 # The cycle, as station names. Written as a list rather than hardcoded as a

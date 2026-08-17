@@ -130,8 +130,23 @@ def test_the_mission_reads_the_key_the_generator_writes():
     assert read, 'the mission reads no station fields at all'
 
     cfg = Path(__file__).resolve().parents[1] / 'config'
-    files = sorted(cfg.glob('stations.*.yaml'))
+    # `stations*.yaml`, NOT `stations.*.yaml`. The dot made this glob match
+    # every generated per-track file and miss `stations.yaml`, which is the
+    # default the mission falls back to when run_stack.sh is not given
+    # --test-track. So the one file on the DEFAULT path was the one file this
+    # test could not see, and it sat there with the old `approach_yaw` key
+    # until the reader stopped defaulting and the mission began exiting on its
+    # first goal.
+    #
+    # A pattern that silently matches a subset is the same failure as a name
+    # filter hiding entities: the listing looked complete because everything in
+    # it passed. Anything shaped like a stations file is now checked, and a new
+    # one is covered the moment it is written.
+    files = sorted(cfg.glob('stations*.yaml'))
     assert files, 'no stations files to check against'
+    assert any(f.name == 'stations.yaml' for f in files), (
+        'the default stations file is not among those checked; that is how '
+        'the approach_yaw key survived in it')
     for f in files:
         written = set()
         for s in yaml.safe_load(f.read_text())['stations']:
