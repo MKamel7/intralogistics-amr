@@ -180,3 +180,74 @@ def test_the_clip_never_runs_past_the_end_of_the_footage():
     idx = f.hold_indices(stamps, 0.0, 10.0, 30)
     assert len(idx) == 300
     assert max(idx) == len(stamps) - 1
+
+
+def test_a_window_is_measured_in_simulated_seconds_not_frames():
+    """The bug that disconnected shot selection from cutting.
+
+    `slices` offers a start offset that `conform` will read as simulated
+    seconds. When it counted frames and divided by the nominal rate instead,
+    the two disagreed by whatever the camera was behind by: measured on a real
+    recording, 610 frames spanning 43.0 s of simulated time, so an offset of
+    "90" meant 90 s to the cutter and 20 s to the selector.
+
+    Here the camera delivers 10 frames a second while the output rate is 30.
+    A window of 8 s must therefore span 8 s of stamps, not 240 frames.
+    """
+    f = load()
+    ts = [i / 10.0 for i in range(600)]         # 60 s at 10 Hz
+    got = f.slices(ts, 8.0, 0.5)
+    assert got, 'no windows offered'
+    for lo, hi in got:
+        assert ts[hi - 1] - ts[lo] == pytest.approx(8.0, abs=0.2)
+    # And the last window must still fit inside the footage.
+    lo, hi = got[-1]
+    assert ts[lo] + 8.0 <= ts[-1] + 1e-9
+
+
+def test_windows_advance_by_the_step_in_simulated_seconds():
+    f = load()
+    ts = [i / 10.0 for i in range(600)]
+    got = f.slices(ts, 8.0, 0.5)
+    starts = [ts[lo] for lo, _ in got]
+    gaps = [b - a for a, b in zip(starts, starts[1:])]
+    assert all(g == pytest.approx(0.5, abs=1e-6) for g in gaps), gaps
+
+
+def test_a_stalled_camera_still_advances_and_terminates():
+    """Frames sharing a stamp must not wedge the scan in place.
+
+    A tenth percentile gap of 0 ms means duplicate stamps are normal, and a
+    step computed by seeking forward in time can land on the frame it started
+    from. Without the forced advance this loops forever.
+    """
+    f = load()
+    ts = [0.0] * 50 + [i / 10.0 for i in range(200)]
+    got = f.slices(ts, 4.0, 0.5)
+    assert got
+    assert all(hi > lo for lo, hi in got)
+
+
+def test_a_recording_shorter_than_the_window_offers_nothing():
+    f = load()
+    ts = [i / 10.0 for i in range(30)]          # 3 s of footage
+    assert f.slices(ts, 8.0, 0.5) == []
+
+
+def test_a_camera_aimed_along_minus_x_is_not_a_failed_spawn():
+    """+pi and -pi are the same heading, and the pose check said otherwise.
+
+    A camera aimed straight down an east-west aisle asks for a yaw of exactly
+    pi; the simulator reports -pi. Compared by subtraction that is 6.28 rad
+    against a 1e-3 tolerance, so a correctly placed camera was rejected as a
+    silently failed spawn on every run.
+    """
+    f = load()
+    assert f.angle_error(-math.pi, math.pi) == pytest.approx(0.0, abs=1e-9)
+    assert f.angle_error(math.pi, -math.pi) == pytest.approx(0.0, abs=1e-9)
+
+
+def test_a_genuinely_wrong_heading_is_still_caught():
+    f = load()
+    assert f.angle_error(0.0, math.pi) == pytest.approx(math.pi, abs=1e-9)
+    assert f.angle_error(1.0, 1.5) == pytest.approx(0.5, abs=1e-9)

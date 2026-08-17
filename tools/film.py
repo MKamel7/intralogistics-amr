@@ -69,6 +69,14 @@ import time
 
 VEHICLE = 'amr'
 
+# nav2_msgs/CollisionMonitorState action_type. Same mapping as
+# tools/classify_stops.py, which is the other reader of this topic.
+ACTION = {0: 'clear', 1: 'stop', 2: 'slowdown', 3: 'approach', 4: 'limit'}
+
+# Worst first. Used to name an episode after the strongest thing the monitor
+# did in it, and to rank the safety beat.
+SEVERITY = {'stop': 0, 'slowdown': 1, 'approach': 2, 'limit': 3, 'clear': 4}
+
 # --- the shot list ---------------------------------------------------------
 #
 # Positions are WORLD frame, in metres. They were not found by flying the GUI
@@ -121,6 +129,17 @@ WAREHOUSE = [
          fov=1.20),
 
     # The goods_in end, looking back up the route it departs along.
+    #
+    # COMPROMISED, and kept as the example of what the search cannot see. A
+    # rack upright stands just off the lens and blocks the right third of the
+    # frame. The occupancy raycast passed it: the grid is 5 cm and a rack post
+    # is thinner than that in places, so the ray slipped by, and a post one
+    # metre from the camera hides an angular slice out of all proportion to
+    # the number of cells it occupies.
+    #
+    # The route is genuinely unoccluded from here, exactly as scored. The shot
+    # is still unusable. That is the difference between an occupancy grid and a
+    # frame, and the only instrument that tells them apart is looking.
     dict(name='south', pos=(2.75, -7.75, 0.80), look=(1.17, 1.65, 0.40),
          fov=1.20),
 ]
@@ -140,9 +159,21 @@ TEST_TRACK = [
 
 SHOTS_BY_WORLD = {'warehouse': WAREHOUSE}
 
+# CAMERA MODELS ARE NAMESPACED, because a shot name is not unique in a world.
+#
+# The test track contains a zone marker model called `aisle` and a shot called
+# `aisle`, so spawning the camera collided with the building. `create` exits 0
+# when the name is taken, so the only reason this surfaced at all is the pose
+# readback below, which reported the simulator holding a yaw of -180 degrees
+# for a camera that had been asked for -0.0. Without that check the shot would
+# have filmed from wherever the marker happens to sit.
+#
+# The TOPIC keeps the bare name, so `/film/aisle` still identifies the shot.
+MODEL_PREFIX = 'film_'
+
 SDF = """<?xml version="1.0"?>
 <sdf version="1.10">
-  <model name="{name}">
+  <model name="{model}">
     <static>true</static>
     <link name="link">
       <sensor name="camera" type="camera">
@@ -160,6 +191,23 @@ SDF = """<?xml version="1.0"?>
   </model>
 </sdf>
 """
+
+
+def angle_error(got, want):
+    """Smallest angle between two headings, in radians.
+
+    THE POSE CHECK COMPARED ANGLES BY SUBTRACTION, and a camera aimed straight
+    down an east-west aisle is at exactly pi. `atan2` returns +pi, the
+    simulator reports -pi, the difference is 6.28 rad against a 1e-3 tolerance,
+    and the best shot in the test track was rejected every time as though the
+    spawn had silently failed. The pose was correct in every digit.
+
+    That is the same class of error the check exists to catch, pointed the
+    other way: there a wrong pose was reported as success, here a right one is
+    reported as failure. A tolerance on a circle has to be measured on the
+    circle.
+    """
+    return abs((got - want + math.pi) % (2.0 * math.pi) - math.pi)
 
 
 def aim(pos, look):
@@ -279,7 +327,9 @@ def spawn(shots, world, size, rate, workdir):
 
     # One listing, one removal pass, one confirmation. Polling `gz model -p`
     # per camera took two seconds a call and turned a spawn into four minutes.
-    stale = [s['name'] for s in shots if s['name'] in models(world)]
+    present = models(world)
+    stale = [MODEL_PREFIX + s['name'] for s in shots
+             if MODEL_PREFIX + s['name'] in present]
     for name in stale:
         drop(name, world)
     if stale:
@@ -295,16 +345,17 @@ def spawn(shots, world, size, rate, workdir):
         yaw, pitch = aim(s['pos'], s['look'])
         path = os.path.join(workdir, s['name'] + '.sdf')
         with open(path, 'w') as fh:
-            fh.write(SDF.format(name=s['name'], fov=s['fov'], w=w, h=h,
+            fh.write(SDF.format(model=MODEL_PREFIX + s['name'],
+                                name=s['name'], fov=s['fov'], w=w, h=h,
                                 rate=rate))
         gz_call([
             'ros2', 'run', 'ros_gz_sim', 'create', '-world', world,
-            '-file', path, '-name', s['name'],
+            '-file', path, '-name', MODEL_PREFIX + s['name'],
             '-x', f"{s['pos'][0]:.4f}", '-y', f"{s['pos'][1]:.4f}",
             '-z', f"{s['pos'][2]:.4f}",
             '-R', '0', '-P', f'{pitch:.6f}', '-Y', f'{yaw:.6f}'], timeout=30.0)
 
-        got = pose_of(s['name'], world)
+        got = pose_of(MODEL_PREFIX + s['name'], world)
         if got is None:
             print(f"  {s['name']:6s} FAILED: no such model after create")
             continue
@@ -313,7 +364,8 @@ def spawn(shots, world, size, rate, workdir):
         # 1 mm and 1 mrad. The failure this catches is not a small error, it is
         # the whole previous pose, so the tolerance only has to exclude float
         # formatting.
-        if off > 1e-3 or abs(gp - pitch) > 1e-3 or abs(gyw - yaw) > 1e-3:
+        if (off > 1e-3 or angle_error(gp, pitch) > 1e-3
+                or angle_error(gyw, yaw) > 1e-3):
             print(f"  {s['name']:6s} FAILED: simulator holds "
                   f"({gx:.2f}, {gy:.2f}, {gz_:.2f}) pitch "
                   f"{math.degrees(gp):.1f} yaw {math.degrees(gyw):.1f}, "
@@ -398,6 +450,7 @@ def record(shots, size, rate, duration, outdir):
                            QoSDurabilityPolicy)
     from sensor_msgs.msg import Image
     from tf2_msgs.msg import TFMessage
+    from nav2_msgs.msg import CollisionMonitorState
     import cv2
     import numpy as np
 
@@ -433,10 +486,32 @@ def record(shots, size, rate, duration, outdir):
                 self.rows[n] = csv.writer(fh)
                 self.rows[n].writerow(['frame', 'sim_t', 'visible', 'dist_m',
                                        'px_across', 'speed_mps', 'veh_x',
-                                       'veh_y'])
+                                       'veh_y', 'action', 'polygon'])
                 self.create_subscription(
                     Image, f'/film/{n}',
                     lambda m, n=n: self._frame(m, n), IMG_QOS)
+
+            # WHAT THE SAFETY MONITOR WAS DOING, frame by frame.
+            #
+            # A caption saying "the protective field stops it" is a claim about
+            # the monitor, and until now the only evidence available at cut
+            # time was the vehicle's speed. Speed cannot tell a protective stop
+            # from a goal arrival, a planner pause or a spot turn between
+            # waypoints, so a beat labelled as safety could easily have been
+            # none of it. classify_stops.py sees the real thing but only
+            # aggregates it, and joining its output to the frames would mean
+            # reconciling two processes' clocks.
+            #
+            # So the recorder subscribes to the monitor itself and stamps every
+            # frame with the action in force and the polygon that selected it.
+            # The claim and the picture then come out of one file, on one
+            # clock, and `--events` can only select a stop that actually was
+            # one.
+            self.action = 'clear'
+            self.polygon = ''
+            self.create_subscription(CollisionMonitorState,
+                                     '/collision_monitor_state',
+                                     self._monitor, 20)
 
             self.veh = None          # (x, y, z)
             self.speed = 0.0
@@ -448,6 +523,10 @@ def record(shots, size, rate, duration, outdir):
                            durability=QoSDurabilityPolicy.VOLATILE, depth=10))
             self.t_first = None
             self.t_last = None
+
+        def _monitor(self, msg):
+            self.action = ACTION.get(msg.action_type, 'unknown')
+            self.polygon = msg.polygon_name or ''
 
         def _truth(self, msg):
             for tf in msg.transforms:
@@ -486,7 +565,8 @@ def record(shots, size, rate, duration, outdir):
             self.t_last = t
             s = self.shots[name]
             if self.veh is None:
-                self.rows[name].writerow([i, f'{t:.3f}', 0, '', '', '', '', ''])
+                self.rows[name].writerow([i, f'{t:.3f}', 0, '', '', '', '', '',
+                                          self.action, self.polygon])
                 return
             # 0.55 m: the vehicle's own diagonal half extent, so `px_across`
             # is roughly how many pixels of frame the vehicle occupies.
@@ -494,7 +574,8 @@ def record(shots, size, rate, duration, outdir):
                                     aspect, self.veh, 0.55)
             self.rows[name].writerow([
                 i, f'{t:.3f}', int(vis), f'{dist:.3f}', f'{px * w:.1f}',
-                f'{self.speed:.3f}', f'{self.veh[0]:.3f}', f'{self.veh[1]:.3f}'])
+                f'{self.speed:.3f}', f'{self.veh[0]:.3f}', f'{self.veh[1]:.3f}',
+                self.action, self.polygon])
 
         def close(self):
             for n, wr in self.writers.items():
@@ -530,6 +611,70 @@ def record(shots, size, rate, duration, outdir):
     node.destroy_node()
     rclpy.shutdown()
     return 0
+
+
+def count_frames(path):
+    """How many frames a file holds, without decoding any of them."""
+    try:
+        out = subprocess.run(
+            ['ffprobe', '-v', 'error', '-select_streams', 'v:0',
+             '-count_packets', '-show_entries', 'stream=nb_read_packets',
+             '-of', 'csv=p=0', path],
+            capture_output=True, text=True, timeout=120).stdout.strip()
+        return int(out.split(',')[0])
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        import cv2
+        cap = cv2.VideoCapture(path)
+        n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        cap.release()
+        return max(n, 0)
+
+
+def logs(outdir):
+    """Every camera's per-frame log in a recording, by camera name."""
+    out = {}
+    for path in sorted(os.listdir(outdir)):
+        if path.endswith('.csv'):
+            with open(os.path.join(outdir, path)) as fh:
+                # A row without a stamp is the half written last line of a
+                # recording still in progress, which is exactly when this gets
+                # read to see whether the shoot is worth continuing.
+                out[path[:-4]] = [r for r in csv.DictReader(fh)
+                                  if (r.get('sim_t') or '').strip()]
+    return out
+
+
+def slices(ts, want, step):
+    """Index ranges covering `want` SIMULATED seconds, every `step` seconds.
+
+    THE UNIT THAT SELECTION AND CUTTING HAVE TO SHARE, and for a while they did
+    not. `--report` counted frames and divided by the nominal rate, so it
+    offered a start of "90.0"; `conform` reads that number as simulated seconds
+    since the camera's first frame. Those are the same number only if the
+    camera delivers exactly `rate` frames per simulated second, which is the
+    one thing this file's docstring says it never does. Measured on the
+    recording this was found in: 610 frames over 43.0 s of simulated time on
+    one camera and 305 over 44.5 s on another, so the printed offsets were
+    short by a factor of 2.1 and 4.4.
+
+    The selector was therefore scoring one moment and the cut was taking a
+    different one, with nothing in the output to show it: the clip still ran at
+    true speed, still held the vehicle in frame often enough to look deliberate,
+    and simply was not the window that had been ranked. Both ends now work in
+    simulated seconds, which is the clock the frames carry.
+    """
+    import bisect
+    out = []
+    i = 0
+    n = len(ts)
+    while i < n:
+        if ts[i] + want > ts[-1]:
+            break
+        stop = bisect.bisect_right(ts, ts[i] + want)
+        out.append((i, stop))
+        nxt = bisect.bisect_left(ts, ts[i] + step)
+        i = max(i + 1, nxt)
+    return out
 
 
 def hold_indices(stamps, start, length, rate):
@@ -579,28 +724,46 @@ def conform(outdir, name, start, length, rate, dest):
 
     with open(os.path.join(outdir, f'{name}.csv')) as fh:
         stamps = [float(r['sim_t']) for r in csv.DictReader(fh)]
-    cap = cv2.VideoCapture(os.path.join(outdir, f'{name}.mp4'))
-    frames = []
-    while True:
-        ok, img = cap.read()
-        if not ok:
-            break
-        frames.append(img)
-    cap.release()
-    n = min(len(frames), len(stamps))
+    # ONLY THE FRAMES THE CLIP NEEDS ARE KEPT. Decoding the whole file into a
+    # list costs 2.7 MB a frame at 720p, so a twenty five minute recording is
+    # tens of gigabytes and the machine starts swapping while ffmpeg is still
+    # waiting. The output indices are known before any pixels are read, so the
+    # decoder walks the file once and keeps only the span between the first and
+    # last of them.
+    total = count_frames(os.path.join(outdir, f'{name}.mp4'))
+    n = min(total, len(stamps))
+    if n:
+        idx = hold_indices(stamps[:n], start, length, rate)
+        lo, hi = (min(idx), max(idx)) if idx else (0, -1)
+        cap = cv2.VideoCapture(os.path.join(outdir, f'{name}.mp4'))
+        frames = {}
+        k = 0
+        while k <= hi:
+            ok, img = cap.read()
+            if not ok:
+                break
+            if k >= lo:
+                frames[k] = img
+            k += 1
+        cap.release()
+    else:
+        frames, idx = {}, []
     if not n:
         print(f'{name}: nothing to cut')
         return None
     # The recorder writes the CSV row and the video frame together, so a length
     # mismatch means one of them was truncated, not that they are misaligned.
-    if abs(len(frames) - len(stamps)) > 2:
-        print(f'  {name}: {len(frames)} frames but {len(stamps)} log rows, '
+    if abs(total - len(stamps)) > 2:
+        print(f'  {name}: {total} frames but {len(stamps)} log rows, '
               f'using {n}')
+    if not idx or min(idx) not in frames:
+        print(f'  {name}: +{start:.1f}s is past the end of the recording')
+        return None
+    first = frames[min(idx)]
     out = cv2.VideoWriter(dest, cv2.VideoWriter_fourcc(*'mp4v'), float(rate),
-                          (frames[0].shape[1], frames[0].shape[0]))
-    idx = hold_indices(stamps[:n], start, length, rate)
+                          (first.shape[1], first.shape[0]))
     for i in idx:
-        out.write(frames[i])
+        out.write(frames.get(i, first))
     out.release()
     used = set(idx)
     print(f'  {name} +{start:5.1f}s for {length:4.1f}s -> {len(used):4d} '
@@ -608,7 +771,7 @@ def conform(outdir, name, start, length, rate, dest):
     return dest
 
 
-def report(outdir, rate, want, min_px, min_speed):
+def report(outdir, rate, want, min_px, min_speed, max_px):
     """Rank the windows in which the vehicle is actually visible and moving.
 
     This is the part that the first cut of the video did by eye, and got wrong
@@ -617,28 +780,32 @@ def report(outdir, rate, want, min_px, min_speed):
     scores zero however well framed it is.
     """
     best = []
-    for path in sorted(os.listdir(outdir)):
-        if not path.endswith('.csv'):
+    for name, rows in sorted(logs(outdir).items()):
+        ts = [float(r['sim_t']) for r in rows]
+        if len(ts) < 2 or ts[-1] - ts[0] < want:
+            print(f'{name}: only {ts[-1] - ts[0] if ts else 0:.1f} s of '
+                  f'simulated time, shorter than {want:.0f} s')
             continue
-        name = path[:-4]
-        with open(os.path.join(outdir, path)) as fh:
-            rows = list(csv.DictReader(fh))
-        n = int(round(want * rate))
-        if len(rows) < n:
-            print(f'{name}: only {len(rows)} frames, shorter than {want:.0f} s')
-            continue
-        for start in range(0, len(rows) - n, max(1, int(rate // 2))):
-            win = rows[start:start + n]
+        for start, stop in slices(ts, want, 0.5):
+            win = rows[start:stop]
             vis = [r for r in win if r['visible'] == '1' and r['px_across']]
-            if len(vis) < 0.75 * n:
+            # A WINDOW WITH ALMOST NO FRAMES IN IT is not a good shot however
+            # well it scores. The frame rate collapses to a few Hz when the
+            # scene is expensive, and a window holding four frames would be
+            # four stills held for two seconds each.
+            if len(win) < max(4, want * 3) or len(vis) < 0.75 * len(win):
                 continue
             px = sum(float(r['px_across']) for r in vis) / len(vis)
             sp = sum(float(r['speed_mps']) for r in vis if r['speed_mps']) / \
                 max(1, len([r for r in vis if r['speed_mps']]))
-            if px < min_px or sp < min_speed:
+            # TOO CLOSE IS ALSO A BAD SHOT, and it outranks everything else
+            # if the score is size times speed: the first ranking was topped
+            # by windows where the vehicle was 2827 px across on a 1280 px
+            # frame, which is it driving over the lens.
+            if px < min_px or px > max_px or sp < min_speed:
                 continue
-            best.append((px * sp, name, start / rate, px, sp,
-                         len(vis) / float(n)))
+            best.append((px * sp, name, ts[start] - ts[0], px, sp,
+                         len(vis) / float(len(win))))
     best.sort(reverse=True)
     print(f'\n{"cam":8s} {"ss":>7s} {"px":>7s} {"m/s":>6s} {"inframe":>8s}')
     for score, name, ss, px, sp, frac in best[:18]:
@@ -646,6 +813,92 @@ def report(outdir, rate, want, min_px, min_speed):
     if not best:
         print('nothing passed the gates; loosen --min-px or --min-speed')
     return best
+
+
+def events(outdir, want, min_px, max_px, lead):
+    """Windows where the SAFETY MONITOR FIRED and the vehicle was in frame.
+
+    `--report` ranks on size and motion, which is what a establishing shot
+    needs and is the wrong instrument for the one beat that makes a claim. A
+    caption reading "a person steps out and the protective field stops it" is a
+    statement about the collision monitor, and motion alone cannot support it:
+    the vehicle also stops when it reaches a goal, when the planner is thinking
+    and between waypoints, and all four look identical from a camera on a wall.
+
+    The recorder stamps every frame with the action the monitor had in force
+    and the polygon that selected it, so a stop can be found rather than
+    inferred, and the polygon name says which field did it. A window is offered
+    only if the stop happened inside it while the vehicle was framed.
+
+    The window opens `lead` seconds BEFORE the monitor fires, because the beat
+    is the approach and the stop together. Starting it on the stop itself gives
+    a clip of a vehicle that is already stationary, which is the mistake the
+    first cut of this video made in a different form.
+    """
+    found = []
+    for name, rows in sorted(logs(outdir).items()):
+        ts = [float(r['sim_t']) for r in rows]
+        if len(ts) < 2:
+            continue
+        t0 = ts[0]
+        i = 0
+        while i < len(rows):
+            if (rows[i].get('action') or 'clear') == 'clear':
+                i += 1
+                continue
+            # One episode: consecutive non-clear frames, allowing a short
+            # flicker back to clear without splitting the beat in two.
+            j = i
+            last = i
+            while j < len(rows) and ts[j] - ts[last] < 1.0:
+                if (rows[j].get('action') or 'clear') != 'clear':
+                    last = j
+                j += 1
+            ep = rows[i:last + 1]
+            # THE MOST SEVERE ACTION IN THE EPISODE, not the most common one.
+            # A majority vote labelled an episode `clear`, because the flicker
+            # tolerance above deliberately spans frames where the monitor had
+            # already released and the beat is named for what it did at its
+            # worst, not for what it spent most of its frames doing.
+            act = min((r['action'] for r in ep if r.get('action')),
+                      key=lambda a: SEVERITY.get(a, 99), default='clear')
+            poly = next((r['polygon'] for r in ep
+                         if r['polygon'] and r['action'] == act), '')
+            # HOW LONG IT WAS ACTUALLY HELD, which decides whether the beat can
+            # be seen at all. A stop that lasts one frame is a real monitor
+            # event and a twitch on camera; captioning it as the field stopping
+            # the vehicle would be true and unsupported by the picture.
+            firing = [k for k in range(i, last + 1)
+                      if (rows[k].get('action') or 'clear') != 'clear']
+            held = ts[firing[-1]] - ts[firing[0]] if firing else 0.0
+            # The window around it, in simulated seconds from this camera's
+            # first frame, which is the unit --cut takes.
+            ss = max(0.0, (ts[i] - t0) - lead)
+            lo = next((k for k in range(len(ts)) if ts[k] - t0 >= ss), 0)
+            hi = next((k for k in range(lo, len(ts))
+                       if ts[k] - t0 >= ss + want), len(ts) - 1)
+            win = rows[lo:hi + 1]
+            vis = [r for r in win if r['visible'] == '1' and r['px_across']]
+            if len(win) >= max(4, want * 3) and len(vis) >= 0.6 * len(win):
+                px = sum(float(r['px_across']) for r in vis) / len(vis)
+                if min_px <= px <= max_px:
+                    found.append((-SEVERITY.get(act, 99), held,
+                                  len(vis) / float(len(win)), name, ss, act,
+                                  poly, px))
+            i = j
+    # Severest first, then longest held, then best framed. Ranking on framing
+    # alone put a one frame stop above a stop that held the vehicle for a
+    # second and a half, and only the second one can be seen.
+    found.sort(reverse=True)
+    print(f'\n{"cam":8s} {"ss":>7s} {"action":>9s} {"held":>6s} {"px":>6s} '
+          f'{"inframe":>8s}  polygon')
+    for _, held, frac, name, ss, act, poly, px in found[:18]:
+        print(f'{name:8s} {ss:7.1f} {act:>9s} {held:5.1f}s {px:6.0f} '
+              f'{frac * 100:7.0f}%  {poly}')
+    if not found:
+        print('no monitor event with the vehicle in frame; '
+              'the run may not have had one')
+    return found
 
 
 def main():
@@ -672,6 +925,12 @@ def main():
                          '"aisle:12.5:8,pass:40:7" as camera:start_s:length_s. '
                          'Start is measured from the first frame of that '
                          'camera, which is what --report prints.')
+    ap.add_argument('--events', action='store_true',
+                    help='list windows where the collision monitor fired and '
+                         'the vehicle was in frame, for the safety beat')
+    ap.add_argument('--lead', type=float, default=4.0,
+                    help='--events: seconds of approach to include before the '
+                         'monitor fires')
     ap.add_argument('--report', action='store_true',
                     help='rank shot candidates from an existing recording')
     ap.add_argument('--want', type=float, default=7.0,
@@ -679,6 +938,9 @@ def main():
     ap.add_argument('--min-px', type=float, default=90.0,
                     help='--report: reject windows where the vehicle is '
                          'smaller than this many pixels across')
+    ap.add_argument('--max-px', type=float, default=700.0,
+                    help='--report: reject windows where it is so close it '
+                         'fills the frame')
     ap.add_argument('--min-speed', type=float, default=0.15,
                     help='--report: reject windows where it is barely moving')
     args = ap.parse_args()
@@ -698,9 +960,13 @@ def main():
         print('\n'.join(made))
         return 0 if made else 1
 
+    if args.events:
+        return 0 if events(outdir, args.want, args.min_px, args.max_px,
+                           args.lead) else 1
+
     if args.report:
         return 0 if report(outdir, args.rate, args.want, args.min_px,
-                           args.min_speed) else 1
+                           args.min_speed, args.max_px) else 1
 
     world = args.world.format(platform=args.platform)
     shots = SHOTS_BY_WORLD.get(world)
@@ -746,7 +1012,7 @@ def main():
         # Take the tripods back out. A camera left in the world would show up
         # in the next run's entity list and confuse anyone reading it.
         for s in live:
-            drop(s['name'], world)
+            drop(MODEL_PREFIX + s['name'], world)
     return rc
 
 
