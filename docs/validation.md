@@ -4247,3 +4247,81 @@ Deliberately, since giving it collision would let it snag on racking the
 protective fields were never sized to clear. The consequence is that the model
 cannot answer the question a real deployment would ask first, and it should not
 be quoted as though it had.
+
+---
+
+## V-61. The load does not slide, it turns, and the number I first reported was a placement offset
+
+The payload is now a body on the deck held by friction alone, so whether it
+stays there is a result. The prediction was explicit and quantitative, which is
+the only reason it could be seen to fail.
+
+### The prediction
+
+An unsecured load moves when deceleration exceeds `mu * g`. At the 0.35 in the
+payload model that is 3.43 m/s2, and V-60 measured protective stops at 3.49 and
+4.08 m/s2. A stop at 4.08 exceeds the limit by 0.65 m/s2 for about 190 ms,
+which is **11.5 mm of relative travel per hard stop**, accumulating over a duty
+cycle.
+
+### The measurement
+
+| | over 80 848 samples, 3 loads, 2 delivered |
+|---|---|
+| translation | **0.0 mm** |
+| rotation | **3.79 degrees** |
+| loads that left the plate | none |
+
+**The prediction did not verify.** The load does not creep. It turns on the
+spot while its centre stays put.
+
+Two candidates, neither established: the deceleration in V-60 is derived from
+stopping distance and is therefore an AVERAGE over the stop rather than the
+peak the load feels, and Gazebo's friction is a constraint solver rather than a
+Coulomb model, so a sub-millimetre slip budget is close to its resolution.
+Choosing between them needs a directed experiment, not another mission run.
+
+### What I reported first, and why it was wrong
+
+Before the probe existed, a spot check put the box at fore -0.0078 m relative
+to the vehicle and I called that 7.8 mm of creep. It is not. The box is placed
+at the vehicle's BELIEVED pose, from `map` to `base_link`, so its offset from
+the vehicle's TRUE pose is the localisation error at the moment of placement.
+It was baked in at the spawn and never changed.
+
+**I measured a constant and called it a rate.** The probe avoids it by
+construction: displacement is measured from where the load STARTED, not from
+the vehicle's centre, so a placement offset cancels on the first sample.
+
+### The probe's own blind spot, found the same way
+
+Its first version tracked translation only and reported `0.0 mm`, which reads
+as "the load did not move" and was false: the box had turned 3.79 degrees. A
+load that has rotated on the deck has moved, and on a pallet with a lip it is
+the rotation that jams rather than the slide. Rotation is measured now.
+
+This is the third measurement in this project to be wrong by leaving out the
+quantity that was actually changing, after V-52's clock and V-56's pairing.
+
+### What the pick and place does and does not claim
+
+Three loads picked, two delivered onto the table in their slots. The vehicle
+has no lifting mechanism and none is claimed: `DetachableJoint` starts attached
+and gz-sim 8.11 has no `suppress_initial_attach`, so a joint cannot be made
+where a box was set down and re-made when the vehicle returns. Placement at the
+plate is the honest version of a pick.
+
+Braking with a resting load implies 4.10 m/s2 from the fastest stop against
+4.08 welded, so the coupling does not change the braking figure and V-60 holds
+for both.
+
+### Two defects fixed on the way
+
+`ros2 run ros_gz_sim set_entity_pose` **hangs**, verified by hand against a
+live simulator. Inside the mission it raised `TimeoutExpired` after 30 seconds
+and killed the run at its first delivery, losing three cycles of navigation
+data to a cargo tool. The `gz service` beneath it answers in milliseconds.
+
+That a cargo tool could kill the mission at all is the larger defect. Load
+handling is something the mission DOES, not something it depends on, and every
+simulator call now degrades to a warning.

@@ -244,6 +244,22 @@
         </visual>
       </link>
     </model>
+    <model name="delivery_table">
+      <static>true</static>
+      <pose>39.5000 8.1783 0.2000 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>0.8000 0.8000 0.4000</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.8000 0.8000 0.4000</size></box></geometry>
+          <material>
+            <ambient>0.42 0.45 0.50 1</ambient>
+            <diffuse>0.42 0.45 0.50 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
     <model name="mark_home">
       <static>true</static>
       <pose>4.5000 5.8033 0.005 0 0 0</pose>

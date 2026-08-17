@@ -54,11 +54,13 @@ people, and they are the number an intralogistics customer actually asks about.
 """
 
 import math
+import subprocess
 import sys
 import time
 from pathlib import Path
 
 import rclpy
+import tf2_ros
 import yaml
 from ament_index_python.packages import get_package_share_directory
 from action_msgs.msg import GoalStatus
@@ -131,6 +133,46 @@ class TransportTask(Node):
         # THE RECOVERY FOR A PLANNER THAT WILL NOT START. See nudge().
         self.backup = ActionClient(self, BackUp, 'backup')
         self.nudges = 0
+
+        # THE LOAD AS A BODY. Off by default, so every figure measured before
+        # this existed stays comparable and a run that does not ask for it is
+        # exactly the run it was.
+        self.physical_load = self.declare_parameter('physical_load', False).value
+        self.plate_height = self.declare_parameter('plate_height', 0.381).value
+        self.world = self.declare_parameter('world', 'test_track').value
+        self.load_model = Path(
+            get_package_share_directory('amr_sim')) / 'models' / 'payload_klt' / 'model.sdf'
+        self.load_name = None
+        self.load_serial = 0
+        self.delivered = 0
+        # WHERE A DELIVERY GOES, from the same file the stations come from, so
+        # the table the generator built and the place the box is put down
+        # cannot drift apart. Absent on a world that has no table, and the run
+        # says so rather than dropping cargo at the origin.
+        self.setdown = spec.get('setdown')
+        # THE MAP FRAME IS NOT THE WORLD FRAME, and the simulator only speaks
+        # world. Every goal above is in the map frame because the vehicle
+        # drives to it; the spawn service takes world coordinates, and the two
+        # differ by exactly where the vehicle was spawned.
+        #
+        # Measured the wrong way round first: a box asked for at map (-2.05,
+        # -0.07) was created at world (-2.05, -0.07), which is outside the
+        # building, and it dropped to the floor while the vehicle drove to
+        # dispatch carrying nothing. The run looked normal.
+        self.spawn_world = spec['spawn']
+        if abs(float(self.spawn_world.get('yaw', 0.0))) > 1e-6:
+            raise SystemExit(
+                'the spawn pose has a non-zero yaw, so map to world is a '
+                'rotation and not the translation map_to_world() assumes')
+        if self.physical_load and self.setdown is None:
+            self.get_logger().warn(
+                f'{path} carries no set down pose, so delivered loads will '
+                f'stay on the plate')
+        # Only built when the load is physical, because a tf listener on a node
+        # that never looks anything up is a subscription doing nothing.
+        if self.physical_load:
+            self.tf_buffer = tf2_ros.Buffer()
+            self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
         self.state_pub = self.create_publisher(String, '/mission/state', 10)
 
         self.odom_total = 0.0
@@ -238,6 +280,12 @@ class TransportTask(Node):
         which is exactly what a smoother enforces.
         """
         self.carrying = carrying
+        # THE LOAD ITSELF, as a body that can fall off. See spawn_load().
+        # Done before the limit change so that if spawning fails the run says
+        # so while still unladen, rather than driving a laden acceleration
+        # limit with nothing on the plate.
+        if self.physical_load:
+            self.spawn_load() if carrying else self.remove_load()
         target = self.accel_laden if carrying else self.accel_unladen
         cli = self.create_client(SetParameters,
                                  '/velocity_smoother/set_parameters')
@@ -311,6 +359,166 @@ class TransportTask(Node):
                 f'{station["name"]}: ended with status {status}')
             return False
         return True
+
+    # ---- the load, as a body rather than as a number ---------------------
+
+    def spawn_load(self):
+        """Put a 100 kg box on the plate, held there by friction alone.
+
+        WHY IT IS NOT WELDED. A fixed joint would carry the mass, which is what
+        V-60 measured, and would make the question of whether the load stays on
+        unanswerable by construction. Nothing holds this but the friction
+        between the box and the deck, so sliding and falling off are outcomes
+        the physics is allowed to produce.
+
+        The box is placed at the vehicle's current pose plus the plate height,
+        which is a PICK in the only sense this simulation supports: gz-sim
+        8.11's DetachableJoint starts attached and has no
+        suppress_initial_attach, so a joint cannot be created where a box was
+        set down and re-made when the vehicle comes back for the next one.
+        Spawning at the plate is the honest version of that, and calling it a
+        pick would be overstating it. The vehicle has no lifting mechanism and
+        none is claimed.
+        """
+        pose = self.vehicle_pose()
+        if pose is None:
+            self.get_logger().warn(
+                'no vehicle pose, so no load was placed; this cycle carries '
+                'nothing and the figures are unladen')
+            return False
+        x, y, yaw = self.map_to_world(*pose)
+        # Clear of the deck by a millimetre so it settles onto the plate rather
+        # than starting interpenetrated, which resolves as a launch.
+        z = self.plate_height + 0.101
+        name = f'payload_{self.load_serial}'
+        self.load_serial += 1
+        cmd = ['ros2', 'run', 'ros_gz_sim', 'create',
+               '-world', self.world, '-name', name,
+               '-file', str(self.load_model),
+               '-x', f'{x:.4f}', '-y', f'{y:.4f}', '-z', f'{z:.4f}',
+               '-Y', f'{yaw:.4f}']
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        except (subprocess.TimeoutExpired, OSError) as exc:   # noqa: BLE001
+            self.get_logger().warn(f'load spawn did not answer: {exc}')
+            return False
+        if r.returncode != 0:
+            self.get_logger().warn(f'load spawn failed: {r.stderr[:200]}')
+            return False
+        self.load_name = name
+        self.get_logger().info(
+            f'placed {name} on the plate at ({x:.2f}, {y:.2f}), '
+            f'held by friction only')
+        return True
+
+    def remove_load(self):
+        """Set the box down on the delivery table.
+
+        It used to be deleted, which is tidy and dishonest: a transport task
+        whose cargo vanishes on arrival has not delivered anything, and the
+        run looks identical whether the load was carried or never existed.
+
+        The table is generated beside the dispatch station and its pose comes
+        from the same file as the stations, so the two cannot disagree.
+
+        Boxes accumulate across cycles in a 2 by 2 grid on the 0.8 m table,
+        which is why the slot follows the delivery count rather than being
+        fixed. A fourth delivery would stack on the first, and with the default
+        three cycles that does not arise; if it ever does the run will show a
+        box balanced on a box, which is a visible wrong answer rather than a
+        silent one.
+        """
+        if not self.load_name:
+            return False
+        if self.setdown is None:
+            self.get_logger().warn(
+                'no set down pose in the stations file, so the load was left '
+                'on the plate and is still being carried')
+            return False
+
+        slot = self.delivered % 4
+        dx = 0.2 if slot in (1, 2) else -0.2
+        dy = 0.2 if slot in (2, 3) else -0.2
+        z = self.setdown['top_z'] + 0.101
+
+        # THE GZ SERVICE DIRECTLY, not `ros2 run ros_gz_sim set_entity_pose`.
+        # That wrapper hangs: run by hand against a live simulator it never
+        # returns, and inside the mission it raised TimeoutExpired after 30
+        # seconds and killed the run at the first delivery. The service under
+        # it answers in milliseconds.
+        r = self.gz_call(
+            f'/world/{self.world}/set_pose', 'gz.msgs.Pose',
+            f'name: "{self.load_name}", position: '
+            f'{{x: {self.setdown["x"] + dx:.4f}, '
+            f'y: {self.setdown["y"] + dy:.4f}, z: {z:.4f}}}')
+        if not r:
+            self.get_logger().warn('set down failed; the load is still carried')
+            return False
+        self.delivered += 1
+        self.get_logger().info(
+            f'set {self.load_name} down on the delivery table, slot {slot}, '
+            f'{self.delivered} delivered')
+        self.load_name = None
+        return True
+
+    def gz_call(self, service, reqtype, req):
+        """One Gazebo service call, and never a reason to abort the mission.
+
+        EVERY failure here returns False rather than raising. A transport run
+        died at its first delivery because a subprocess timeout propagated out
+        of the load handling and took the whole mission with it: three cycles
+        of navigation data lost to a cargo tool. Load handling is a thing the
+        mission does, not a thing it depends on, and it must degrade to a
+        warning.
+        """
+        try:
+            r = subprocess.run(
+                ['gz', 'service', '-s', service,
+                 '--reqtype', reqtype, '--reptype', 'gz.msgs.Boolean',
+                 '--timeout', '5000', '--req', req],
+                capture_output=True, text=True, timeout=15)
+        except (subprocess.TimeoutExpired, OSError) as exc:   # noqa: BLE001
+            self.get_logger().warn(f'{service} did not answer: {exc}')
+            return False
+        if r.returncode != 0 or 'true' not in r.stdout:
+            self.get_logger().warn(
+                f'{service} refused: {(r.stdout + r.stderr)[:200]}')
+            return False
+        return True
+
+    def map_to_world(self, x, y, yaw):
+        """Map frame to world frame, which is a translation by the spawn pose.
+
+        Valid only while the spawn yaw is zero, which the constructor asserts
+        rather than assumes. With a rotated spawn this would need the full
+        transform and would be wrong in a way that looks like a small offset.
+        """
+        return (x + float(self.spawn_world['x']),
+                y + float(self.spawn_world['y']),
+                yaw)
+
+    def vehicle_pose(self):
+        """Where the vehicle is, from tf, for placing the load.
+
+        map to base_link, which is localisation rather than ground truth. That
+        is deliberate: the placement is part of the SIMULATED WORLD, and using
+        the oracle to position a physical object would make the load's position
+        depend on something the vehicle cannot know. A real forklift places a
+        box where it believes itself to be, and gets that wrong by exactly the
+        localisation error.
+        """
+        try:
+            tf = self.tf_buffer.lookup_transform(
+                'map', 'base_link', rclpy.time.Time(),
+                timeout=rclpy.duration.Duration(seconds=2.0))
+        except Exception as exc:                       # noqa: BLE001
+            self.get_logger().warn(f'no transform for the load: {exc}')
+            return None
+        p = tf.transform.translation
+        q = tf.transform.rotation
+        yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y),
+                         1.0 - 2.0 * (q.y * q.y + q.z * q.z))
+        return p.x, p.y, yaw
 
     def nudge(self):
         """Reverse 0.15 m so the planner has a different cell to start from.

@@ -33,8 +33,10 @@
 #   tools/run_stack.sh --run mission --latency    also measure control_latency
 #   tools/run_stack.sh --run mission --contacts   also measure contact with people
 #   tools/run_stack.sh --run mission --social     also measure proxemic distance
-#   tools/run_stack.sh --payload 100             carry the rated load
+#   tools/run_stack.sh --payload 100             carry the rated load, welded
+#   tools/run_stack.sh --physical-load           carry it as a box that can fall off
 #   tools/run_stack.sh --run mission --braking   also measure stopping distance
+#   tools/run_stack.sh --physical-load --load    also measure whether it stays on
 #   tools/run_stack.sh --no-gate              measure anyway if preflight fails
 #   tools/run_stack.sh --platform mir250_class the second platform
 #   tools/run_stack.sh --test-track            the datasheet-sized test track
@@ -84,6 +86,8 @@ CONTACTS=false
 SOCIAL=false
 PAYLOAD=0.0
 BRAKING=false
+PHYSICAL_LOAD=false
+LOADPROBE=false
 GATE=true
 CYCLES=2
 
@@ -104,6 +108,8 @@ while [ $# -gt 0 ]; do
     --social) SOCIAL=true; shift ;;
     --payload) PAYLOAD="${2:?--payload needs a mass in kg}"; shift 2 ;;
     --braking) BRAKING=true; shift ;;
+    --physical-load) PHYSICAL_LOAD=true; shift ;;
+    --load) LOADPROBE=true; shift ;;
     --no-gate) GATE=false; shift ;;
     -h|--help)
       # The usage block is the comment header of this file, so there is one
@@ -375,6 +381,24 @@ fi
 # estimate and the deceleration comes from a single published rating that the
 # MP-400 manual does not distinguish by load, so a laden run measures an
 # assumption nobody has tested.
+# WHETHER THE CARGO STAYS WHERE IT WAS PUT. The load rides on friction alone,
+# so this is a result rather than an assumption, and it is the question a real
+# deployment asks before it asks about cycle times.
+if [ "$LOADPROBE" = true ]; then
+  read -r LHL LHW < <(python3 - "$PLATFORM" <<'EOF'
+import pathlib, sys, yaml
+spec = yaml.safe_load((pathlib.Path('src/amr_description/config/platforms')
+                       / f'{sys.argv[1]}.yaml').read_text())['values']
+print(spec['chassis_length'] / 2.0, spec['chassis_width'] / 2.0)
+EOF
+)
+  python3 -u tools/measure_load.py --ros-args -p duration_s:=2400.0 \
+          -p half_length:="$LHL" -p half_width:="$LHW" \
+          > "$RUN/load.log" 2>&1 &
+  LDP=$!
+  say "load probe running"
+fi
+
 if [ "$BRAKING" = true ]; then
   python3 -u tools/measure_braking.py --ros-args -p duration_s:=2400.0 \
           > "$RUN/braking.log" 2>&1 &
@@ -486,7 +510,9 @@ case "$TASK" in
     done
     say "controller idle after survey (${quiet}s quiet)"
     ros2 launch amr_mission transport.launch.py cycles:=$CYCLES \
-        platform:=$PLATFORM stations_file:="$STATIONS" > "$RUN/mission.log" 2>&1
+        platform:=$PLATFORM stations_file:="$STATIONS" \
+        physical_load:=$PHYSICAL_LOAD world:="$WORLD" \
+        > "$RUN/mission.log" 2>&1
     MISSION_RC=$?
     # AND THE LOG, BECAUSE THE EXIT CODE IS A LIE. `ros2 launch` returns 0
     # whatever its nodes did, and `on_exit=Shutdown()` does not change that:
@@ -501,7 +527,9 @@ case "$TASK" in
     say "mission exited $MISSION_RC" ;;
   mission)
     ros2 launch amr_mission transport.launch.py cycles:=$CYCLES \
-        platform:=$PLATFORM stations_file:="$STATIONS" > "$RUN/mission.log" 2>&1
+        platform:=$PLATFORM stations_file:="$STATIONS" \
+        physical_load:=$PHYSICAL_LOAD world:="$WORLD" \
+        > "$RUN/mission.log" 2>&1
     MISSION_RC=$?
     # AND THE LOG, BECAUSE THE EXIT CODE IS A LIE. `ros2 launch` returns 0
     # whatever its nodes did, and `on_exit=Shutdown()` does not change that:
@@ -559,6 +587,11 @@ if [ "$BRAKING" = true ]; then
   kill -INT ${BRK:-} 2>/dev/null
   wait ${BRK:-} 2>/dev/null
   say "braking probe done; see $RUN/braking.log"
+fi
+if [ "$LOADPROBE" = true ]; then
+  kill -INT ${LDP:-} 2>/dev/null
+  wait ${LDP:-} 2>/dev/null
+  say "load probe done; see $RUN/load.log"
 fi
 if [ "$TRACK" = true ]; then
   wait ${TRK:-} 2>/dev/null

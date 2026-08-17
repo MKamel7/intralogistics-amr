@@ -95,6 +95,19 @@ def stations_file(context):
                / 'config' / 'stations.yaml')
 
 
+def plate_height(context):
+    """Where a load actually rests, from the platform spec.
+
+    top_plate_height, not chassis_height. On the MP-400 those are H2 at 381 mm
+    and H1 at 411 mm, and a box placed 30 mm above the plate drops onto the
+    deck on the first physics step, which reads as the load bouncing.
+    """
+    platform = LaunchConfiguration('platform').perform(context)
+    spec = Path(get_package_share_directory('amr_description')) \
+        / 'config' / 'platforms' / f'{platform}.yaml'
+    return float(yaml.safe_load(spec.read_text())['values']['top_plate_height'])
+
+
 def make_node(context):
     laden, unladen = accel_limits(LaunchConfiguration('platform').perform(context))
 
@@ -126,6 +139,11 @@ def make_node(context):
             # which is the correct behaviour rather than a special case.
             'accel_laden': laden,
             'accel_unladen': unladen,
+            # THE LOAD AS A BODY RATHER THAN AS A NUMBER. Off by default so
+            # every figure measured before it existed stays comparable.
+            'physical_load': LaunchConfiguration('physical_load'),
+            'plate_height': plate_height(context),
+            'world': LaunchConfiguration('world'),
         }])]
 
 
@@ -133,6 +151,11 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('cycles', default_value='3'),
         DeclareLaunchArgument('handling_time_s', default_value='5.0'),
+        DeclareLaunchArgument(
+            'physical_load', default_value='false',
+            description='place a real 100 kg box on the plate, held by '
+                        'friction only, so whether it stays on is measured'),
+        DeclareLaunchArgument('world', default_value='test_track'),
         DeclareLaunchArgument('use_sim_time', default_value='true'),
         # Must match the platform the stack was brought up with. run_stack.sh
         # passes the same value to every launch that needs it.

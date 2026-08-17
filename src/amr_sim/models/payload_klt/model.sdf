@@ -1,0 +1,72 @@
+<?xml version="1.0"?>
+<sdf version="1.10">
+  <!-- A LOAD THAT CAN FALL OFF, WHICH IS THE POINT.
+
+       The earlier model welded the payload to the chassis as a URDF link with
+       a fixed joint. That measures what the mass does to the vehicle, which is
+       V-60, and it cannot answer the question a real deployment asks first:
+       does the load stay on the plate.
+
+       Here it is a separate rigid body resting on the deck. Nothing holds it
+       but friction, so sliding, rotating and falling off are all outcomes the
+       physics is allowed to produce.
+
+       THE BINDING NUMBER IS THE FRICTION COEFFICIENT, not the mass. An
+       unsecured load begins to slide when the deceleration exceeds mu * g:
+
+           mu 0.30 -> 2.94 m/s2
+           mu 0.35 -> 3.43 m/s2
+           mu 0.40 -> 3.92 m/s2
+
+       and V-60 measured protective stops at 3.49 m/s2 unladen and 4.08 laden.
+       So this is not a comfortable margin either way, and the answer depends
+       on a coefficient rather than on anything the vehicle does. -->
+  <model name="payload_klt">
+    <link name="link">
+      <!-- 100 kg, the MP-400's rated top plate payload, in a 400 x 400 x 200
+           mm box. That is a Euro half pallet footprint, which is what a load
+           of this mass on a vehicle this size actually is. -->
+      <inertial>
+        <mass>100.0</mass>
+        <!-- Box inertia for 0.4 x 0.4 x 0.2 m at 100 kg:
+             Ixx = Iyy = m(y^2 + z^2)/12 = 100(0.16 + 0.04)/12 = 1.6667
+             Izz = m(x^2 + y^2)/12       = 100(0.16 + 0.16)/12 = 2.6667 -->
+        <inertia>
+          <ixx>1.6667</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>1.6667</iyy><iyz>0</iyz>
+          <izz>2.6667</izz>
+        </inertia>
+      </inertial>
+      <collision name="collision">
+        <geometry><box><size>0.400 0.400 0.200</size></box></geometry>
+        <surface>
+          <friction>
+            <ode>
+              <!-- 0.35, ESTIMATED, and it is the parameter this whole model
+                   turns on. A plastic KLT container on a painted steel or
+                   anodised aluminium deck sits in the 0.3 to 0.4 range for
+                   static friction; no datasheet publishes it for this pairing
+                   because it is a property of two surfaces rather than of the
+                   vehicle.
+
+                   It is carried here rather than in the platform spec on
+                   purpose: it belongs to the LOAD and the deck together, not
+                   to the robot, and putting it in the platform spec would
+                   invite it being read as a vehicle property the way the
+                   MiR250 self filter margin once was. See V-46. -->
+              <mu>0.35</mu>
+              <mu2>0.35</mu2>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+      <visual name="visual">
+        <geometry><box><size>0.400 0.400 0.200</size></box></geometry>
+        <material>
+          <ambient>0.85 0.45 0.10 1</ambient>
+          <diffuse>0.90 0.55 0.10 1</diffuse>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>

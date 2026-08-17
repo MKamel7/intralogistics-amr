@@ -25,3 +25,8 @@ stations:
 route:
 - goods_in
 - dispatch
+setdown:
+  x: 39.5
+  y: 7.882
+  top_z: 0.4
+  note: world frame, for the simulator, not a nav goal

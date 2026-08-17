@@ -570,7 +570,32 @@ def build_world(spec, platform):
         'goods_in': (2.5, (a2_lo + a2_hi) / 2.0, 0.0),
         'dispatch': (INTERIOR_X - 2.5, bay_ys[1], 0.0),
     }
+
+    # A SET DOWN TABLE BESIDE THE DISPATCH STATION, so a delivered load has
+    # somewhere to go. Before this the mission deleted the box at the station,
+    # which is tidy and dishonest: a transport task that makes its cargo vanish
+    # on arrival has not delivered anything.
+    #
+    # BESIDE, NOT IN FRONT. The vehicle stops with its centre on the station
+    # and its own footprint reaches 0.28 m to each side, so a table on the
+    # approach line would be an obstacle the goal itself sits inside.
+    #
+    # The offset is 1.4 m, which is not arbitrary. The table half width is
+    # 0.4 m and the global costmap inflates obstacles by 0.4634 m, so its cost
+    # reaches 1.4 - 0.4 - 0.4634 = 0.54 m short of the station. Less offset and
+    # the goal pose starts to sit in inflated cells, which is how "Start
+    # occupied" is manufactured deliberately rather than found (V-58).
+    #
+    # The adjacent delivery bays were the obvious home for it and are 4.18 m
+    # away, which is a drive rather than a set down.
+    setdown = (INTERIOR_X - 2.5, bay_ys[1] + 1.4, 0.40)
     stations = {n: (x, y, yaw) for n, (x, y, yaw) in stations_world.items()}
+
+    # The table itself: a low steel bench, tall enough that a load on it is
+    # clear of the 0.110 m scan plane and therefore visible to the vehicle as
+    # the obstacle it really is.
+    models.append(box('delivery_table', setdown[0], setdown[1], setdown[2] / 2.0,
+                      0.80, 0.80, setdown[2], steel))
 
     # ---- floor markings, painted not built --------------------------------
     # The home square under the spawn, and three delivery bays at the dispatch
@@ -639,6 +664,7 @@ def build_world(spec, platform):
         'bay_ys': bay_ys,
         'interior_y': iy,
         'stations_world': stations_world,
+        'setdown': setdown,
         'solids': solids,
         'aisle_1_y': lay['aisle_1'],
         'aisle_2_y': lay['aisle_2'],
@@ -931,12 +957,23 @@ def build_stations(derived, spec):
             'world_xy': [round(x, 3), round(y, 3)],
             'note': 'map frame, relative to the spawn pose recorded below',
         })
+    sd = derived['setdown']
     return {
         # Recorded so run_stack.sh spawns the vehicle where the station offsets
         # assume it did. A spawn somewhere else silently shifts every goal.
         'spawn': {'x': round(sx, 3), 'y': round(sy, 3), 'yaw': 0.0},
         'stations': out,
         'route': ['goods_in', 'dispatch'],
+        # WHERE A DELIVERED LOAD IS PUT DOWN, in WORLD coordinates, because it
+        # is a place in the simulator rather than a navigation goal. Everything
+        # above is in the map frame because the vehicle drives to it; this is
+        # handed to the simulator's own spawn service and never to Nav2.
+        #
+        # The height is the table top, so a box centre sits half its own
+        # thickness above it.
+        'setdown': {'x': round(sd[0], 3), 'y': round(sd[1], 3),
+                    'top_z': round(sd[2], 3),
+                    'note': 'world frame, for the simulator, not a nav goal'},
     }
 
 
