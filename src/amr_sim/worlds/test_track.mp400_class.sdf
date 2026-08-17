@@ -244,7 +244,37 @@
         </visual>
       </link>
     </model>
-    <model name="delivery_table">
+    <model name="dock_left">
+      <static>true</static>
+      <pose>1.7237 5.6311 0.1500 0 0 0.7854</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>0.3500 0.0500 0.3000</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.3500 0.0500 0.3000</size></box></geometry>
+          <material>
+            <ambient>0.85 0.62 0.15 1</ambient>
+            <diffuse>0.85 0.62 0.15 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>    <model name="dock_right">
+      <static>true</static>
+      <pose>1.7237 5.3836 0.1500 0 0 -0.7854</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>0.3500 0.0500 0.3000</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.3500 0.0500 0.3000</size></box></geometry>
+          <material>
+            <ambient>0.85 0.62 0.15 1</ambient>
+            <diffuse>0.85 0.62 0.15 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>    <model name="delivery_table">
       <static>true</static>
       <pose>39.5000 7.9824 0.2000 0 0 0</pose>
       <link name="link">

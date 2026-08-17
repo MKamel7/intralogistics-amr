@@ -54,6 +54,9 @@ if(BUILD_TESTING)
   # The merge geometry is deliberately free of ROS so it can be tested here in
   # milliseconds rather than against a running simulator.
   ament_add_gtest(test_scan_merge_core test/test_scan_merge_core.cpp)
+  ament_add_gtest(test_dock_core test/test_dock_core.cpp)
+  target_include_directories(test_dock_core PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
   target_include_directories(test_scan_merge_core PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include)
 

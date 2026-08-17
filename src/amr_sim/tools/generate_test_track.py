@@ -124,6 +124,20 @@ PEDESTRIAN_WIDTH = 0.50    # m, a person standing
 # neighbours; see the derivation where `setdown` is computed.
 SETDOWN_TABLE = 1.00       # m, square
 SETDOWN_SLOT = 0.25        # m, from the centre to a slot centre
+
+# THE DOCK. A funnel opening toward the vehicle, two plates meeting at 90
+# degrees, which is the arrangement a robot noses into and the one that makes
+# all three degrees of freedom observable: a flat plate leaves lateral position
+# unobservable because sliding along it changes no range reading.
+#
+# 0.35 m faces, so a plate is covered by roughly 100 returns at a metre and a
+# line fit through them is far more precise than any single range. Tall enough
+# to sit across the 0.110 m scan plane and no taller, because a dock the vehicle
+# cannot see is furniture.
+DOCK_FACE = 0.35           # m, each plate
+DOCK_OPENING = math.pi / 2.0   # rad, between the plates
+DOCK_H = 0.30              # m, clears the 0.110 m scan plane
+DOCK_T = 0.05              # m, plate thickness
 PASSING_CLEARANCE = 0.20   # m, so passing is not a squeeze
 PASSING_ALLOWANCE = PEDESTRIAN_WIDTH + PASSING_CLEARANCE
 
@@ -311,6 +325,50 @@ def floor_marking(name, cx, cy, sx, sy, colour, line=0.10):
 {visuals}      </link>
     </model>
 """
+
+
+def rotated_box(name, x, y, z, sx, sy, sz, yaw, colour):
+    """A static box with a yaw, for the dock plates.
+
+    `box` above hard codes a zero pose because every other object in this world
+    is axis aligned. The dock is the first thing that is not, and giving it its
+    own function rather than adding a defaulted argument to `box` keeps the 40
+    existing call sites from acquiring a parameter none of them uses.
+    """
+    r, g, b = colour
+    return f"""    <model name="{name}">
+      <static>true</static>
+      <pose>{x:.4f} {y:.4f} {z:.4f} 0 0 {yaw:.4f}</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>{sx:.4f} {sy:.4f} {sz:.4f}</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>{sx:.4f} {sy:.4f} {sz:.4f}</size></box></geometry>
+          <material>
+            <ambient>{r:.2f} {g:.2f} {b:.2f} 1</ambient>
+            <diffuse>{r:.2f} {g:.2f} {b:.2f} 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>"""
+
+
+def dock_plates(name, ax, ay, yaw, face, opening, height, thick, colour):
+    """The two plates of a funnel dock, meeting at `ax, ay`.
+
+    `yaw` points from the apex out toward the approaching vehicle, so each plate
+    runs from the apex along yaw +/- half the opening. The plate is placed at
+    the MIDPOINT of that run, because a box pose is its centre.
+    """
+    out = []
+    for side, tag in ((+1, 'left'), (-1, 'right')):
+        a = yaw + side * opening / 2.0
+        cx = ax + 0.5 * face * math.cos(a)
+        cy = ay + 0.5 * face * math.sin(a)
+        out.append(rotated_box(f'{name}_{tag}', cx, cy, height / 2.0,
+                               face, thick, height, a, colour))
+    return out
 
 
 def box(name, x, y, z, sx, sy, sz, colour):
@@ -613,7 +671,30 @@ def build_world(spec, platform):
     #   had: the table half width went 0.4 -> 0.5, so without it the inflated
     #   obstacle would have crept 100 mm nearer the goal pose.
     setdown = (INTERIOR_X - 2.5, bay_ys[1] + 1.5, 0.40)
+
+    # THE DOCK, at goods_in, facing the way the vehicle arrives.
+    #
+    # goods_in is approached from the east, so the apex sits WEST of the station
+    # and its funnel opens east, which is the direction the vehicle comes from.
+    # The apex is one standoff beyond the station pose so a vehicle parked on
+    # the station is looking straight down the throat.
+    #
+    # 0.9 m of standoff: far enough that both plates fall inside the detector's
+    # forward sector at once, close enough that a 0.35 m plate still spans about
+    # a hundred returns. The detector windows 0.25 to 2.50 m, so this sits
+    # comfortably inside it rather than at an edge.
+    dock_standoff = 0.90
+    dock_apex = (stations_world['goods_in'][0] - dock_standoff,
+                 stations_world['goods_in'][1])
+    dock_yaw = 0.0            # the funnel opens toward +x, where the vehicle is
     stations = {n: (x, y, yaw) for n, (x, y, yaw) in stations_world.items()}
+
+    # A high visibility colour, because a dock a person cannot see either is a
+    # different hazard. `signal` belongs to the furniture function's scope.
+    dock_colour = (0.85, 0.62, 0.15)
+    models.extend(dock_plates('dock', dock_apex[0], dock_apex[1], dock_yaw,
+                              DOCK_FACE, DOCK_OPENING, DOCK_H, DOCK_T,
+                              dock_colour))
 
     # The table itself: a low steel bench, tall enough that a load on it is
     # clear of the 0.110 m scan plane and therefore visible to the vehicle as
@@ -689,6 +770,7 @@ def build_world(spec, platform):
         'interior_y': iy,
         'stations_world': stations_world,
         'setdown': setdown,
+        'dock': (dock_apex[0], dock_apex[1], dock_yaw, dock_standoff),
         'solids': solids,
         'aisle_1_y': lay['aisle_1'],
         'aisle_2_y': lay['aisle_2'],
@@ -982,6 +1064,7 @@ def build_stations(derived, spec):
             'note': 'map frame, relative to the spawn pose recorded below',
         })
     sd = derived['setdown']
+    dk = derived['dock']
     return {
         # Recorded so run_stack.sh spawns the vehicle where the station offsets
         # assume it did. A spawn somewhere else silently shifts every goal.
@@ -1003,6 +1086,13 @@ def build_stations(derived, spec):
                     'slot': SETDOWN_SLOT,
                     'table': SETDOWN_TABLE,
                     'note': 'world frame, for the simulator, not a nav goal'},
+        # THE DOCK'S TRUE POSE, in world coordinates, so a docking measurement
+        # has something to be right or wrong about. The vehicle never reads
+        # this: it finds the dock in its own scan. This is the answer sheet.
+        'dock': {'x': round(dk[0], 4), 'y': round(dk[1], 4),
+                 'yaw': round(dk[2], 4), 'standoff': round(dk[3], 4),
+                 'face': DOCK_FACE, 'opening': round(DOCK_OPENING, 4),
+                 'note': 'world frame; ground truth for scoring, never an input'},
     }
 
 
