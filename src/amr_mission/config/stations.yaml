@@ -35,6 +35,30 @@
 # path, which is what a reviewer runs first, and it went unnoticed because
 # every measured run passed --test-track.
 
+# THE VEHICLE'S SPAWN POSE, in WORLD coordinates, and the third half of the
+# same bug.
+#
+# The station poses above are in the map frame, whose origin SLAM puts at the
+# vehicle's start pose. Spawning a physical load needs world coordinates, so
+# the mission converts map to world by translating by exactly this pose, and
+# it reads the pose from here. The generated test track files have always
+# carried it; this file, on the default path, never did, so the mission died
+# in its constructor with KeyError: 'spawn' the moment anyone ran the default
+# world with a physical load. Two argument bugs deep on the same untested path.
+#
+# It MUST equal the spawn that tools/run_stack.sh gives the bring-up, or every
+# goal shifts by the difference and the load is created somewhere the vehicle
+# is not. The track branch solved that by making the stations file the single
+# owner and reading it back; the default branch now does the same, so these
+# two numbers cannot drift apart.
+#
+# The yaw must stay zero: map_to_world() is a translation, and the mission
+# refuses to run rather than assume it away if this is ever given a rotation.
+spawn:
+  x: 2.0
+  y: -1.0
+  yaw: 0.0
+
 stations:
   - name: goods_in
     description: Inbound station on the southern main aisle

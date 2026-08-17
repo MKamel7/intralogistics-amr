@@ -76,8 +76,18 @@ KEEPOUT=keepout_mask
 STATIONS=
 SCENARIO=walking_people
 TRUTH_MAP=warehouse_truth
-SPAWN_X=2.0
-SPAWN_Y=-1.0
+# The default world's spawn, read from the stations file that also owns the
+# station poses, for the reason the track branch gives below: the station
+# coordinates are in the map frame and SLAM puts that frame's origin at the
+# vehicle's start pose, so a spawn typed here and a spawn written there drift
+# apart silently and shift every goal. Falls back to the historical literals
+# if the file cannot be read, so a broken file is a visible failure later
+# rather than a vehicle spawned at the origin.
+DEFAULT_STATIONS="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/src/amr_mission/config/stations.yaml"
+SPAWN_X=$(awk '/^spawn:/{f=1;next} f&&/^  x:/{print $2;exit}' "$DEFAULT_STATIONS" 2>/dev/null)
+SPAWN_Y=$(awk '/^spawn:/{f=1;next} f&&/^  y:/{print $2;exit}' "$DEFAULT_STATIONS" 2>/dev/null)
+SPAWN_X=${SPAWN_X:-2.0}
+SPAWN_Y=${SPAWN_Y:--1.0}
 TASK=none
 CLASSIFY=false
 TRACK=false
@@ -523,8 +533,17 @@ case "$TASK" in
       sleep 1
     done
     say "controller idle after survey (${quiet}s quiet)"
+    # STATIONS IS EMPTY ON THE DEFAULT WORLD, and `ros2 launch` rejects
+    # `stations_file:=` with nothing after it as a malformed argument rather
+    # than treating it as the empty string the launch file already defaults it
+    # to. So the whole mission phase died on argument parsing the moment anyone
+    # ran this without --test-track, printing `mission exited 2` and leaving a
+    # surveyed map and an idle vehicle. The survey two blocks up has always
+    # guarded this the right way; the mission was written without the guard,
+    # and only the test track path was ever exercised. Same shape as the
+    # stations key bug: the default path is the one a reviewer runs first.
     ros2 launch amr_mission transport.launch.py cycles:=$CYCLES \
-        platform:=$PLATFORM stations_file:="$STATIONS" \
+        platform:=$PLATFORM ${STATIONS:+stations_file:="$STATIONS"} \
         physical_load:=$PHYSICAL_LOAD world:="$WORLD" \
         > "$RUN/mission.log" 2>&1
     MISSION_RC=$?
@@ -540,8 +559,17 @@ case "$TASK" in
     MISSION_RC=$(mission_verdict "$RUN/mission.log" "$MISSION_RC")
     say "mission exited $MISSION_RC" ;;
   mission)
+    # STATIONS IS EMPTY ON THE DEFAULT WORLD, and `ros2 launch` rejects
+    # `stations_file:=` with nothing after it as a malformed argument rather
+    # than treating it as the empty string the launch file already defaults it
+    # to. So the whole mission phase died on argument parsing the moment anyone
+    # ran this without --test-track, printing `mission exited 2` and leaving a
+    # surveyed map and an idle vehicle. The survey two blocks up has always
+    # guarded this the right way; the mission was written without the guard,
+    # and only the test track path was ever exercised. Same shape as the
+    # stations key bug: the default path is the one a reviewer runs first.
     ros2 launch amr_mission transport.launch.py cycles:=$CYCLES \
-        platform:=$PLATFORM stations_file:="$STATIONS" \
+        platform:=$PLATFORM ${STATIONS:+stations_file:="$STATIONS"} \
         physical_load:=$PHYSICAL_LOAD world:="$WORLD" \
         > "$RUN/mission.log" 2>&1
     MISSION_RC=$?
