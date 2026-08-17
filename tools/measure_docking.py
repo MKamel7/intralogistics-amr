@@ -111,8 +111,30 @@ class DockingProbe(Node):
         self.at = None
         self.arrivals = {}         # station -> [(distance, heading error)]
 
+        # THE DETECTOR'S OWN ACCURACY, which is a different question from where
+        # the vehicle parks. The detector reports the dock relative to the
+        # scanner; the stations file carries the dock's true world pose as an
+        # answer sheet the vehicle never reads. Composing the vehicle's true
+        # pose with the detection predicts a world pose, and the difference
+        # from the answer sheet is the sensor error.
+        #
+        # That is the number the docking argument rests on: V-62 showed the
+        # localisation floor is 55 mm and irreducible from the map frame, so
+        # docking only becomes possible if the sensor is better than that.
+        self.dock_truth = None
+        self.dock_errors = []
+        if stations and Path(stations).is_file():
+            spec = yaml.safe_load(Path(stations).read_text())
+            dk = spec.get('dock')
+            if dk:
+                self.dock_truth = (dk['x'], dk['y'])
+
         self.create_subscription(TFMessage, '/ground_truth/poses',
                                  self._truth, TRUTH_QOS)
+        if self.dock_truth is not None:
+            from geometry_msgs.msg import PoseStamped
+            self.create_subscription(PoseStamped, '/dock_pose',
+                                     self._dock, TRUTH_QOS)
         self.t0 = self.get_clock().now()
         self.create_timer(1.0, self._tick)
         self.reported = False
@@ -174,6 +196,29 @@ class DockingProbe(Node):
                 f'after turning {math.degrees(turn):+.1f} deg')
             return
 
+    def _dock(self, msg):
+        """Score one detection against the answer sheet.
+
+        The vehicle's own true pose is needed to place the detection in the
+        world, and it comes from the oracle. That is legitimate for SCORING and
+        would not be for control: the detector never sees it.
+        """
+        if self.last is None or self.dock_truth is None or self.yaw_history is None:
+            return
+        if not self.yaw_history:
+            return
+        vx, vy, _ = self.last
+        vyaw = self.yaw_history[-1][1]
+        dx, dy = msg.pose.position.x, msg.pose.position.y
+        c, s = math.cos(vyaw), math.sin(vyaw)
+        wx = vx + c * dx - s * dy
+        wy = vy + s * dx + c * dy
+        err = math.hypot(wx - self.dock_truth[0], wy - self.dock_truth[1])
+        # A detection from far away is a detection of something else, and the
+        # detector is windowed to 2.5 m anyway. Anything beyond that here is a
+        # false positive and belongs in the count rather than in the accuracy.
+        self.dock_errors.append(err)
+
     def _tick(self):
         if (self.get_clock().now() - self.t0).nanoseconds * 1e-9 >= self.duration:
             self.report()
@@ -213,6 +258,22 @@ class DockingProbe(Node):
             print(f'  {opposed} had a heading error OPPOSING the turn, which is '
                   f'the signature')
             print('  of a rotation stopped by a tolerance rather than completed.')
+        if self.dock_errors:
+            d = sorted(self.dock_errors)
+            gross = [e for e in d if e > 0.30]
+            good = [e for e in d if e <= 0.30]
+            print()
+            print(f'  DOCK DETECTION, {len(d)} detection(s) scored against the')
+            print('  dock pose the generator wrote, which the vehicle never reads:')
+            if good:
+                print(f'    p50 {statistics.median(good) * 1000:6.1f} mm   '
+                      f'p95 {good[min(len(good) - 1, int(round(0.95 * (len(good) - 1))))] * 1000:6.1f} mm   '
+                      f'max {max(good) * 1000:6.1f} mm   n={len(good)}')
+            print(f'    {len(gross)} detection(s) beyond 300 mm, which are not the '
+                  f'dock and are counted, not averaged')
+            print('  Compare against the 55 mm parked localisation floor: a')
+            print('  sensor error below it is what makes docking possible at all.')
+
         allds = [a[0] for v in self.arrivals.values() for a in v]
         print(f'  median {statistics.median(allds) * 1000:.0f} mm, '
               f'worst {max(allds) * 1000:.0f} mm')

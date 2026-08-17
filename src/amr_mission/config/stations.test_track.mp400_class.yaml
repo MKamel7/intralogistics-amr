@@ -9,7 +9,7 @@ stations:
 - name: goods_in
   x: -2.0
   y: 0.0
-  yaw: 0.0
+  yaw: 3.141592653589793
   world_xy:
   - 2.5
   - 5.507

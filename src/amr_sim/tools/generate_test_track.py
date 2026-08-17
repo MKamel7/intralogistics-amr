@@ -632,7 +632,18 @@ def build_world(spec, platform):
     bay_ys = [bay_lo, (bay_lo + bay_hi) / 2.0, bay_hi]
 
     stations_world = {
-        'goods_in': (2.5, (a2_lo + a2_hi) / 2.0, 0.0),
+        # FACING WEST, into the dock at the end of the aisle.
+        #
+        # It was 0.0, facing east, which is the direction the vehicle arrives
+        # from, so the goal demanded a 180 degree spot turn on arrival and left
+        # the vehicle looking away from the dock. The detector searches the
+        # forward sector, so it could never see the thing it was built for.
+        #
+        # Turning to face the dock is what a vehicle docking at an aisle end
+        # actually does, and it removes the spot turn that V-63 measured here.
+        # That finding stands on the data it was taken with; this layout no
+        # longer exhibits it, which is the point of fixing it.
+        'goods_in': (2.5, (a2_lo + a2_hi) / 2.0, math.pi),
         'dispatch': (INTERIOR_X - 2.5, bay_ys[1], 0.0),
     }
 

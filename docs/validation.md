@@ -4624,3 +4624,172 @@ shown to work, on the fourth attempt at measuring it.
 
 The corrective was not a better statistical test. It was holding the task
 constant.
+
+---
+
+## V-65. The station orientation was written, committed, regenerated, and never read
+
+Found while building precision docking, which is the first feature in this
+project that needs the parked ORIENTATION to be right. Everything before it
+needed only the position.
+
+### The two lines
+
+The generator writes, for every station:
+
+```yaml
+- name: goods_in
+  x: -2.0
+  y: 0.0
+  yaw: 0.0
+```
+
+The mission read:
+
+```python
+yaw = float(station.get('approach_yaw', 0.0))
+```
+
+**`yaw` and `approach_yaw` are not the same key.** Every navigation goal this
+project has ever sent used a yaw of 0, regardless of what the generator
+computed, and the `yaw` field was written, committed, regenerated per platform
+and never once read.
+
+### The default is the whole defect
+
+`station['approach_yaw']` would have raised `KeyError` on the first mission ever
+run. `.get('approach_yaw', 0.0)` substituted a plausible number, the vehicle
+drove to a plausible pose, and nothing anywhere looked wrong.
+
+A missing key is a loud failure. A missing key with a default is a silent
+substitution of somebody's guess for a computed value, and it survived 64
+findings.
+
+### What it was hiding
+
+**V-63.** That finding measured a 180 degree spot turn at `goods_in` and
+explained the parked heading error by the goal checker stopping a rotation as
+soon as it is inside tolerance. The mechanism is real and the sign flip
+evidence for it is decisive, and it stands.
+
+But the REASON that station demanded a turn was this bug. `goods_in` is
+approached from the east and the effective goal yaw was always 0, facing east,
+so the vehicle arrived pointing the right way and then turned 180 degrees to
+satisfy a goal orientation nobody had chosen. With the key fixed, the parked
+heading error at `goods_in` went from +143.9 and +171.0 degrees to +9.8 and
+-7.7.
+
+**And it made the dock invisible.** The dock sits at the aisle end, west of
+`goods_in`. A vehicle parked facing east has it behind, and the detector
+searches the forward sector, so the first docking run reported `0 found, 140
+not found` for the whole run. The detector was right; the goal was wrong.
+
+### The fix, and the test that would have caught it
+
+The mission reads `yaw` and raises if it is absent. No default.
+
+The test walks the SYNTAX TREE of the mission and compares every station field
+it reads against every field the generator writes, across all stations files. It
+does not name a key, so the two cannot drift again.
+
+It parses rather than searching text because the first version used a regex and
+matched `approach_yaw` inside the comment explaining the bug. **That is the
+fifth test in this project to match the prose documenting the thing it
+forbids**, and parsing is the structural answer: a comment is not in the tree.
+
+### What generalises
+
+Two components agreed on a file format and disagreed about one key. Both were
+individually correct, the file was valid, the schema was never written down, and
+a default turned the disagreement into a plausible answer.
+
+This is the same shape as V-23, where a provenance citation was correct and
+described the wrong part, and V-24, where a limit was derived correctly and
+overwritten by a correct-looking runtime call. **A system can be wrong while
+every file in it is right**, and defaults are how the seam gets hidden.
+
+---
+
+## V-66. The dock detector does not support a docking claim, and the always-on decision was wrong
+
+V-62 established that a goal in the map frame cannot dock: the vehicle parks a
+median 117 mm from a station, the parked localisation floor is 55 mm, and
+docking needs roughly 10 mm. The fix was to make the error a SENSOR error
+instead, by aligning to a dock the vehicle can see.
+
+Built, unit tested, measured, and **not shipped.**
+
+### The measurement
+
+1452 detections over one run, scored against the dock pose the generator wrote
+and the vehicle never reads:
+
+| | |
+|---|---|
+| detections scored | 1452 |
+| **more than 300 mm from the real dock** | **1218, or 84 percent** |
+| plausibly the dock | 234 |
+| accuracy on those: p50 | 43.4 mm |
+| p95 | **64.7 mm** |
+| max | 73.7 mm |
+| the localisation floor it had to beat | 55 mm |
+
+Two independent reasons this cannot be used:
+
+**It reports things that are not the dock, five times more often than it
+reports the dock.** A warehouse is full of two surfaces meeting near 90
+degrees: rack ends, pallet corners, doorway reveals, the delivery table. The
+thirteen unit tests include six refusals and they reject a flat wall, a shallow
+kink, a rack-leg-sized corner and a curve. They are not sufficient, because the
+building contains geometry that passes every one of them.
+
+**Its p95 is above the floor it was supposed to beat.** 64.7 mm against 55 mm.
+The p50 of 43.4 mm is better than the floor, but a docking claim made on a
+median while the p95 is worse than the alternative is not a claim.
+
+### The scoring understates the detector, and that does not rescue it
+
+The score composes the detection with the vehicle's true pose taken at the
+latest ground truth message rather than interpolated to the scan's own stamp. At
+0.3 m/s with a control period of tens of milliseconds that injects something of
+the order of 10 to 20 mm, so **43.4 mm is an upper bound on the detector's own
+error rather than the error itself.** Interpolating would be the right next
+measurement.
+
+It does not change the conclusion. The false positive rate is unaffected by any
+timing question, and it is the disqualifying number.
+
+### The design decision that was wrong, in writing
+
+The launch file carried this, in a comment I wrote:
+
+> PERCEPTION ONLY, always on. It steers nothing and costs one line fit per scan
+> over a windowed subset, so there is no reason to gate it behind a docking
+> mode: a dock pose that is only published while docking cannot be used to
+> decide whether docking is worth attempting.
+
+Every clause is true and the conclusion is wrong. An always-on detector in a
+cluttered building spends most of its time looking at things that are not the
+dock, so most of what it publishes is wrong. **A docking detector should run
+when docking is EXPECTED**, gated on proximity to a known dock, which is how
+real systems do it and which I reasoned myself out of.
+
+### What is shipped
+
+The node, the geometry and their tests are kept. The detector is NOT launched,
+because running it would publish a pose a controller could act on. The approach
+controller exists, is tested as a pure function, and is not wired into the
+mission.
+
+The README says the vehicle parks by navigation goal, which is what it does.
+
+### What it cost, and what it found
+
+Docking is not delivered. Building it found two defects that had nothing to do
+with docking: the station orientation had never been read in the project's
+entire life (V-65), and the dock's own layout put it behind the parked vehicle,
+which was only legible because the detector refused to lock onto whatever
+corner it could see.
+
+That is the honest accounting. A feature that failed, two defects it exposed,
+and a design decision it proved wrong.

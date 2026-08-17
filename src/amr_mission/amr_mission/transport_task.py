@@ -338,7 +338,27 @@ class TransportTask(Node):
         goal.pose.header.stamp = rclpy.time.Time().to_msg()
         goal.pose.pose.position.x = float(station['x'])
         goal.pose.pose.position.y = float(station['y'])
-        yaw = float(station.get('approach_yaw', 0.0))
+        # THE KEY THE GENERATOR ACTUALLY WRITES, and no silent default.
+        #
+        # This read `station.get('approach_yaw', 0.0)`. The stations file has
+        # always written `yaw`. So every goal this project has ever sent used
+        # yaw 0 regardless of what the generator computed, and the `yaw` field
+        # was written, committed, regenerated and never once read.
+        #
+        # The default is what hid it. `station['approach_yaw']` would have
+        # raised KeyError on the first run; `.get(..., 0.0)` substituted a
+        # plausible number and the vehicle drove to a plausible pose.
+        #
+        # It also explains V-63: the goal yaw was always 0, facing east, so
+        # arriving at goods_in from the east always demanded a 180 degree spot
+        # turn. That finding is about the goal checker and stands; its cause at
+        # THAT station was this.
+        if 'yaw' not in station:
+            raise SystemExit(
+                f'station {station["name"]} has no yaw; the stations file and '
+                f'this reader disagree about the key, which is how every goal '
+                f'came to be sent with yaw 0')
+        yaw = float(station['yaw'])
         goal.pose.pose.orientation.z = math.sin(yaw / 2.0)
         goal.pose.pose.orientation.w = math.cos(yaw / 2.0)
 

@@ -1,6 +1,6 @@
 # Faults that hid behind coherent explanations
 
-`docs/validation.md` is the full record, 64 numbered findings and 4600 lines,
+`docs/validation.md` is the full record, 66 numbered findings and 4900 lines,
 and it is long because it is a laboratory notebook. This is the short version.
 
 Every fault below had a persuasive wrong explanation attached to it, and none of
@@ -20,9 +20,16 @@ which is what actually goes wrong on a deployment.
 | Latency, RETRACTED | p99 1260 ms became **p95 124 ms** | percentiles from 43 samples across runs of 6 to 17, with the probe's own "samples is thin" warning printed in the same output |
 | Goal tolerance | set to 200 mm, parks **212 mm** out | a tolerance is a stopping condition, not an accuracy specification |
 | Human aware layer, RETRACTED | shipped disabled, then **7.33 % to 5.00 %** | "the effect is smaller than the noise" is a claim about the experiment, not the effect |
+| Station orientation | **every goal ever sent used yaw 0** | the generator wrote `yaw`, the mission read `approach_yaw` with a default, so a guess replaced a computed value silently |
+| Precision docking | built, measured, **not shipped**: 84 % false positives | "it steers nothing so there is no reason to gate it" was true in every clause and wrong in its conclusion |
 
 **Five of the faults were in the measuring instruments rather than in the
 robot.** That ratio is uncomfortable and it is the honest headline.
+
+**One feature was built, measured and not shipped.** Precision docking works on
+synthetic geometry to under a millimetre and reports 84 percent false positives
+in a real building, so the node is kept, unit tested, and not launched. Building
+it found two defects that had nothing to do with docking.
 
 ---
 
@@ -318,6 +325,35 @@ percent of survey duration and no measured loss of mobility.
 Both retractions are written into `docs/validation.md` beside the original
 claim, with the wrong sentence left standing rather than edited away, because
 the mistake is the useful part.
+
+---
+
+## 9. A field written, committed, regenerated, and never read
+
+Found while building precision docking, which is the first feature in this
+project that needs the parked ORIENTATION to be right rather than only the
+position.
+
+The generator writes `yaw` for every station. The mission read
+`station.get('approach_yaw', 0.0)`. Two different keys, so **every navigation
+goal this project ever sent used a yaw of 0**, and the computed orientation was
+written, committed, regenerated per platform and never once consumed.
+
+**The default is the whole defect.** A subscript would have raised `KeyError`
+on the first mission ever run. `.get(key, 0.0)` substituted a plausible number,
+the vehicle drove to a plausible pose, and nothing looked wrong for the entire
+life of the project.
+
+It was hiding two things. The 180 degree spot turn that V-63 measured at
+`goods_in` existed only because the effective goal yaw was always east; with
+the key fixed the parked heading error there went from +143.9 degrees to +9.8.
+And it made the new dock invisible, because a vehicle parked facing east has an
+aisle-end dock behind it and the detector searches forward. The first docking
+run reported `0 found, 140 not found` for its whole length. The detector was
+right and the goal was wrong.
+
+**What caught it:** a feature that could not work unless the value was correct.
+Not a test, not a review. Every earlier feature tolerated the wrong answer.
 
 ---
 

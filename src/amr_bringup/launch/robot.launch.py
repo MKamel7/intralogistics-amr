@@ -357,6 +357,24 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('scanners')),
         parameters=[{'use_sim_time': True}])
 
+    # THE DOCK DETECTOR IS NOT LAUNCHED, and the comment that used to be here
+    # argued it should always run because it steers nothing and costs little.
+    # That reasoning was wrong and V-66 is the measurement:
+    #
+    #   1452 detections over one run, 1218 of them more than 300 mm from the
+    #   real dock. 84 percent false positives. A warehouse is full of two
+    #   surfaces meeting near 90 degrees and an always-on detector finds them.
+    #
+    # Accuracy on the 234 plausible ones was p50 43.4 mm and p95 64.7 mm
+    # against the 55 mm localisation floor it had to beat, so it does not
+    # clearly beat it either.
+    #
+    # The node and its geometry are kept and unit tested. A docking detector
+    # should run when docking is EXPECTED, gated on proximity to a known dock,
+    # which is a change with its own measurement rather than one to smuggle in
+    # here. Until then, running it would publish a pose a controller could act
+    # on, and this project does not ship those.
+
     rviz = Node(
         package='rviz2', executable='rviz2', output='screen',
         condition=IfCondition(LaunchConfiguration('rviz')),

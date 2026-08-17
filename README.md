@@ -8,14 +8,15 @@ layer that sits after the planner and can override it.
 name outran the code; there is no traffic controller and no task allocation. A fleet layer is
 listed under Roadmap and is claimed nowhere else.
 
-**Status: one platform validated end to end, with 64 recorded findings.** This README documents
+**Status: FINISHED. One platform validated end to end, with 66 recorded findings.** This README documents
 what exists and what is measured, not what is planned. Every figure below is traceable to an entry
 in `docs/validation.md`; anything not built is under Roadmap and is claimed nowhere else.
 
 **If you have five minutes, read [docs/findings.md](docs/findings.md) instead of this file.** It is
-the eight faults worth knowing about, each with the number attached and the wrong explanation that
-held for a while. Two of them are claims this project made and later retracted, and five of the
-faults were in the measuring instruments rather than in the robot.
+the nine faults worth knowing about, each with the number attached and the wrong explanation that
+held for a while. Two of them are claims this project made and later retracted, five of the faults
+were in the measuring instruments rather than in the robot, and one was a value written, committed
+and regenerated for the project's whole life without ever being read.
 
 ### Measured, on the generated track, MP-400 class
 
@@ -40,6 +41,7 @@ faults were in the measuring instruments rather than in the robot.
 | parked accuracy at a station | median **117 mm**, worst 212 mm against a 200 mm tolerance | V-62 |
 | heading error when the goal needs a turn | up to the yaw tolerance, **signed by the rotation** | V-63 |
 | time in intimate space, human aware layer on | **5.00 %** against 7.33 with it off, for 6 % of survey time | V-64 |
+| precision docking | **not delivered.** The detector reports 84 % false positives always-on | V-66 |
 
 The latency row was wrong for most of this project's life and the correction is worth reading.
 It said p95 796 ms and called the spec estimate refuted, on the strength of 43 samples pooled from
@@ -450,37 +452,44 @@ Published figures from the reference platform are validated **against**, never t
 model and the reference disagree, [docs/validation.md](docs/validation.md) says so and says which
 way the error points.
 
-## Roadmap
+## What a successor would do
 
-What is left, in the order it would be worth doing:
+This project is finished. What follows is not a plan, it is the list of things a
+next person would find worth doing, each with the measurement that says why.
 
-1. **Decide whether to write the measured latency into the spec.** `control_latency: 0.10` is
-   marked NOT YET MEASURED and is now measured: p95 124 ms over 397 samples, sd 24 ms. The estimate
-   is short by 24 ms, which is 18 mm of travel at 0.75 m/s. That is a decision about a safety
-   constant rather than a correction, so nothing has written it, and whoever does should run a cycle
-   afterwards: V-42 and V-45 are what enlarging a protective field costs and neither was predicted
-   from arithmetic.
-2. **Precision docking, and it is NOT reachable from the map frame.** Measured: the vehicle parks
-   a median 117 mm from the station, worst 212 mm against a 200 mm goal tolerance, because a
-   tolerance governs where the vehicle BELIEVES it is and the localisation error adds on top.
-   Docking needs about 10 mm; the localisation floor is 55 mm, so a perfect controller would still
-   be five times too coarse. It needs a dock the vehicle can SEE, which makes the error a sensor
-   error rather than a localisation one. See V-62.
-3. **Tighten `xy_goal_tolerance` toward the localisation floor**, which should roughly halve the
-   parked error for the cost of one number, and must be measured rather than assumed: a tolerance
-   below what the controller can achieve buys goal-reached timeouts instead of accuracy.
-4. **Tighten `yaw_goal_tolerance` for orientation critical work.** V-63 established that a goal
-   needing a turn inherits an error up to the tolerance, always opposing the rotation, so the
-   tolerance IS the error rather than a bound on a random one. Tightening it trades accuracy
-   against the time spent creeping the last few degrees, which on a differential drive is the
-   slowest part of an approach, so it needs measuring rather than assuming.
+1. **Gate the dock detector on proximity to a known dock, then re-measure.** It
+   reports 84 % false positives when always on, because a warehouse is full of
+   two surfaces meeting near 90 degrees (V-66). A docking detector should run
+   when docking is expected. Its accuracy also needs re-scoring with the vehicle
+   pose interpolated to the scan stamp, since the current 43 mm p50 is an upper
+   bound that includes the scorer's own timing error.
+2. **Decide whether to write the measured latency into the spec.**
+   `control_latency: 0.10` is marked NOT YET MEASURED and is now measured at p95
+   124 ms over 397 samples, sd 24 ms. The estimate is short by 24 ms, 18 mm of
+   travel at 0.75 m/s. That is a decision about a safety constant, not a
+   correction, and whoever makes it should run a cycle afterwards: V-42 and V-45
+   are what enlarging a protective field costs.
+3. **Tighten `xy_goal_tolerance` toward the 55 mm localisation floor.** Should
+   roughly halve the parked error for the cost of one number, and must be
+   measured: a tolerance below what the controller can achieve buys goal-reached
+   timeouts rather than accuracy.
+4. **Tighten `yaw_goal_tolerance` for orientation critical work.** V-63 showed a
+   goal needing a turn inherits an error up to the tolerance, always opposing the
+   rotation, so the tolerance IS the error rather than a bound on a random one.
+5. **Restore the MiR250 as a runtime target, or delete it.** Its specification
+   and generated configuration are kept and the tests run over both platforms,
+   which is what caught V-33. It has not been driven since the MP-400 became the
+   reference, and a second platform that is only ever generated is a claim about
+   the tools rather than about the vehicle.
 
-Not on this list: a fleet layer. The project runs one vehicle and says so.
+Not on this list: a fleet layer. The project runs one vehicle and says so. The
+VDA 5050 interface is the vehicle half, which is what an integrator connects to,
+and a dispatcher with one robot behind it would be a claim without a measurement.
 
-Also not on this list: closing V-39 on the MiR250. It stays deliberately open there, recorded in
-`UNSHAPED_SELF_FILTER` in two test modules with the reasoning attached. That platform is kept as a
-second specification because generating two vehicles from one set of tools is what caught V-33, and
-it is not a runtime target, so measuring its self filter would be work in service of nothing.
+Also not on this list: closing V-39 on the MiR250. It stays deliberately open
+there, recorded in `UNSHAPED_SELF_FILTER` in two test modules with the reasoning
+attached, because 11 mm of the 40 mm measured on that vehicle is not explained by
+its pod geometry and nobody has identified it.
 
 ## Predecessor
 
