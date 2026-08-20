@@ -507,7 +507,7 @@ its pod geometry and nobody has identified it.
 
 ## Predecessor
 
-This project began as a rebuild of a university group project
+This project began as a rebuild of a university coursework project
 ([`warehouse-fleet`](https://github.com/MKamel7/warehouse-fleet), SoSe 2026), which is preserved as
 submitted. Almost nothing carries over: different simulator, different ROS distribution, different
 robot, different architecture. This repository is solo work from its first commit.
