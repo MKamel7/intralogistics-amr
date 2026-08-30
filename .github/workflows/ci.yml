@@ -16,7 +16,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install
-        run: pip install pytest pyyaml ruff
+        run: pip install pytest==8.3.4 pyyaml==6.0.2 ruff==0.15.20
       - name: Lint
         run: ruff check src
       # EVERY GENERATOR GATE, not just the provenance one. These four files
