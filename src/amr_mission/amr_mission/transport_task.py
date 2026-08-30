@@ -74,6 +74,8 @@ from rclpy.action import ActionClient
 from rclpy.node import Node
 from std_msgs.msg import String
 
+from amr_mission.route import carrying_after, handling_label
+
 # Collision monitor action codes, from nav2_msgs/CollisionMonitorState.
 ACTION = {0: 'clear', 1: 'stop', 2: 'slowdown', 3: 'approach', 4: 'limit'}
 
@@ -638,12 +640,20 @@ class TransportTask(Node):
                     self.publish_state(f'cycle {index}: failed to reach {name}')
                     ok = False
                     break
-                # Handling. First station of the route loads, the last unloads.
+                # Handling. The first station loads, the last unloads, and a
+                # station in between is a transfer the load rides through.
+                # See amr_mission/route.py for why this is not `leg == 0`.
+                stops = len(self.route)
                 self.publish_state(
                     f'cycle {index}: at {name}, '
-                    f'{"loading" if leg == 0 else "unloading"}')
+                    f'{handling_label(leg, stops)}')
                 self.spin_for(self.dwell)
-                self.set_payload(leg == 0)
+                # Only act on a CHANGE of load state. spawn_load() has no
+                # guard against being called twice, so re-asserting "carrying"
+                # at an intermediate stop would put a second box on the plate.
+                want = carrying_after(leg, stops)
+                if want != self.carrying:
+                    self.set_payload(want)
 
             # Let the navigation stack settle before the next cycle. Firing
             # immediately caught controller_server still unwinding the previous
