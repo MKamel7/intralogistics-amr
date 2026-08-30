@@ -1,7 +1,13 @@
 cmake_minimum_required(VERSION 3.8)
 project(amr_evaluation)
 find_package(ament_cmake REQUIRED)
-install(DIRECTORY tools results
+# `results` is deliberately not installed. It is generated output and is
+# gitignored (.gitignore:10), so it does not exist in a fresh clone, and
+# install(DIRECTORY) on a missing directory is a hard CMake error. That is what
+# failed the colcon build on every clean checkout: `tools` installs, then
+# `results` aborts the package. Nothing reads share/amr_evaluation/results, so
+# naming it here bought nothing and cost the build.
+install(DIRECTORY tools
         DESTINATION share/${PROJECT_NAME}
         PATTERN "__pycache__" EXCLUDE)
 
