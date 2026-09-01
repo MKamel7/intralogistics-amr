@@ -16,22 +16,29 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install
-        run: pip install pytest pyyaml ruff
+        run: pip install pytest==8.3.4 pyyaml==6.0.2 ruff==0.15.20
       - name: Lint
         run: ruff check src
-      # EVERY GENERATOR GATE, not just the provenance one. These four files
-      # need no ROS and run in seconds, and between them they assert that the
-      # platform specs keep their sources, that the protective fields match
-      # their generator, that the Nav2 configuration matches its generator and
-      # template, and that the mission cannot widen the envelope the generator
-      # derived. Three of the four exist because a real fault got through.
+      # EVERY GENERATOR GATE, not just the provenance one. These files need no
+      # ROS and run in seconds, and between them they assert that the platform
+      # specs keep their sources, that the protective fields match their
+      # generator, that the Nav2 configuration matches its generator and
+      # template, and that the load is set down at the last stop rather than the
+      # first. Most of them exist because a real fault got through.
+      #
+      # test_transport_limits.py is NOT here, deliberately: it imports
+      # ament_index_python, which this job does not install, so it failed
+      # collection and took the whole gate down with it (exit code 2) rather
+      # than reporting on the files that can run. It is registered in
+      # amr_mission/CMakeLists.txt and runs under `colcon test` in the job
+      # below, where ROS exists, so no coverage is lost by leaving it out here.
       - name: Generator and provenance gates
         run: |
           python3 -m pytest -q \
             src/amr_description/test/test_platform_spec.py \
             src/amr_safety/test/test_fields.py \
             src/amr_navigation/test/test_nav2_config.py \
-            src/amr_mission/test/test_transport_limits.py \
+            src/amr_mission/test/test_route.py \
             src/amr_sim/test/test_test_track.py \
             src/amr_evaluation/test/test_experiment.py
 
