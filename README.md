@@ -6,7 +6,7 @@ layer that sits after the planner and can override it.
 
 **One robot, not a fleet.** The repository was originally named for a multi-robot system and the
 name outran the code; there is no traffic controller and no task allocation. A fleet layer is
-listed under Roadmap and is claimed nowhere else.
+cancelled, not deferred, and is claimed nowhere in this repository.
 
 **Status: FINISHED. One platform validated end to end, with 66 recorded findings.** This README documents
 what exists and what is measured, not what is planned. Every figure below is traceable to an entry
@@ -470,9 +470,8 @@ way the error points.
 
 Capability-level. The measurement-level items are in *What a successor would do* below.
 
-- **Fleet coordination as a controlled experiment** — three AMRs, VDA 5050 master control, task allocation, route reservation, zone locking, deadlock detection, charger scheduling, mission recovery. What makes it evidence rather than a demo is comparing centralised reservation against naive independent Nav2 on throughput, queue time, deadlock frequency, travel distance and mission latency. **Do not write another global planner**; the point is the distributed-systems layer.
 - **Repair precision docking with fiducials** — Nav2 coarse approach, then AprilTag or ArUco pose, then visual servo or local PID to plus or minus 10 to 20 mm. The current detector is documented as failed at 84% false positives, and fixing a named failure is a better story than never having tried.
-- **Decide what VDA 5050 is today.** The bridge is a headline package that no launch file can start, with neither credentials nor TLS, feeding orders straight to `NavigateToPose`. Either wire it with authenticated MQTT as part of the fleet work, or say plainly it is an unwired entry point.
+- **Decide what VDA 5050 is today.** The bridge is a headline package that no launch file can start, with neither credentials nor TLS, feeding orders straight to `NavigateToPose`. Either wire it with authenticated MQTT, or say plainly it is an unwired entry point.
 - **Extract `amr_common`** — pose maths, one `yaw_from_quaternion`, and the topic names currently hardcoded across four nodes and six YAML keys. Renaming the controller today breaks four nodes silently, because a subscriber to a dead topic never errors.
 
 ## What a successor would do
