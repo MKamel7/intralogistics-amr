@@ -83,17 +83,19 @@ def as_param(points):
 MIN_DETECTABLE_BAND = 0.050
 
 
-def clear_of_blind_zone(spec):
-    """The smallest half extents a field may have and still be observable.
-
-    Returns (min_half_length, min_half_width). Applied as a FLOOR rather than
-    an offset: a field already well outside the blind zone is left exactly as
-    ISO 13855 sized it, and only the ones the sensor cannot see into are grown.
-    """
-    v = spec['values']
-    margin = v['self_filter_margin']
-    return (v['chassis_length'] / 2.0 + margin + MIN_DETECTABLE_BAND,
-            v['chassis_width'] / 2.0 + margin + MIN_DETECTABLE_BAND)
+# `clear_of_blind_zone()` used to sit here: the floor V-42 and V-45 tried to
+# apply to the field polygons. It was removed on 2026-09-01, uncalled since
+# V-45 was reverted. Deleting it is the point rather than tidiness. A named
+# function computing a safety floor, in a safety-field generator, alongside a
+# constant explaining why the floor matters, reads to anyone opening this file
+# as a floor that is being enforced. It was not being enforced by anything, and
+# code that describes a guarantee it does not provide is worse than no code.
+#
+# The constant stays because it is still the real threshold: the test asserts
+# every generated field clears the blind zone by at least MIN_DETECTABLE_BAND,
+# and imports it from here so there is one definition. What changed in V-49 is
+# WHERE the clearance is bought. It is bought by shaping the self filter, not
+# by growing the fields, which is why `observable` below is an identity.
 
 
 def observable(points, _spec):

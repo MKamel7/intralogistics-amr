@@ -61,7 +61,6 @@ import csv
 import math
 import os
 import re
-import shutil
 import signal
 import subprocess
 import sys

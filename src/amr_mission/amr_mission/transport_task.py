@@ -189,6 +189,15 @@ class TransportTask(Node):
 
         self.cycle = None
         self.carrying = False
+        # One client for the node's life. It used to be created inside
+        # set_payload, which runs on every leg: each call built a new client,
+        # never destroyed it, and leaked an rmw publisher/subscription pair,
+        # while re-paying the 5 s discovery wait_for_service on a service that
+        # had already been found once. Discovery is a per-node cost, not a
+        # per-call one, and paying it per leg was also the reason a laden leg
+        # could sit for five seconds before it started moving.
+        self._smoother_params = self.create_client(
+            SetParameters, '/velocity_smoother/set_parameters')
         self.get_logger().info(
             f'transport task: {" -> ".join(self.route)}, '
             f'{self.cycles_wanted} cycle(s), from {Path(path).name}')
@@ -289,8 +298,7 @@ class TransportTask(Node):
         if self.physical_load:
             self.spawn_load() if carrying else self.remove_load()
         target = self.accel_laden if carrying else self.accel_unladen
-        cli = self.create_client(SetParameters,
-                                 '/velocity_smoother/set_parameters')
+        cli = self._smoother_params
         if not cli.wait_for_service(timeout_sec=5.0):
             self.get_logger().warn(
                 'velocity_smoother parameter service missing; the acceleration '

@@ -19,11 +19,12 @@ SPEC_DIR = (Path(__file__).resolve().parents[2]
             / 'amr_description' / 'config' / 'platforms')
 
 
-# A protective field must clear the self filter blind zone by at least this
-# much in some axis, or the returns it depends on are deleted before the
-# collision monitor runs. 50 mm is one scan bin at the ranges involved,
-# not a safety margin; it is the floor below which the field is decorative.
-MIN_DETECTABLE_BAND = 0.050
+# MIN_DETECTABLE_BAND is imported from the generator below, not defined here.
+# It used to be a second copy of the same 0.050, which made this test unable to
+# fail for the reason it exists: the two numbers could drift apart and the
+# assertion would keep passing against its own private value while the fields
+# were generated against a different one. A test that supplies the constant it
+# is checking is checking arithmetic, not the generator.
 
 
 def cfg_path(name):
@@ -56,6 +57,10 @@ def _load_generator():
 
 
 gen = _load_generator()
+
+# The one definition, owned by the generator that sizes the fields. The
+# rationale for 50 mm lives beside it in generate_fields.py.
+MIN_DETECTABLE_BAND = gen.MIN_DETECTABLE_BAND
 
 
 # EVERY PLATFORM, NOT JUST THE FIRST ONE. These assert properties a protective

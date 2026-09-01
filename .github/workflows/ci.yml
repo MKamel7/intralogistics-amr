@@ -17,8 +17,14 @@ jobs:
           python-version: '3.12'
       - name: Install
         run: pip install pytest==8.3.4 pyyaml==6.0.2 ruff==0.15.20
+      # `ruff check src` left the repository's other 5,753 lines of Python
+      # unlinted: tools/ holds the filming and demo-cutting pipeline, which is
+      # what produced docs/media/demo.mp4, so it is the code a reader is most
+      # likely to run after the README and the least likely to have been
+      # checked. It is listed explicitly rather than linting `.` so a new
+      # top-level directory has to be added here deliberately.
       - name: Lint
-        run: ruff check src
+        run: ruff check src tools
       # EVERY GENERATOR GATE, not just the provenance one. These files need no
       # ROS and run in seconds, and between them they assert that the platform
       # specs keep their sources, that the protective fields match their
