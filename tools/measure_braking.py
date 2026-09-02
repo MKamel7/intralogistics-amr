@@ -63,6 +63,7 @@ from rclpy.node import Node
 from rclpy.parameter import Parameter
 from rclpy.qos import QoSDurabilityPolicy, QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
 from tf2_msgs.msg import TFMessage
+from amr_common.topics import Topics
 
 TRUTH_QOS = QoSProfile(
     reliability=QoSReliabilityPolicy.BEST_EFFORT,
@@ -117,7 +118,7 @@ class BrakingProbe(Node):
         self.armed_while_slow = 0
         self.resumed = 0
 
-        self.create_subscription(TFMessage, '/ground_truth/poses',
+        self.create_subscription(TFMessage, Topics.GROUND_TRUTH_POSES,
                                  self._truth, TRUTH_QOS)
         self.create_subscription(TwistStamped,
                                  '/diff_drive_controller/cmd_vel',

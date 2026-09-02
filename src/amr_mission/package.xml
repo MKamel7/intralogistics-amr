@@ -13,6 +13,8 @@
   <buildtool_depend>ament_cmake</buildtool_depend>
   <buildtool_depend>ament_cmake_python</buildtool_depend>
   <exec_depend>rclpy</exec_depend>
+  <!-- One quaternion to yaw, and one name per topic. -->
+  <exec_depend>amr_common</exec_depend>
   <!-- The transport task reads its acceleration limits from the platform spec,
        which amr_description installs. -->
   <exec_depend>amr_description</exec_depend>

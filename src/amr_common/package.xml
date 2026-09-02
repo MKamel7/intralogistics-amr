@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>amr_common</name>
+  <version>0.1.0</version>
+  <description>
+    The things every other package needs and nobody should write twice: the
+    pose maths, and the names of the topics the nodes talk over.
+
+    It exists because quaternion to yaw was written twelve times across ten
+    files in TWO MATHEMATICALLY INEQUIVALENT FORMS, and because the controller
+    name appears in five Python files and several YAML files with nothing
+    keeping them in step. A subscriber to a topic that no longer exists does
+    not error, it just goes quiet, so renaming the controller broke nodes
+    silently. Both problems are shapes rather than bugs, and a shared package
+    is the only fix that stops the next instance.
+  </description>
+  <maintainer email="mkamel860@gmail.com">Mohamed Kamel</maintainer>
+  <license>Apache-2.0</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <test_depend>ament_cmake_pytest</test_depend>
+  <export><build_type>ament_cmake</build_type></export>
+</package>

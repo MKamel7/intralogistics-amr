@@ -59,6 +59,8 @@ from rclpy.node import Node
 from rclpy.parameter import Parameter
 from rclpy.qos import QoSDurabilityPolicy, QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
 from tf2_msgs.msg import TFMessage
+from amr_common.pose import yaw_from_quaternion
+from amr_common.topics import Topics
 
 TRUTH_QOS = QoSProfile(
     reliability=QoSReliabilityPolicy.BEST_EFFORT,
@@ -127,7 +129,7 @@ class SocialProbe(Node):
         self.at_min = {}        # name -> (speed, ttc) at that moment
         self.samples = 0
 
-        self.create_subscription(TFMessage, '/ground_truth/poses',
+        self.create_subscription(TFMessage, Topics.GROUND_TRUTH_POSES,
                                  self._truth, TRUTH_QOS)
         self.create_subscription(TwistStamped,
                                  '/diff_drive_controller/cmd_vel',
@@ -156,8 +158,7 @@ class SocialProbe(Node):
             poses[tf.child_frame_id] = (p.x, p.y)
             if tf.child_frame_id == self.vehicle_frame:
                 q = tf.transform.rotation
-                yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y),
-                                 1.0 - 2.0 * (q.y * q.y + q.z * q.z))
+                yaw = yaw_from_quaternion(q)
         v = poses.get(self.vehicle_frame)
         if v is None or yaw is None:
             return

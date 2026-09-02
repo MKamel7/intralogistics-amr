@@ -65,6 +65,7 @@ import signal
 import subprocess
 import sys
 import time
+from amr_common.topics import Topics
 
 VEHICLE = 'amr'
 
@@ -524,7 +525,7 @@ def record(shots, size, rate, duration, outdir):
             self.speed = 0.0
             self.prev = None         # (t, x, y)
             self.create_subscription(
-                TFMessage, '/ground_truth/poses', self._truth,
+                TFMessage, Topics.GROUND_TRUTH_POSES, self._truth,
                 QoSProfile(reliability=QoSReliabilityPolicy.BEST_EFFORT,
                            history=QoSHistoryPolicy.KEEP_LAST,
                            durability=QoSDurabilityPolicy.VOLATILE, depth=10))

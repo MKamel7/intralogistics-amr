@@ -44,6 +44,7 @@ from rclpy.node import Node
 from rclpy.parameter import Parameter
 from rclpy.qos import QoSDurabilityPolicy, QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
 from tf2_msgs.msg import TFMessage
+from amr_common.topics import Topics
 
 TRUTH_QOS = QoSProfile(
     reliability=QoSReliabilityPolicy.BEST_EFFORT,
@@ -89,7 +90,7 @@ class PathProbe(Node):
         self.plan_len = None
         self.replans = 0
 
-        self.create_subscription(TFMessage, '/ground_truth/poses',
+        self.create_subscription(TFMessage, Topics.GROUND_TRUTH_POSES,
                                  self._truth, TRUTH_QOS)
         self.create_subscription(Path, '/plan', self._plan, 10)
         self.t0 = self.get_clock().now()

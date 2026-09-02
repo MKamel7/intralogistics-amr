@@ -48,6 +48,8 @@ from rclpy.node import Node
 from rclpy.parameter import Parameter
 from rclpy.qos import QoSDurabilityPolicy, QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
 from tf2_msgs.msg import TFMessage
+from amr_common.pose import yaw_from_quaternion
+from amr_common.topics import Topics
 
 TRUTH_QOS = QoSProfile(
     reliability=QoSReliabilityPolicy.BEST_EFFORT,
@@ -129,7 +131,7 @@ class DockingProbe(Node):
             if dk:
                 self.dock_truth = (dk['x'], dk['y'])
 
-        self.create_subscription(TFMessage, '/ground_truth/poses',
+        self.create_subscription(TFMessage, Topics.GROUND_TRUTH_POSES,
                                  self._truth, TRUTH_QOS)
         if self.dock_truth is not None:
             from geometry_msgs.msg import PoseStamped
@@ -148,8 +150,7 @@ class DockingProbe(Node):
                 continue
             p = tf.transform.translation
             q = tf.transform.rotation
-            yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y),
-                             1.0 - 2.0 * (q.y * q.y + q.z * q.z))
+            yaw = yaw_from_quaternion(q)
             if self.last is not None:
                 dt = now - self.last[2]
                 if dt > 1e-6:

@@ -68,6 +68,28 @@ That is enforced, not aspirational. `test_platform_spec.py` fails the build when
 provenance, and it has caught a real fault: a scanner mounting position quoted to the millimetre
 from an operating manual that described a different sensor than the one fitted. See V-23.
 
+### One quaternion to yaw, and one name per topic
+
+`amr_common` exists because the same two mistakes kept being made. Quaternion to
+yaw was written **twelve times across ten files, in two forms that are not the
+same function**: the general one, and `2 * atan2(z, w)`, which is exact when
+roll or pitch is zero and wrong when both are. Measured on a compound tilt of
+30 degrees roll and 20 of pitch, the shortcut reports 34.59 degrees where the
+heading is 40.00. Both sites using it read poses that are planar in today's
+scenarios, which is a property of the scenarios and not of the code.
+
+The topic names had the sharper failure mode. `diff_drive_controller` appeared
+in seven Python files and in the controller and collision monitor YAML, and **a
+subscriber to a renamed topic does not error, it goes quiet**, so renaming the
+controller would have left those nodes running and receiving nothing.
+
+Three checks keep it extracted, each verified by falsification rather than by
+watching it pass: the YAML configs are checked against the constants in both
+directions, and a grep gate fails the build if either yaw form is written
+again, naming the file. The tests deliberately keep their own topic literals,
+because a test that repeats the name independently is a check on the constant
+rather than a copy of it.
+
 ## Where to read next
 
 | | |
@@ -118,6 +140,7 @@ src/amr_description   platform specs, xacro description, generated controllers
     amr_bringup       launch
     amr_evaluation    scoring tools and the experiment runner
     amr_vda5050       VDA 5050 vehicle interface over MQTT
+    amr_common        one quaternion to yaw, and one name per topic
 tools/                the instruments: nine probes, the stack runner, teardown
 docs/findings.md      START HERE: the nine worth reading, with the numbers
 docs/ENGINEERING_REPORT.md  every measurement, every subsystem, the instruments
@@ -167,8 +190,10 @@ report.
   visual servo to plus or minus 10 to 20 mm. The current detector is documented as failed.
 - **Decide what VDA 5050 is today.** The bridge is a headline package that no launch file can start,
   with neither credentials nor TLS. Either wire it, or say plainly it is an unwired entry point.
-- **Extract `amr_common`**, pose maths and one `yaw_from_quaternion`, and the topic names currently
-  hardcoded across four nodes and six YAML keys.
+- **Bring the launch files and the RViz generator onto `amr_common.topics`.** The nodes and probes
+  use it now; `navigation.launch.py` and `build_navigation_rviz.py` still carry topic literals,
+  because a launch file that imports from the workspace it is launching is a dependency worth
+  thinking about rather than a rename.
 
 ## Predecessor
 

@@ -47,6 +47,8 @@ from rclpy.node import Node
 from rclpy.parameter import Parameter
 from rclpy.qos import QoSDurabilityPolicy, QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
 from tf2_msgs.msg import TFMessage
+from amr_common.pose import yaw_from_quaternion
+from amr_common.topics import Topics
 
 TRUTH_QOS = QoSProfile(
     reliability=QoSReliabilityPolicy.BEST_EFFORT,
@@ -90,7 +92,7 @@ class LoadProbe(Node):
         self.samples = 0
         self.seen = 0
 
-        self.create_subscription(TFMessage, '/ground_truth/poses',
+        self.create_subscription(TFMessage, Topics.GROUND_TRUTH_POSES,
                                  self._truth, TRUTH_QOS)
         self.t0 = self.get_clock().now()
         self.create_timer(1.0, self._tick)
@@ -106,14 +108,10 @@ class LoadProbe(Node):
             p = tf.transform.translation
             if tf.child_frame_id == self.vehicle_frame:
                 q = tf.transform.rotation
-                vehicle = (p.x, p.y, math.atan2(
-                    2.0 * (q.w * q.z + q.x * q.y),
-                    1.0 - 2.0 * (q.y * q.y + q.z * q.z)))
+                vehicle = (p.x, p.y, yaw_from_quaternion(q))
             elif tf.child_frame_id.startswith('payload'):
                 q = tf.transform.rotation
-                poses[tf.child_frame_id] = (p.x, p.y, p.z, math.atan2(
-                    2.0 * (q.w * q.z + q.x * q.y),
-                    1.0 - 2.0 * (q.y * q.y + q.z * q.z)))
+                poses[tf.child_frame_id] = (p.x, p.y, p.z, yaw_from_quaternion(q))
         if vehicle is None or not poses:
             return
         self.samples += 1

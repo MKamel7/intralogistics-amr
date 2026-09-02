@@ -65,6 +65,7 @@ from rclpy.node import Node
 from rclpy.parameter import Parameter
 from rclpy.qos import QoSDurabilityPolicy, QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
 from tf2_msgs.msg import TFMessage
+from amr_common.topics import Topics
 
 TRUTH_QOS = QoSProfile(
     reliability=QoSReliabilityPolicy.BEST_EFFORT,
@@ -114,9 +115,9 @@ class LocalisationProbe(Node):
         self.tf_failures = 0
         self.truth_msgs = 0
 
-        self.create_subscription(TFMessage, '/ground_truth/poses',
+        self.create_subscription(TFMessage, Topics.GROUND_TRUTH_POSES,
                                  self._truth, TRUTH_QOS)
-        self.create_subscription(Odometry, '/diff_drive_controller/odom',
+        self.create_subscription(Odometry, Topics.ODOM,
                                  self._odom, 20)
         self.t0 = self.get_clock().now()
         self.create_timer(0.05, self._sample)

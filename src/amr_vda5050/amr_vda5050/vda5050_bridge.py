@@ -51,6 +51,8 @@ from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 
 from amr_vda5050 import vda5050 as v
+from amr_common.pose import yaw_from_quaternion
+from amr_common.topics import Topics
 
 try:
     import paho.mqtt.client as mqtt
@@ -92,7 +94,7 @@ class Vda5050Bridge(Node):
         self.errors = []
 
         self.nav = ActionClient(self, NavigateToPose, 'navigate_to_pose')
-        self.create_subscription(Odometry, '/diff_drive_controller/odom',
+        self.create_subscription(Odometry, Topics.ODOM,
                                  self._odom, 10)
 
         self.client = None
@@ -277,9 +279,7 @@ class Vda5050Bridge(Node):
     def _odom(self, msg):
         p = msg.pose.pose.position
         q = msg.pose.pose.orientation
-        import math
-        yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y),
-                         1.0 - 2.0 * (q.y * q.y + q.z * q.z))
+        yaw = yaw_from_quaternion(q)
         self.pose = (p.x, p.y, yaw)
         self.velocity = (msg.twist.twist.linear.x, msg.twist.twist.angular.z)
 

@@ -34,13 +34,14 @@ import time
 import rclpy
 from rclpy.node import Node
 from rclpy.parameter import Parameter
+from amr_common.topics import Topics
 
 # The command chain, in the order a velocity travels along it. Each entry is a
 # topic that must have at least one publisher, because a broken link here is
 # invisible: the upstream node keeps publishing happily into nothing.
 CHAIN = [
-    '/cmd_vel_nav',
-    '/cmd_vel_raw',
+    Topics.CMD_VEL_NAV,
+    Topics.CMD_VEL_RAW,
     '/diff_drive_controller/cmd_vel',
 ]
 
@@ -60,7 +61,7 @@ LIFECYCLE = [
     '/costmap_filter_info_server',
 ]
 
-SENSORS = ['/scan', '/diff_drive_controller/odom', '/map']
+SENSORS = ['/scan', Topics.ODOM, '/map']
 
 
 class Preflight(Node):
@@ -161,7 +162,7 @@ class Preflight(Node):
         self.check('map to base_link resolves', ok, detail)
 
         print()
-        for topic in ('/scan', '/diff_drive_controller/odom'):
+        for topic in ('/scan', Topics.ODOM):
             rate, detail = self.rate(topic)
             self.check(f'{topic} is flowing', rate > 0.0, detail)
 
@@ -184,7 +185,7 @@ class Preflight(Node):
         # output and its state are legitimately silent and a bare "is flowing"
         # check would fail every healthy bringup. The fault is input flowing
         # while output does not.
-        in_rate, in_detail = self.rate('/cmd_vel_raw')
+        in_rate, in_detail = self.rate(Topics.CMD_VEL_RAW)
         if in_rate > 0.0:
             out_rate, out_detail = self.rate('/diff_drive_controller/cmd_vel')
             self.check('collision monitor passes commands through',

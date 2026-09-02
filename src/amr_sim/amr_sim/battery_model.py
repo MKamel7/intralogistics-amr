@@ -37,6 +37,7 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import BatteryState
 from nav_msgs.msg import Odometry
+from amr_common.topics import Topics
 
 
 class BatteryModel(Node):
@@ -85,7 +86,7 @@ class BatteryModel(Node):
         self.last_t = None
 
         self.pub = self.create_publisher(BatteryState, 'battery_state', 10)
-        self.create_subscription(Odometry, '/diff_drive_controller/odom',
+        self.create_subscription(Odometry, Topics.ODOM,
                                  self._odom, 10)
         self.create_timer(1.0 / float(g('publish_rate')), self._tick)
 

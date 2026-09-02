@@ -75,6 +75,8 @@ from rclpy.node import Node
 from std_msgs.msg import String
 
 from amr_mission.route import carrying_after, handling_label
+from amr_common.pose import yaw_from_quaternion
+from amr_common.topics import Topics
 
 # Collision monitor action codes, from nav2_msgs/CollisionMonitorState.
 ACTION = {0: 'clear', 1: 'stop', 2: 'slowdown', 3: 'approach', 4: 'limit'}
@@ -179,7 +181,7 @@ class TransportTask(Node):
 
         self.odom_total = 0.0
         self._last_odom = None
-        self.create_subscription(Odometry, '/diff_drive_controller/odom',
+        self.create_subscription(Odometry, Topics.ODOM,
                                  self._odom, 20)
 
         self._action = 'clear'
@@ -551,8 +553,7 @@ class TransportTask(Node):
             return None
         p = tf.transform.translation
         q = tf.transform.rotation
-        yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y),
-                         1.0 - 2.0 * (q.y * q.y + q.z * q.z))
+        yaw = yaw_from_quaternion(q)
         return p.x, p.y, yaw
 
     def nudge(self):

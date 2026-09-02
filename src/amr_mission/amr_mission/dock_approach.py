@@ -49,6 +49,7 @@ from rclpy.node import Node
 from rclpy.parameter import Parameter
 from rclpy.qos import qos_profile_sensor_data
 from std_msgs.msg import Bool
+from amr_common.pose import yaw_error, yaw_from_quaternion
 
 
 def approach_command(dx, dy, dyaw, standoff, gains, limits):
@@ -94,11 +95,6 @@ def approach_command(dx, dy, dyaw, standoff, gains, limits):
 
 def _clamp(v, limit):
     return max(-limit, min(limit, v))
-
-
-def yaw_of(q):
-    return math.atan2(2.0 * (q.w * q.z + q.x * q.y),
-                      1.0 - 2.0 * (q.y * q.y + q.z * q.z))
 
 
 class DockApproach(Node):
@@ -173,8 +169,7 @@ class DockApproach(Node):
         dy = self.pose.pose.position.y
         # The detector's yaw points from the apex back at the sensor, so a
         # perfectly aligned vehicle sees pi. The error is the departure from it.
-        dyaw = math.atan2(math.sin(yaw_of(self.pose.pose.orientation) - math.pi),
-                          math.cos(yaw_of(self.pose.pose.orientation) - math.pi))
+        dyaw = yaw_error(yaw_from_quaternion(self.pose.pose.orientation), math.pi)
 
         if abs(dx - self.standoff) <= self.xy_tol and abs(dy) <= self.xy_tol \
                 and abs(dyaw) <= self.yaw_tol:

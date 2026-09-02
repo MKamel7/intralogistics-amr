@@ -51,6 +51,8 @@ from nav_msgs.msg import OccupancyGrid
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import LaserScan
 from tf2_msgs.msg import TFMessage
+from amr_common.pose import yaw_from_quaternion
+from amr_common.topics import Topics
 
 # Bearing sectors, in degrees from straight ahead. Defined once because the
 # forward, side and rear counts and every split derived from them must use the
@@ -77,7 +79,7 @@ class StopClassifier(Node):
         self.robot = None
         self.create_subscription(LaserScan, '/scan', self._scan,
                                  qos_profile_sensor_data)
-        self.create_subscription(TFMessage, '/ground_truth/poses', self._poses, 20)
+        self.create_subscription(TFMessage, Topics.GROUND_TRUTH_POSES, self._poses, 20)
         self.create_subscription(CollisionMonitorState,
                                  '/collision_monitor_state', self._state, 20)
         # WHAT THE VEHICLE WAS DOING when the field fired. A stop for something
@@ -87,7 +89,7 @@ class StopClassifier(Node):
         self.cmd_vx = 0.0
         self.cmd_wz = 0.0
         self.create_subscription(
-            TwistStamped, '/cmd_vel_raw',
+            TwistStamped, Topics.CMD_VEL_RAW,
             lambda m: (setattr(self, 'cmd_vx', m.twist.linear.x),
                        setattr(self, 'cmd_wz', m.twist.angular.z)), 20)
         self.tf = tf2_ros.Buffer()
@@ -155,8 +157,7 @@ class StopClassifier(Node):
             self.verdicts['no transform'] += 1
             return
         q = tr.transform.rotation
-        yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y),
-                         1.0 - 2.0 * (q.y * q.y + q.z * q.z))
+        yaw = yaw_from_quaternion(q)
         tx, ty = tr.transform.translation.x, tr.transform.translation.y
 
         m = self.scan
@@ -210,8 +211,7 @@ class StopClassifier(Node):
             except Exception:
                 return f'no transform map to {frame}'
             q = tr.transform.rotation
-            yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y),
-                             1.0 - 2.0 * (q.y * q.y + q.z * q.z))
+            yaw = yaw_from_quaternion(q)
             px = (tr.transform.translation.x
                   + wx * math.cos(yaw) - wy * math.sin(yaw))
             py = (tr.transform.translation.y

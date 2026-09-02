@@ -29,12 +29,13 @@ from geometry_msgs.msg import TwistStamped
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy
+from amr_common.topics import Topics
 
 SPEC = (Path(__file__).resolve().parents[2]
         / 'amr_description' / 'config' / 'platforms' / 'mir250_class.yaml')
 
 CMD_TOPIC = '/diff_drive_controller/cmd_vel'
-ODOM_TOPIC = '/diff_drive_controller/odom'
+ODOM_TOPIC = Topics.ODOM
 
 
 class DriveCheck(Node):

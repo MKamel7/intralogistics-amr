@@ -51,6 +51,7 @@ from rclpy.node import Node
 from rclpy.parameter import Parameter
 from rclpy.qos import QoSDurabilityPolicy, QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
 from tf2_msgs.msg import TFMessage
+from amr_common.topics import Topics
 
 TRUTH_QOS = QoSProfile(
     reliability=QoSReliabilityPolicy.BEST_EFFORT,
@@ -78,7 +79,7 @@ class SlipProbe(Node):
                              Parameter('use_sim_time', value=True)])
         self.duration = self.declare_parameter('duration_s', 60.0).value
         self.truth_topic = self.declare_parameter(
-            'truth_topic', '/ground_truth/poses').value
+            'truth_topic', Topics.GROUND_TRUTH_POSES).value
         # The vehicle's child_frame_id in the ground truth stream. Everything
         # else on that topic is a pedestrian.
         self.vehicle_frame = self.declare_parameter('vehicle_frame', 'amr').value
@@ -97,7 +98,7 @@ class SlipProbe(Node):
         # second measurement.
         self.reported = False
 
-        self.create_subscription(Odometry, '/diff_drive_controller/odom',
+        self.create_subscription(Odometry, Topics.ODOM,
                                  self._odom, 20)
         # tf2_msgs/TFMessage, NOT PoseArray. This was written against the
         # wrong type first, which is silent: the subscription is created, no
@@ -160,7 +161,7 @@ class SlipProbe(Node):
         print(f'  wheel odometry against ground truth, '
               f'{self.odom_n} odom / {self.truth_n} truth sample(s)')
         if self.odom_n == 0 or self.truth_n == 0:
-            missing = '/diff_drive_controller/odom' if self.odom_n == 0 else self.truth_topic
+            missing = Topics.ODOM if self.odom_n == 0 else self.truth_topic
             print(f'  NO DATA on {missing}, so nothing was compared.')
             print('  This is not a result. Check the topic is being published.')
             print('=' * 70)

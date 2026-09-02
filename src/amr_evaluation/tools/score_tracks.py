@@ -31,6 +31,8 @@ from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from tf2_msgs.msg import TFMessage
 from vision_msgs.msg import Detection3DArray
+from amr_common.pose import yaw_from_quaternion
+from amr_common.topics import Topics
 
 SCENARIOS = Path(__file__).resolve().parents[2] / 'amr_sim' / 'scenarios'
 
@@ -111,7 +113,7 @@ class Scorer(Node):
         self.truth = {}
         self.robot = None
         self.frames = []
-        self.create_subscription(TFMessage, '/ground_truth/poses', self._truth, 10)
+        self.create_subscription(TFMessage, Topics.GROUND_TRUTH_POSES, self._truth, 10)
         self.create_subscription(
             Detection3DArray, '/people_tracks', self._tracks, qos_profile_sensor_data)
 
@@ -120,7 +122,7 @@ class Scorer(Node):
             if tf.child_frame_id == ROBOT_MODEL:
                 q = tf.transform.rotation
                 self.robot = (tf.transform.translation.x, tf.transform.translation.y,
-                              2.0 * math.atan2(q.z, q.w))
+                              yaw_from_quaternion(q))
             elif tf.child_frame_id in self.names:
                 self.truth[tf.child_frame_id] = (
                     tf.transform.translation.x, tf.transform.translation.y)

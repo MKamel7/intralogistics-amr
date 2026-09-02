@@ -62,6 +62,8 @@ from rclpy.node import Node
 from tf2_msgs.msg import TFMessage
 
 from amr_sim.occupancy import load_map
+from amr_common.pose import yaw_from_quaternion
+from amr_common.topics import Topics
 
 SCENARIOS = Path(__file__).resolve().parent.parent / 'scenarios'
 
@@ -219,7 +221,7 @@ class PedestrianDriver(Node):
         self.grid = load_map(map_file)
         x0, y0, x1, y1 = self.grid.bounds
         self.poses = {}
-        self.create_subscription(TFMessage, '/ground_truth/poses', self._poses, 10)
+        self.create_subscription(TFMessage, Topics.GROUND_TRUTH_POSES, self._poses, 10)
         self.dt = 0.05
         self.create_timer(self.dt, self._tick)
         self.get_logger().info(
@@ -233,7 +235,7 @@ class PedestrianDriver(Node):
         for tf in msg.transforms:
             p = tf.transform.translation
             q = tf.transform.rotation
-            self.poses[tf.child_frame_id] = (p.x, p.y, 2.0 * math.atan2(q.z, q.w))
+            self.poses[tf.child_frame_id] = (p.x, p.y, yaw_from_quaternion(q))
             if tf.child_frame_id in self.walkers:
                 self.walkers[tf.child_frame_id]['pose'] = self.poses[tf.child_frame_id]
 
