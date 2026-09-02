@@ -37,11 +37,6 @@ def yaw_from_quaternion(q) -> float:
                       1.0 - 2.0 * (q.y * q.y + q.z * q.z))
 
 
-def quaternion_from_yaw(yaw: float):
-    """A planar rotation as (x, y, z, w), the inverse of the above for flat poses."""
-    return (0.0, 0.0, math.sin(yaw / 2.0), math.cos(yaw / 2.0))
-
-
 def normalise_angle(angle: float) -> float:
     """Wrap an angle into [-pi, pi].
 

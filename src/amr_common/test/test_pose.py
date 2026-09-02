@@ -3,12 +3,17 @@
 import math
 
 import pytest
-from amr_common.pose import (
-    normalise_angle,
-    quaternion_from_yaw,
-    yaw_error,
-    yaw_from_quaternion,
-)
+from amr_common.pose import normalise_angle, yaw_error, yaw_from_quaternion
+
+
+def quaternion_from_yaw(yaw):
+    """A planar rotation as (x, y, z, w).
+
+    Lives here rather than in the library because nothing outside these tests
+    ever called it: an unused public function is API surface that has to be
+    kept working for no one.
+    """
+    return (0.0, 0.0, math.sin(yaw / 2.0), math.cos(yaw / 2.0))
 
 
 class Q:

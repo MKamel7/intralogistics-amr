@@ -39,19 +39,15 @@ class Topics:
     #: Wheel odometry, published by the controller and therefore named after it.
     ODOM = f"/{CONTROLLER}/odom"
 
-    #: Perception and navigation.
-    SCAN = "/scan"
-    MAP = "/map"
-    PLAN = "/plan"
-    TRAJECTORIES = "/trajectories"
-    ROBOT_DESCRIPTION = "/robot_description"
-
-    #: The safety layer's own outputs.
-    PROTECTIVE_FIELD = "/protective_field"
-    WARNING_FIELD = "/warning_field"
+    # NOT LISTED HERE: /scan, /map, /plan, /protective_field and the rest. They
+    # were, and nothing used them. A name in this file is a name the next
+    # person will trust and reuse, and an entry that no code reads and no test
+    # checks has never been confronted with the system: it is a guess with a
+    # constant's authority. They come back when something migrates onto them,
+    # which is the launch files and the RViz generator, and that is a roadmap
+    # item rather than a rename to do in passing.
 
     #: Evaluation oracles. ADR 0006: ground truth is scored against, never
     #: consumed by the control path, so these belong to the tools and to
     #: nothing that drives.
     GROUND_TRUTH_POSES = "/ground_truth/poses"
-    GROUND_TRUTH_MAP = "/ground_truth/map"

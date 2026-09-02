@@ -29,8 +29,6 @@ from launch.substitutions import (Command, LaunchConfiguration,
                                   PathJoinSubstitution, TextSubstitution)
 import yaml
 from pathlib import Path
-
-from amr_common.pose import to_frame
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
@@ -393,27 +391,41 @@ def generate_launch_description():
     # says otherwise.
     def make_dock_detector(context, *_, **__):
         stations_path = LaunchConfiguration('stations').perform(context)
-        dock_x = dock_y = 0.0
-        if stations_path and Path(stations_path).is_file():
-            spec = yaml.safe_load(open(stations_path))
-            dock = spec.get('dock', {}) or {}
-            spawn = spec.get('spawn', {}) or {}
-            # FRAMES, AND THIS FILE DELIBERATELY MIXES THEM. `spawn` is world,
-            # the stations are map frame relative to it, and the `dock` block is
-            # world frame because it is the scorer's ground truth. The gate
-            # compares against map -> base_link, so the dock has to be brought
-            # into the map frame or the comparison is between two different
-            # origins.
-            #
-            # It is worth spelling out because the first version of this passed
-            # the world coordinates straight through. On this track that is 7 m
-            # from where the vehicle believes the dock is, the gate never opened,
-            # and the detector published nothing anywhere. A gate that is always
-            # shut and a building with no docks in it look identical from here.
-            dock_x, dock_y = to_frame(
-                float(dock.get('x', 0.0)), float(dock.get('y', 0.0)),
-                float(spawn.get('x', 0.0)), float(spawn.get('y', 0.0)),
-                float(spawn.get('yaw', 0.0)))
+        # REFUSE RATHER THAN GUESS. Without a stations file the gate defaulted
+        # to (0, 0), which on this track is the vehicle's own spawn: the gate
+        # would open at the start pose and nowhere near the dock, and the run
+        # would look like a dock that is never detected. A launch that cannot
+        # do what was asked should say so.
+        if not stations_path or not Path(stations_path).is_file():
+            raise RuntimeError(
+                'docking:=true needs stations:=<stations yaml>. The dock gate is '
+                'positioned from that file, and without it the detector would '
+                'search around the map origin instead of around the dock.')
+        # Imported here, not at module scope. Every robot launch would
+        # otherwise fail with ImportError if amr_common were not built,
+        # which is a whole bringup broken by a package only the dock
+        # detector needs.
+        from amr_common.pose import to_frame
+
+        spec = yaml.safe_load(open(stations_path))
+        dock = spec.get('dock', {}) or {}
+        spawn = spec.get('spawn', {}) or {}
+        # FRAMES, AND THIS FILE DELIBERATELY MIXES THEM. `spawn` is world,
+        # the stations are map frame relative to it, and the `dock` block is
+        # world frame because it is the scorer's ground truth. The gate
+        # compares against map -> base_link, so the dock has to be brought
+        # into the map frame or the comparison is between two different
+        # origins.
+        #
+        # It is worth spelling out because the first version of this passed
+        # the world coordinates straight through. On this track that is 7 m
+        # from where the vehicle believes the dock is, the gate never opened,
+        # and the detector published nothing anywhere. A gate that is always
+        # shut and a building with no docks in it look identical from here.
+        dock_x, dock_y = to_frame(
+            float(dock.get('x', 0.0)), float(dock.get('y', 0.0)),
+            float(spawn.get('x', 0.0)), float(spawn.get('y', 0.0)),
+            float(spawn.get('yaw', 0.0)))
         return [Node(
             package='amr_perception', executable='dock_detector', output='screen',
             parameters=[{

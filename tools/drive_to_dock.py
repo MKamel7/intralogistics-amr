@@ -36,11 +36,41 @@ from tf2_msgs.msg import TFMessage
 #: publisher receives nothing at all. Both sides look healthy: the topic has a
 #: publisher, the node has a subscription, and no message ever arrives. Copied
 #: deliberately from measure_docking, which had it right.
+#: Beyond this the vehicle turns in place rather than driving an arc.
+BEARING_TOLERANCE = 0.15
+
 TRUTH_QOS = QoSProfile(
     reliability=QoSReliabilityPolicy.BEST_EFFORT,
     history=QoSHistoryPolicy.KEEP_LAST,
     durability=QoSDurabilityPolicy.VOLATILE,
     depth=10)
+
+
+def approach_command(distance, bearing, *, mode, standoff, retreat_to,
+                     turn_speed, drive_speed):
+    """What to do at this pose, as a pure decision.
+
+    Separated from the node because this drives a 250 kg vehicle and the rules
+    are worth testing without a simulator: the sign of the turn especially,
+    since inverting it drives away from the dock while looking like a
+    controller that is working.
+
+    Returns (linear, angular, mode), where mode is 'approach', 'retreat' or
+    'arrived'.
+    """
+    if mode == 'arrived':
+        return 0.0, 0.0, 'arrived'
+    if mode == 'retreat':
+        if distance >= retreat_to:
+            return 0.0, 0.0, 'approach'
+        return -drive_speed, 0.0, 'retreat'
+    if distance <= standoff:
+        return 0.0, 0.0, 'arrived'
+    if abs(bearing) > BEARING_TOLERANCE:
+        # Turn in place first. Driving while badly misaligned traces an arc
+        # into whatever is beside the dock.
+        return 0.0, math.copysign(turn_speed, bearing), 'approach'
+    return drive_speed, 0.5 * bearing, 'approach'
 
 
 class DriveToDock(Node):
@@ -118,37 +148,30 @@ class DriveToDock(Node):
         cmd.header.stamp = self.get_clock().now().to_msg()
         cmd.header.frame_id = 'base_link'
 
-        if self.finished:
-            self.pub.publish(cmd)
-            return
+        mode = 'arrived' if self.finished else ('retreat' if self.retreating else 'approach')
+        linear, angular, mode = approach_command(
+            distance, bearing, mode=mode, standoff=self.standoff,
+            retreat_to=self.retreat_to, turn_speed=self.turn_speed,
+            drive_speed=self.drive_speed)
 
-        if self.retreating:
-            if distance >= self.retreat_to:
-                self.retreating = False
-                self.get_logger().info(f'backed off to {distance:.2f} m, approaching again')
-            else:
-                cmd.twist.linear.x = -self.drive_speed
-                self.pub.publish(cmd)
-                return
-        elif distance <= self.standoff:
+        if mode == 'arrived' and not self.finished:
             self.done_cycles += 1
             self.get_logger().info(
                 f'reached the dock at {distance:.2f} m '
                 f'({self.done_cycles} of {self.cycles} approaches)')
             if self.done_cycles >= self.cycles:
                 self.finished = True
-                self.pub.publish(cmd)
                 self.get_logger().info(
                     f'{self.done_cycles} approaches done, holding. The moving '
                     f'detections are the ones a docking claim rests on.')
-                return
-            self.retreating = True
-            return
-        if abs(bearing) > 0.15:
-            cmd.twist.angular.z = math.copysign(self.turn_speed, bearing)
-        else:
-            cmd.twist.linear.x = self.drive_speed
-            cmd.twist.angular.z = 0.5 * bearing
+            else:
+                self.retreating = True
+        elif mode == 'approach' and self.retreating:
+            self.retreating = False
+            self.get_logger().info(f'backed off to {distance:.2f} m, approaching again')
+
+        cmd.twist.linear.x = linear
+        cmd.twist.angular.z = angular
         self.pub.publish(cmd)
 
 
