@@ -30,6 +30,11 @@ WHAT IT IMPLEMENTS
                     reports on a timer gives it up to a second of stale truth
                     to schedule on.
 
+    security        credentials from the environment and TLS to the broker,
+                    both required. The bridge REFUSES to connect without them
+                    rather than connecting anonymously in clear, which is what
+                    it used to do. See mqtt_security.
+
     order           base nodes traversed in sequence. An update must join the
                     order it extends, or it is refused, because accepting a
                     disjoint update makes the vehicle drive to a node it was
@@ -50,6 +55,7 @@ from rclpy.action import ActionClient
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 
+from amr_vda5050 import mqtt_security as sec
 from amr_vda5050 import vda5050 as v
 from amr_common.pose import yaw_from_quaternion
 from amr_common.topics import Topics
@@ -66,7 +72,10 @@ class Vda5050Bridge(Node):
         self.manufacturer = self.declare_parameter('manufacturer', 'Neobotix').value
         self.serial = self.declare_parameter('serial_number', 'mp400-01').value
         self.broker = self.declare_parameter('broker_host', 'localhost').value
-        self.port = self.declare_parameter('broker_port', 1883).value
+        # 8883, not 1883. A default that is insecure is the one most
+        # deployments keep. See mqtt_security.
+        self.port = self.declare_parameter('broker_port', sec.DEFAULT_TLS_PORT).value
+        self.allow_insecure = self.declare_parameter('allow_insecure', False).value
         self.map_id = self.declare_parameter('map_id', 'test_track').value
 
         self.header = v.Header(self.manufacturer, self.serial)
@@ -120,7 +129,29 @@ class Vda5050Bridge(Node):
         return v.topic(self.manufacturer, self.serial, name)
 
     def _connect(self):
+        # WHO MAY DRIVE, AND OVER WHAT, decided before a socket is opened.
+        # This node turns an MQTT message into a NavigateToPose goal, so an
+        # anonymous plaintext connection is an open door onto a 250 kg vehicle.
+        # The decision fails closed and says what is missing; the escape for a
+        # local test broker has to be asked for by name.
+        credentials = sec.credentials_from_env()
+        tls = sec.tls_from_env()
+        decision = sec.decide(credentials, tls, allow_insecure=self.allow_insecure)
+        self.get_logger().info(sec.describe(decision, tls, self.port))
+        if not decision.allowed:
+            self.get_logger().error(
+                'the VDA 5050 interface is NOT connected. The rest of the stack '
+                'is unaffected, and this vehicle accepts no remote orders.')
+            self.client = None
+            return
+        if not decision.secure:
+            self.get_logger().warn(sec.describe(decision, tls, self.port))
+
         self.client = mqtt.Client(client_id=f'{self.manufacturer}-{self.serial}')
+        if credentials.complete:
+            self.client.username_pw_set(credentials.username, credentials.password)
+        if tls.enabled:
+            self.client.tls_set(ca_certs=tls.ca, certfile=tls.cert, keyfile=tls.key)
         # THE LAST WILL IS THE POINT. Registered before connecting, so the
         # broker holds it from the first moment and publishes it if this
         # process dies without saying goodbye.

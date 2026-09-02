@@ -16,9 +16,12 @@ install(PROGRAMS ${PROJECT_NAME}/vda5050_bridge.py
         DESTINATION lib/${PROJECT_NAME}
         RENAME vda5050_bridge)
 
+install(DIRECTORY launch DESTINATION share/${PROJECT_NAME})
+
 if(BUILD_TESTING)
   find_package(ament_cmake_pytest REQUIRED)
   ament_add_pytest_test(test_vda5050 test/test_vda5050.py)
+  ament_add_pytest_test(test_mqtt_security test/test_mqtt_security.py)
 endif()
 
 ament_package()
