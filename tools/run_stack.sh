@@ -26,6 +26,7 @@
 # Usage:
 #   tools/run_stack.sh                        bring up and hold
 #   tools/run_stack.sh --cameras off          fleet tier, cheaper
+#   tools/run_stack.sh --people off           empty building, for geometry runs
 #   tools/run_stack.sh --run survey           bring up, then survey
 #   tools/run_stack.sh --run mission          bring up, then transport task
 #   tools/run_stack.sh --run survey_mission   survey first, then transport
@@ -75,6 +76,7 @@ TRACK_WORLD=false
 KEEPOUT=keepout_mask
 STATIONS=
 SCENARIO=walking_people
+PEOPLE=true
 TRUTH_MAP=warehouse_truth
 # The default world's spawn, read from the stations file that also owns the
 # station poses, for the reason the track branch gives below: the station
@@ -106,6 +108,13 @@ CYCLES=2
 while [ $# -gt 0 ]; do
   case "$1" in
     --cameras) [ "${2:-}" = off ] && CAMERAS=false; shift 2 ;;
+    # A run with nobody in the building is a DIFFERENT experiment, not a
+    # tidier version of the same one, so it is asked for by name. It exists
+    # because a pedestrian standing beside the vehicle marks the vehicle's own
+    # cell occupied, the planner then refuses with "Start occupied" before it
+    # searches, and a measurement about something else (docking geometry, say)
+    # dies for a reason that has nothing to do with what it was measuring.
+    --people)  [ "${2:-}" = off ] && PEOPLE=false; shift 2 ;;
     --platform) PLATFORM="${2:?--platform needs a name}"; shift 2 ;;
     --world)   WORLD="${2:?--world needs a name}"; TRACK_WORLD=false; shift 2 ;;
     --test-track) TRACK_WORLD=true; shift ;;
@@ -272,9 +281,13 @@ if [ "${STALE:-0}" -gt 0 ]; then
 fi
 
 say "starting: platform=$PLATFORM world=$WORLD cameras=$CAMERAS rviz=$RVIZ task=$TASK"
+# --docking also turns the dock detector on, gated on the nominal dock position
+# out of the stations file. It stays off otherwise: V-66 measured 84 percent
+# false positives running it everywhere, and the gate is the fix being measured.
 ros2 launch amr_bringup robot.launch.py platform:=$PLATFORM world:=$WORLD \
      x:=$SPAWN_X y:=$SPAWN_Y \
      gui:=true rviz:=$RVIZ cameras:=$CAMERAS payload_kg:=$PAYLOAD \
+     docking:=$DOCKING stations:="$STATIONS" \
      > "$RUN/robot.log" 2>&1 &
 # Every readiness wait below is conditional on this still being alive. A launch
 # that dies on a bad parameter does so in under a second, long before any node
@@ -319,10 +332,15 @@ say "keepout filter active"
 wait_active /bt_navigator 200 && say "nav2 active" || { say "NAV2 FAILED"; exit 1; }
 
 sleep 10
-ros2 launch amr_sim people.launch.py scenario:=$SCENARIO \
-    world:=$WORLD truth_map:=$TRUTH_MAP > "$RUN/people.log" 2>&1 &
-sleep 15
-say "people spawned"
+if [ "$PEOPLE" = true ]; then
+  ros2 launch amr_sim people.launch.py scenario:=$SCENARIO \
+      world:=$WORLD truth_map:=$TRUTH_MAP > "$RUN/people.log" 2>&1 &
+  sleep 15
+  say "people spawned"
+else
+  say "NO PEOPLE: the building is empty, so anything measured here says "\
+      "nothing about behaviour around people"
+fi
 
 python3 tools/preflight.py > "$RUN/preflight.log" 2>&1
 PF=$?

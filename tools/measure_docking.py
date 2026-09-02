@@ -58,6 +58,41 @@ TRUTH_QOS = QoSProfile(
     depth=10)
 
 
+
+def pose_at(history, t):
+    """The vehicle pose at time `t`, interpolated between ground truth samples.
+
+    WHY THE LATEST SAMPLE IS NOT GOOD ENOUGH, AND WHAT IT COST
+
+    V-66 scored 1452 dock detections against the vehicle's LATEST ground truth
+    pose rather than its pose at the detection's own timestamp. Ground truth
+    arrives at tens of hertz and the vehicle moves while docking, so that skew
+    injects error of the order of 10 to 20 mm at 0.3 m/s, into a measurement
+    whose whole question was whether the detector beats a 55 mm floor. V-66 said
+    so itself and called interpolating "the right next measurement", which is
+    what this is.
+
+    `history` is a list of (t, x, y, yaw), oldest first. Yaw is interpolated the
+    short way round, so a sample either side of the pi boundary does not produce
+    a pose facing backwards.
+
+    Returns None when `t` is outside the history: extrapolating past the ends
+    would put back exactly the kind of invented number this replaces.
+    """
+    if not history or len(history) < 2:
+        return None
+    if t < history[0][0] or t > history[-1][0]:
+        return None
+    for (t0, x0, y0, yaw0), (t1, x1, y1, yaw1) in zip(history, history[1:]):
+        if t0 <= t <= t1:
+            span = t1 - t0
+            if span <= 1e-9:
+                return (x0, y0, yaw0)
+            f = (t - t0) / span
+            dyaw = math.atan2(math.sin(yaw1 - yaw0), math.cos(yaw1 - yaw0))
+            return (x0 + f * (x1 - x0), y0 + f * (y1 - y0), yaw0 + f * dyaw)
+    return None
+
 def pose_error(vx, vy, vyaw, sx, sy, syaw):
     """Distance and heading error between a parked vehicle and a station.
 
@@ -125,6 +160,13 @@ class DockingProbe(Node):
         # docking only becomes possible if the sensor is better than that.
         self.dock_truth = None
         self.dock_errors = []
+        self.pose_history = []
+        #: Detections whose stamp falls outside the ground truth history. They
+        #: are counted rather than scored against a guessed pose, because a
+        #: number produced by extrapolation is what this change removes.
+        self.dock_unscored = 0
+        self.dock_moving = []
+        self.dock_still = []
         if stations and Path(stations).is_file():
             spec = yaml.safe_load(Path(stations).read_text())
             dk = spec.get('dock')
@@ -159,6 +201,10 @@ class DockingProbe(Node):
             self.last = (p.x, p.y, now)
             self.yaw_history.append((now, yaw))
             self.yaw_history = [h for h in self.yaw_history if now - h[0] <= 12.0]
+            # Position as well as heading, so a detection can be scored against
+            # where the vehicle WAS when the scan was taken. See pose_at.
+            self.pose_history.append((now, p.x, p.y, yaw))
+            self.pose_history = [h for h in self.pose_history if now - h[0] <= 12.0]
 
             near = None
             for name, (sx, sy, _syaw) in self.stations.items():
@@ -203,13 +249,20 @@ class DockingProbe(Node):
         The vehicle's own true pose is needed to place the detection in the
         world, and it comes from the oracle. That is legitimate for SCORING and
         would not be for control: the detector never sees it.
+
+        The pose is interpolated to the detection's own stamp rather than taken
+        as the latest sample. V-66 reported 43.4 mm p50 as an UPPER BOUND for
+        exactly this reason and named the fix; anything measured here before
+        this change carries 10 to 20 mm of the scorer's own error.
         """
-        if self.last is None or self.dock_truth is None or self.yaw_history is None:
+        if self.last is None or self.dock_truth is None:
             return
-        if not self.yaw_history:
+        stamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+        at = pose_at(self.pose_history, stamp)
+        if at is None:
+            self.dock_unscored += 1
             return
-        vx, vy, _ = self.last
-        vyaw = self.yaw_history[-1][1]
+        vx, vy, vyaw = at
         dx, dy = msg.pose.position.x, msg.pose.position.y
         c, s = math.cos(vyaw), math.sin(vyaw)
         wx = vx + c * dx - s * dy
@@ -219,6 +272,14 @@ class DockingProbe(Node):
         # detector is windowed to 2.5 m anyway. Anything beyond that here is a
         # false positive and belongs in the count rather than in the accuracy.
         self.dock_errors.append(err)
+        # SPLIT BY WHETHER THE VEHICLE WAS MOVING, because a stationary
+        # detector has no motion error and a docking claim is about an
+        # approach. The first gated run scored p95 47.4 mm with the vehicle
+        # holding station for most of the window, which is a real number about
+        # a situation that is not docking. Reported separately rather than
+        # averaged together, so neither figure can quietly stand in for the
+        # other.
+        (self.dock_moving if self.speed > self.stopped else self.dock_still).append(err)
 
     def _tick(self):
         if (self.get_clock().now() - self.t0).nanoseconds * 1e-9 >= self.duration:
@@ -272,6 +333,19 @@ class DockingProbe(Node):
                       f'max {max(good) * 1000:6.1f} mm   n={len(good)}')
             print(f'    {len(gross)} detection(s) beyond 300 mm, which are not the '
                   f'dock and are counted, not averaged')
+            # SPLIT BY MOTION. A stationary detector has no motion error, and a
+            # docking claim is about an approach, so a figure measured while
+            # holding station cannot stand in for one measured while driving.
+            for label, errs in (('while moving', self.dock_moving),
+                                ('while still ', self.dock_still)):
+                if errs:
+                    ordered = sorted(errs)
+                    p95 = ordered[min(len(ordered) - 1,
+                                      int(round(0.95 * (len(ordered) - 1))))]
+                    print(f'    {label}  p50 {statistics.median(errs) * 1000:5.1f} mm  '
+                          f'p95 {p95 * 1000:5.1f} mm  n={len(errs)}')
+                else:
+                    print(f'    {label}  no detections')
             print('  Compare against the 55 mm parked localisation floor: a')
             print('  sensor error below it is what makes docking possible at all.')
 

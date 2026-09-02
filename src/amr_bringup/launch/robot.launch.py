@@ -28,6 +28,9 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import (Command, LaunchConfiguration,
                                   PathJoinSubstitution, TextSubstitution)
 import yaml
+from pathlib import Path
+
+from amr_common.pose import to_frame
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
@@ -81,6 +84,18 @@ def generate_launch_description():
         DeclareLaunchArgument('cameras', default_value='true',
                               description='false gives the fleet-tier robot'),
         DeclareLaunchArgument('scanners', default_value='true'),
+        # Docking. Off by default: see the dock detector below and V-66.
+        DeclareLaunchArgument(
+            'docking', default_value='false',
+            description='run the gated dock detector'),
+        DeclareLaunchArgument(
+            'dock_gate_radius', default_value='3.0',
+            description='look for the dock only within this many metres of '
+                        'where the site layout says it is'),
+        DeclareLaunchArgument(
+            'stations', default_value='',
+            description='stations yaml; its dock block gives the nominal dock '
+                        'position for the gate'),
         DeclareLaunchArgument(
             'payload_kg', default_value='0.0',
             description='carried mass on the top plate; the rated payload is '
@@ -357,23 +372,62 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('scanners')),
         parameters=[{'use_sim_time': True}])
 
-    # THE DOCK DETECTOR IS NOT LAUNCHED, and the comment that used to be here
-    # argued it should always run because it steers nothing and costs little.
-    # That reasoning was wrong and V-66 is the measurement:
+    # THE DOCK DETECTOR IS GATED, and the comment that used to be here argued
+    # it should always run because it steers nothing and costs little. That
+    # reasoning was wrong and V-66 is the measurement:
     #
     #   1452 detections over one run, 1218 of them more than 300 mm from the
     #   real dock. 84 percent false positives. A warehouse is full of two
     #   surfaces meeting near 90 degrees and an always-on detector finds them.
     #
-    # Accuracy on the 234 plausible ones was p50 43.4 mm and p95 64.7 mm
-    # against the 55 mm localisation floor it had to beat, so it does not
-    # clearly beat it either.
+    # It now runs only within `dock_gate_radius` of where the site layout says
+    # the dock is, and fails closed without a localisation pose. The position is
+    # COMMISSIONING DATA in the same sense as the keepout zones of ADR 0007: an
+    # integrator says where the dock is, to a metre or so, and the detector
+    # supplies the precision. It is a different role from the `dock` block the
+    # scorer reads, which is ground truth and exact.
     #
-    # The node and its geometry are kept and unit tested. A docking detector
-    # should run when docking is EXPECTED, gated on proximity to a known dock,
-    # which is a change with its own measurement rather than one to smuggle in
-    # here. Until then, running it would publish a pose a controller could act
-    # on, and this project does not ship those.
+    # It is off by default. Turning it on publishes a pose a controller could
+    # act on, and the accuracy question of V-66 (p95 64.7 mm against a 55 mm
+    # floor) is still open until the re-measurement with an interpolated scorer
+    # says otherwise.
+    def make_dock_detector(context, *_, **__):
+        stations_path = LaunchConfiguration('stations').perform(context)
+        dock_x = dock_y = 0.0
+        if stations_path and Path(stations_path).is_file():
+            spec = yaml.safe_load(open(stations_path))
+            dock = spec.get('dock', {}) or {}
+            spawn = spec.get('spawn', {}) or {}
+            # FRAMES, AND THIS FILE DELIBERATELY MIXES THEM. `spawn` is world,
+            # the stations are map frame relative to it, and the `dock` block is
+            # world frame because it is the scorer's ground truth. The gate
+            # compares against map -> base_link, so the dock has to be brought
+            # into the map frame or the comparison is between two different
+            # origins.
+            #
+            # It is worth spelling out because the first version of this passed
+            # the world coordinates straight through. On this track that is 7 m
+            # from where the vehicle believes the dock is, the gate never opened,
+            # and the detector published nothing anywhere. A gate that is always
+            # shut and a building with no docks in it look identical from here.
+            dock_x, dock_y = to_frame(
+                float(dock.get('x', 0.0)), float(dock.get('y', 0.0)),
+                float(spawn.get('x', 0.0)), float(spawn.get('y', 0.0)),
+                float(spawn.get('yaw', 0.0)))
+        return [Node(
+            package='amr_perception', executable='dock_detector', output='screen',
+            parameters=[{
+                'use_sim_time': True,
+                'gate_enabled': True,
+                'dock_x': dock_x,
+                'dock_y': dock_y,
+                'gate_radius': float(
+                    LaunchConfiguration('dock_gate_radius').perform(context)),
+            }])]
+
+    dock_detector = OpaqueFunction(
+        function=make_dock_detector,
+        condition=IfCondition(LaunchConfiguration('docking')))
 
     rviz = Node(
         package='rviz2', executable='rviz2', output='screen',
@@ -393,7 +447,7 @@ def generate_launch_description():
         # both start fine with this one variable cleared. Narrowed by unsetting
         # the candidates one at a time; GTK_PATH was the only one that mattered.
         SetEnvironmentVariable('GTK_PATH', ''),
-        gz, aim_camera, rsp, bridge, spawn, rviz, battery, scan_merger, leg_detector, people_tracker, slam, slam_lifecycle, collision_monitor, safety_lifecycle,
+        gz, aim_camera, rsp, bridge, spawn, rviz, battery, scan_merger, leg_detector, dock_detector, people_tracker, slam, slam_lifecycle, collision_monitor, safety_lifecycle,
         # Chain on spawn exiting rather than on a timer. `create` exits once the
         # model is in the world, which is exactly the precondition the
         # controller_manager needs.

@@ -4793,3 +4793,66 @@ corner it could see.
 
 That is the honest accounting. A feature that failed, two defects it exposed,
 and a design decision it proved wrong.
+
+## V-67. The dock detector does support a docking claim, once it is gated and the scorer is fixed
+
+V-66 disqualified the detector for two reasons and named the fix for each. Both
+were done and both numbers moved.
+
+### What changed
+
+**The scorer was measuring its own error.** It placed each detection in the
+world using the vehicle's LATEST ground truth sample rather than its pose at the
+detection's own timestamp. V-66 said so itself, called 43.4 mm p50 an upper
+bound, and named interpolating as the right next measurement. `pose_at` now
+interpolates between the bracketing samples, refuses to extrapolate past the
+ends of the history, and interpolates yaw the short way round.
+
+**The detector was ungated.** V-66's own conclusion: a docking detector should
+run when docking is EXPECTED. It now searches only within 3 m of where the site
+layout says the dock is, and **fails closed without a localisation pose**,
+because silence is recoverable and a confident pose for a rack end is not.
+
+### The measurement
+
+2784 detections over four approaches, driving in to 1.18 m and backing off to
+2.6 m, on the generated track with an empty building:
+
+| | V-66 | now |
+|---|---|---|
+| detections scored | 1452 | 2784 |
+| **beyond 300 mm, so not the dock** | **1218, or 84 %** | **0** |
+| p50 | 43.4 mm | 43.4 mm |
+| **p95** | **64.7 mm** | **47.9 mm** |
+| max | 73.7 mm | 75.9 mm |
+| while moving, p95 | not separated | **49.3 mm**, n=1167 |
+| while still, p95 | not separated | 46.9 mm, n=1617 |
+
+**The p50 did not move and the p95 moved 17 mm.** That is the signature of a
+timing skew rather than a sensor improvement: the vehicle's motion between the
+scan and the ground truth sample inflates the tail and leaves the middle alone.
+The detector was always this good and the instrument was not.
+
+**Moving costs 2.4 mm at p95.** The first gated run held station for most of its
+window, which made its 47.4 mm a real number about a situation that is not
+docking, so the probe now splits by whether the vehicle was moving. It matters
+less than expected, and the moving figure is the one that counts: **49.3 mm p95,
+below the 55 mm parked localisation floor it has to beat.**
+
+### What this does and does not license
+
+It licenses aligning to the dock instead of to a map goal, which is what V-62
+said docking needs. It does not license a docking claim yet: the approach
+controller in `amr_mission/dock_approach.py` is still tested only as a pure
+function and is not wired into a mission, so nothing has yet parked by sensor.
+
+**Zero false positives here is partly by construction and the number should be
+read that way.** The gate only opens within 3 m of the dock and this run spent
+its time there, so this does not repeat V-66's building-wide search. What it
+establishes is that the class of false positive that disqualified the detector,
+rack ends and pallet corners seen from across the building, cannot reach a
+controller any more, and that within the gate nothing was mistaken for the dock.
+
+One run, one dock, one approach direction, no people. The roadmap's fiducial
+work is NOT justified by this evidence: a marker would be added to fix an
+accuracy problem the measurement says is already inside the budget.

@@ -90,6 +90,50 @@ struct DockSpec
   double min_face{0.10};          ///< metres of face, or it is a corner not a dock
 };
 
+/// Where the dock is, and how close the vehicle must be before looking for it.
+///
+/// WHY A DETECTOR IS GATED AT ALL, WHICH THIS PROJECT ARGUED ITSELF OUT OF ONCE
+///
+/// V-66 measured 1452 detections and found 84 percent of them more than 300 mm
+/// from the real dock. The building is full of two surfaces meeting near 90
+/// degrees: rack ends, pallet corners, doorway reveals, the delivery table. The
+/// geometry tests reject a flat wall, a shallow kink, a rack-leg-sized corner
+/// and a curve, and they are still not sufficient, because a warehouse contains
+/// things that pass all of them.
+///
+/// The launch comment at the time said an always-on detector "steers nothing"
+/// so there was no reason to gate it. Every clause of that was true and the
+/// conclusion was wrong: a detector that spends most of its time looking at
+/// things that are not the dock publishes mostly wrong poses, and a controller
+/// downstream cannot tell which. A docking detector should run when docking is
+/// EXPECTED, which is what real systems do.
+struct DockGate
+{
+  bool enabled{true};      ///< false restores the old always-on behaviour
+  double x{0.0};           ///< dock position in the map frame, commissioning data
+  double y{0.0};
+  double radius{3.0};      ///< look for the dock only inside this
+};
+
+/// Should the detector search this scan at all?
+///
+/// FAILS CLOSED. Without a pose the vehicle cannot know whether it is near the
+/// dock, and the failure this gate exists to prevent is publishing a confident
+/// pose for something that is not the dock. Silence is recoverable; a wrong
+/// dock pose that a controller acts on is not.
+inline bool shouldSearch(const DockGate & gate, bool have_pose, double vx, double vy)
+{
+  if (!gate.enabled) {
+    return true;
+  }
+  if (!have_pose) {
+    return false;
+  }
+  const double dx = vx - gate.x;
+  const double dy = vy - gate.y;
+  return std::hypot(dx, dy) <= gate.radius;
+}
+
 /// Total least squares line fit. Empty result if fewer than two points.
 inline std::optional<Line2> fitLine(const std::vector<Point2> & pts)
 {

@@ -173,3 +173,51 @@ TEST(FindDock, TheHeadingPointsFromTheApexTowardTheSensor)
   ASSERT_TRUE(pose.has_value());
   EXPECT_NEAR(std::abs(pose->yaw), M_PI, 0.02);
 }
+
+// The gate V-66 said should have been there. 84 percent of 1452 detections
+// were more than 300 mm from the real dock, because the detector ran
+// everywhere and a warehouse is full of near-90-degree corners.
+TEST(DockGate, disabled_searches_everywhere_as_before)
+{
+  amr_perception::DockGate gate;
+  gate.enabled = false;
+  EXPECT_TRUE(amr_perception::shouldSearch(gate, false, 100.0, 100.0));
+}
+
+TEST(DockGate, searches_when_the_vehicle_is_near_the_dock)
+{
+  amr_perception::DockGate gate;
+  gate.x = 10.0;
+  gate.y = 5.0;
+  gate.radius = 3.0;
+  EXPECT_TRUE(amr_perception::shouldSearch(gate, true, 10.0, 5.0));
+  EXPECT_TRUE(amr_perception::shouldSearch(gate, true, 12.0, 5.0));
+}
+
+TEST(DockGate, refuses_to_search_across_the_building)
+{
+  amr_perception::DockGate gate;
+  gate.x = 10.0;
+  gate.y = 5.0;
+  gate.radius = 3.0;
+  EXPECT_FALSE(amr_perception::shouldSearch(gate, true, 20.0, 5.0));
+  EXPECT_FALSE(amr_perception::shouldSearch(gate, true, 10.0, 9.0));
+}
+
+TEST(DockGate, fails_closed_without_a_pose)
+{
+  // Silence is recoverable. A confident pose for a rack end is not.
+  amr_perception::DockGate gate;
+  gate.x = 0.0;
+  gate.y = 0.0;
+  gate.radius = 3.0;
+  EXPECT_FALSE(amr_perception::shouldSearch(gate, false, 0.0, 0.0));
+}
+
+TEST(DockGate, the_boundary_is_inclusive_and_does_not_wobble)
+{
+  amr_perception::DockGate gate;
+  gate.radius = 2.0;
+  EXPECT_TRUE(amr_perception::shouldSearch(gate, true, 2.0, 0.0));
+  EXPECT_FALSE(amr_perception::shouldSearch(gate, true, 2.0001, 0.0));
+}

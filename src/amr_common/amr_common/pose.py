@@ -60,3 +60,26 @@ def yaw_error(target: float, current: float) -> float:
     target.
     """
     return normalise_angle(target - current)
+
+
+def to_frame(x: float, y: float, origin_x: float, origin_y: float,
+             origin_yaw: float = 0.0) -> tuple[float, float]:
+    """Express a world point in a frame whose origin sits at a known world pose.
+
+    WHY THIS IS SHARED RATHER THAN INLINE
+
+    `stations.*.yaml` mixes frames on purpose and says so per entry: `spawn` is
+    world, the stations are map frame relative to it, and the `dock` block is
+    world because it is the scorer's ground truth. Anything that reads one of
+    those and compares it with `map -> base_link` has to do this conversion, and
+    doing it inline is how it gets done once and forgotten the second time.
+
+    It was forgotten the first time: the dock detector's proximity gate was
+    handed the dock's WORLD coordinates and compared them against the vehicle's
+    MAP pose, 7.1 m apart on the test track. The gate never opened, so the
+    detector published nothing anywhere, and a gate that is always shut looks
+    exactly like a building with no docks in it.
+    """
+    dx, dy = x - origin_x, y - origin_y
+    c, s = math.cos(-origin_yaw), math.sin(-origin_yaw)
+    return c * dx - s * dy, s * dx + c * dy

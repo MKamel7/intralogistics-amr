@@ -8,7 +8,7 @@ layer that sits after the planner and can override it.
 name outran the code; there is no traffic controller and no task allocation. A fleet layer is
 cancelled, not deferred, and is claimed nowhere in this repository.
 
-**Status: FINISHED. One platform validated end to end, with 66 recorded findings.** This README documents
+**Status: FINISHED. One platform validated end to end, with 67 recorded findings.** This README documents
 what exists and what is measured, not what is planned. Every figure below is traceable to an entry
 in `docs/validation.md`; anything not built is under Roadmap and is claimed nowhere else.
 
@@ -50,7 +50,7 @@ were in the measuring instruments rather than in the robot, and one was a value 
 | braking distance, laden and unladen | **9 mm** median both, 85 to 97 mm worst, n=859 | V-60 |
 | an unsecured 100 kg load, over a duty cycle | **0.0 mm** of slide, **3.8 deg** of rotation, none lost | V-61 |
 | parked accuracy at a station | median **117 mm**, worst 212 mm against a 200 mm tolerance | V-62 |
-| precision docking | **not delivered.** The detector reports 84 % false positives always-on | V-66 |
+| dock detection, gated | p95 **49.3 mm** while moving, **0** of 2784 beyond 300 mm | V-67 |
 
 The other nine measurements, the planner comparison over nine runs, and the latency retraction
 that cost this project a published claim are in
@@ -96,7 +96,7 @@ rather than a copy of it.
 |---|---|
 | [docs/findings.md](docs/findings.md) | **start here.** The nine faults worth knowing about, five minutes |
 | [docs/ENGINEERING_REPORT.md](docs/ENGINEERING_REPORT.md) | every measurement, every subsystem, the instruments, the ADRs |
-| [docs/validation.md](docs/validation.md) | the laboratory notebook, 66 numbered entries |
+| [docs/validation.md](docs/validation.md) | the laboratory notebook, 67 numbered entries |
 | [docs/safety_concept.md](docs/safety_concept.md) | the protective field reasoning and what it does not prove |
 | [docs/adr](docs/adr) | ten architecture decision records |
 | [docs/architecture](docs/architecture) | arc42 architecture documentation |
@@ -105,7 +105,11 @@ rather than a copy of it.
 
 - **Physical load transfer.** A cycle loads and unloads as a mission state with a dwell. Nothing is
   carried in the physics.
-- **Precision docking.** The vehicle parks by navigation goal, not by aligning to a marker.
+- **Precision docking, though the sensor half now works.** The vehicle still parks by
+  navigation goal. The dock detector was disqualified by V-66 for 84 % false positives and a p95
+  above the localisation floor; gating it and fixing the scorer's own timing error put it at
+  49.3 mm p95 while moving with no false positives (V-67). What is missing is the approach
+  controller, which exists and is tested as a pure function and is wired into nothing.
 - **The fleet layer, deliberately.** No dispatcher, no lane reservation, no task allocation. The
   VDA 5050 interface is the *vehicle* half, and a dispatcher with one robot behind it would be a
   claim without a measurement.
@@ -144,7 +148,7 @@ src/amr_description   platform specs, xacro description, generated controllers
 tools/                the instruments: nine probes, the stack runner, teardown
 docs/findings.md      START HERE: the nine worth reading, with the numbers
 docs/ENGINEERING_REPORT.md  every measurement, every subsystem, the instruments
-docs/validation.md    the laboratory notebook, 66 numbered entries
+docs/validation.md    the laboratory notebook, 67 numbered entries
 docs/adr              architecture decision records
 docs/architecture     arc42 architecture documentation
 docs/datasheets       archived source documents for every physical constant
@@ -186,8 +190,11 @@ See V-50.
 Capability-level, and the measurement-level list a successor would work from is in the engineering
 report.
 
-- **Repair precision docking with fiducials**, Nav2 coarse approach then AprilTag or ArUco pose then
-  visual servo to plus or minus 10 to 20 mm. The current detector is documented as failed.
+- **Wire the dock approach controller into a mission and measure a parked accuracy at the dock.**
+  The fiducial work this used to call for is not justified: V-67 measured the existing geometric
+  detector at 49.3 mm p95 while moving with zero false positives, which is inside the budget a
+  marker would have been added to reach. What is unmeasured is parking BY that sensor, against the
+  117 mm median a map-frame goal achieves.
 - **Decide what VDA 5050 is today.** The bridge is a headline package that no launch file can start,
   with neither credentials nor TLS. Either wire it, or say plainly it is an unwired entry point.
 - **Bring the launch files and the RViz generator onto `amr_common.topics`.** The nodes and probes

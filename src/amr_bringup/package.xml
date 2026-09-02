@@ -10,6 +10,8 @@
   <license>Apache-2.0</license>
   <buildtool_depend>ament_cmake</buildtool_depend>
 
+  <!-- The launch converts the dock pose into the map frame. -->
+  <exec_depend>amr_common</exec_depend>
   <exec_depend>amr_description</exec_depend>
   <exec_depend>amr_sim</exec_depend>
   <exec_depend>controller_manager</exec_depend>

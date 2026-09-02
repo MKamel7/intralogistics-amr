@@ -29,6 +29,8 @@
 #include "sensor_msgs/msg/laser_scan.hpp"
 #include "std_msgs/msg/bool.hpp"
 #include "tf2/LinearMath/Quaternion.h"
+#include "tf2_ros/buffer.h"
+#include "tf2_ros/transform_listener.h"
 
 namespace amr_perception
 {
@@ -49,6 +51,17 @@ public:
     spec_.min_points = static_cast<std::size_t>(
       declare_parameter("min_points", static_cast<int>(spec_.min_points)));
 
+    // The gate. Commissioning data, like the keepout zones: where the dock is
+    // comes from the site layout, not from perception. See DockGate.
+    gate_.enabled = declare_parameter("gate_enabled", gate_.enabled);
+    gate_.x = declare_parameter("dock_x", gate_.x);
+    gate_.y = declare_parameter("dock_y", gate_.y);
+    gate_.radius = declare_parameter("gate_radius", gate_.radius);
+    map_frame_ = declare_parameter("map_frame", std::string("map"));
+    base_frame_ = declare_parameter("base_frame", std::string("base_link"));
+    tf_buffer_ = std::make_shared<tf2_ros::Buffer>(get_clock());
+    tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
+
     pose_pub_ = create_publisher<geometry_msgs::msg::PoseStamped>("dock_pose", 10);
     // A SEPARATE, EXPLICIT "no dock" SIGNAL. A controller that infers absence
     // from a stale pose will drive at a dock that is no longer there, and a
@@ -66,11 +79,49 @@ public:
       spec_.opening * 180.0 / M_PI, spec_.opening_tol * 180.0 / M_PI,
       spec_.min_range, spec_.max_range, spec_.half_sector * 180.0 / M_PI,
       spec_.min_face);
+    if (gate_.enabled) {
+      RCLCPP_INFO(
+        get_logger(), "gated: searching only within %.1f m of the dock at (%.2f, %.2f)",
+        gate_.radius, gate_.x, gate_.y);
+    } else {
+      RCLCPP_WARN(
+        get_logger(),
+        "GATE DISABLED: searching every scan. V-66 measured 84 percent false "
+        "positives this way");
+    }
   }
 
 private:
+  /// The vehicle's own belief about where it is, from localisation rather than
+  /// from the oracle: ADR 0006 keeps ground truth out of the control path, and
+  /// a gate that decides whether to steer is in it.
+  bool vehiclePose(double & x, double & y) const
+  {
+    try {
+      const auto tf = tf_buffer_->lookupTransform(
+        map_frame_, base_frame_, tf2::TimePointZero);
+      x = tf.transform.translation.x;
+      y = tf.transform.translation.y;
+      return true;
+    } catch (const tf2::TransformException &) {
+      return false;
+    }
+  }
+
   void onScan(const sensor_msgs::msg::LaserScan::SharedPtr msg)
   {
+    double vx = 0.0, vy = 0.0;
+    const bool have_pose = vehiclePose(vx, vy);
+    if (!shouldSearch(gate_, have_pose, vx, vy)) {
+      // Say "no dock" rather than going quiet: a controller that infers absence
+      // from silence cannot tell a gated detector from a dead one, which is the
+      // same argument the found topic already exists for.
+      std_msgs::msg::Bool gated;
+      gated.data = false;
+      found_pub_->publish(gated);
+      return;
+    }
+
     std::vector<Point2> pts;
     pts.reserve(msg->ranges.size());
     for (std::size_t i = 0; i < msg->ranges.size(); ++i) {
@@ -117,6 +168,11 @@ private:
   }
 
   DockSpec spec_;
+  DockGate gate_;
+  std::string map_frame_;
+  std::string base_frame_;
+  std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
+  std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
   rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pose_pub_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr found_pub_;
   rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr sub_;

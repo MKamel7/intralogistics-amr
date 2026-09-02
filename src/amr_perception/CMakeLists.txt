@@ -35,7 +35,7 @@ target_include_directories(dock_detector PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
 ament_target_dependencies(dock_detector
-  rclcpp sensor_msgs geometry_msgs std_msgs tf2)
+  rclcpp sensor_msgs geometry_msgs std_msgs tf2 tf2_ros)
 
 add_executable(leg_detector src/leg_detector_node.cpp)
 target_include_directories(leg_detector PUBLIC

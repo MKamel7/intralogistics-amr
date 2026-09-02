@@ -98,3 +98,50 @@ def test_the_final_turn_is_recorded():
     assert 'after turning' in t, 'the turn is computed but never reported'
     assert 'OPPOSING the turn' in t, (
         'the report does not test the sign relationship the hypothesis rests on')
+
+
+def at(history, t):
+    return load().pose_at(history, t)
+
+
+def test_a_pose_between_two_samples_is_interpolated_not_snapped():
+    """The fix V-66 asked for: score a detection against where the vehicle WAS.
+
+    Taking the latest sample instead injects the vehicle's own motion into the
+    detector's error, which is how a 43.4 mm p50 became an upper bound rather
+    than a measurement.
+    """
+    history = [(10.0, 0.0, 0.0, 0.0), (10.1, 0.30, 0.0, 0.0)]
+
+    assert at(history, 10.05)[0] == pytest.approx(0.15)
+    assert at(history, 10.0)[0] == pytest.approx(0.0)
+    assert at(history, 10.1)[0] == pytest.approx(0.30)
+
+
+def test_the_skew_it_removes_is_the_size_v66_predicted():
+    """At 0.3 m/s, half a 100 ms ground truth period is 15 mm of error."""
+    history = [(0.0, 0.0, 0.0, 0.0), (0.1, 0.03, 0.0, 0.0)]
+
+    interpolated = at(history, 0.05)[0]
+    latest_sample = history[-1][1]
+
+    assert abs(latest_sample - interpolated) == pytest.approx(0.015, abs=1e-9)
+
+
+def test_yaw_interpolates_the_short_way_round():
+    """A sample either side of pi must not produce a pose facing backwards."""
+    history = [(0.0, 0.0, 0.0, math.pi - 0.05), (1.0, 0.0, 0.0, -math.pi + 0.05)]
+
+    yaw = at(history, 0.5)[2]
+
+    assert abs(math.atan2(math.sin(yaw - math.pi), math.cos(yaw - math.pi))) < 0.02
+
+
+def test_a_stamp_outside_the_history_is_refused_rather_than_extrapolated():
+    """Extrapolating would reinstate the invented number this replaces."""
+    history = [(5.0, 0.0, 0.0, 0.0), (6.0, 1.0, 0.0, 0.0)]
+
+    assert at(history, 4.9) is None
+    assert at(history, 6.1) is None
+    assert at([], 5.0) is None
+    assert at([(5.0, 0.0, 0.0, 0.0)], 5.0) is None

@@ -84,3 +84,34 @@ def test_yaw_error_takes_the_short_way_round_and_keeps_its_sign():
     assert yaw_error(math.radians(10), math.radians(350)) == pytest.approx(math.radians(20))
     assert yaw_error(math.radians(350), math.radians(10)) == pytest.approx(math.radians(-20))
     assert abs(yaw_error(math.pi - 0.01, -math.pi + 0.01)) == pytest.approx(0.02, abs=1e-9)
+
+
+def test_a_world_point_at_the_frame_origin_is_the_origin():
+    from amr_common.pose import to_frame
+
+    assert to_frame(4.5, 5.507, 4.5, 5.507) == pytest.approx((0.0, 0.0))
+
+
+def test_the_dock_conversion_that_was_missed():
+    """The real numbers from the test track, and the 7.1 m the gate was out by.
+
+    dock world (1.6, 5.5074), spawn world (4.5, 5.507), so the dock is 2.9 m
+    BEHIND the vehicle's start in the map frame. The gate was told (1.6, 5.5074)
+    and compared it with a map pose, which put it 7.1 m from the truth and shut
+    the detector off everywhere.
+    """
+    from amr_common.pose import to_frame
+
+    mx, my = to_frame(1.6, 5.5074, 4.5, 5.507, 0.0)
+
+    assert (mx, my) == pytest.approx((-2.9, 0.0), abs=1e-3)
+    assert math.hypot(1.6 - mx, 5.5074 - my) == pytest.approx(7.1, abs=0.05)
+
+
+def test_a_rotated_frame_rotates_the_point():
+    """A spawn yaw of 90 degrees puts a point ahead of it on the frame's +x."""
+    from amr_common.pose import to_frame
+
+    x, y = to_frame(1.0, 2.0, 1.0, 1.0, math.pi / 2)
+
+    assert (x, y) == pytest.approx((1.0, 0.0), abs=1e-9)
