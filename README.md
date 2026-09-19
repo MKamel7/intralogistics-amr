@@ -114,26 +114,6 @@ rather than a copy of it.
 | [docs/adr](docs/adr) | ten architecture decision records |
 | [docs/architecture](docs/architecture) | arc42 architecture documentation |
 
-## ⚠️ Not done yet
-
-- **Physical load transfer.** A cycle loads and unloads as a mission state with a dwell. Nothing is
-  carried in the physics.
-- **Precision docking, though the sensor half now works.** The vehicle still parks by
-  navigation goal. The dock detector was disqualified by V-66 for 84 % false positives and a p95
-  above the localisation floor; gating it and fixing the scorer's own timing error put it at
-  49.3 mm p95 while moving with no false positives (V-67). What is missing is the approach
-  controller, which exists and is tested as a pure function and is wired into nothing.
-- **The fleet layer, deliberately.** No dispatcher, no lane reservation, no task allocation. The
-  VDA 5050 interface is the *vehicle* half, and a dispatcher with one robot behind it would be a
-  claim without a measurement.
-- **A human-aware costmap layer.** The planner routes around people as ordinary obstacles, without
-  paying a cost for passing close to one.
-- **The MiR250 as a running vehicle.** Its specification and generated configuration are kept and
-  the tests run over both platforms, which is what caught V-33. It is not validated on the track.
-
-The open items, and the camera field-of-view figure that no published number may rest on until its
-data sheet is archived, are in the engineering report.
-
 ## 🚚 The robot
 
 A **MiR250-class** AMR: a 250 kg payload differential-drive platform with two drive wheels, four
@@ -233,6 +213,19 @@ report.
   use it now; `navigation.launch.py` and `build_navigation_rviz.py` still carry topic literals,
   because a launch file that imports from the workspace it is launching is a dependency worth
   thinking about rather than a rename.
+
+- **Carry the load in the physics.** A cycle currently loads and unloads as a mission state with a
+  dwell, so nothing is actually carried. Making the transfer physical is what would let the
+  dynamics of a loaded vehicle be measured rather than assumed.
+- **A human-aware costmap layer.** The planner routes around people as ordinary obstacles and pays
+  no cost for passing close to one. On a floor shared with people on foot that distinction is the
+  whole point.
+- **Validate the MiR250 on the track.** Its specification and generated configuration are kept and
+  the tests run over both platforms, which is what caught V-33, but it has never been run on the
+  track as a vehicle.
+- **The fleet layer, still deliberately absent.** No dispatcher, no lane reservation, no task
+  allocation. The VDA 5050 interface is the vehicle half, and a dispatcher with one robot behind it
+  would be a claim without a measurement. It stays out until there is a second robot to measure.
 
 ## 🕓 Predecessor
 
