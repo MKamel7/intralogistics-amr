@@ -33,6 +33,16 @@ were in the measuring instruments rather than in the robot, and one was a value 
 *The first 20 seconds of a transport run. The safety layer sits after the planner and
 can override it, which is the part worth watching.*
 
+## 🛠️ Built with
+
+| | |
+| --- | --- |
+| **Robotics** | ROS 2 Jazzy, Nav2 |
+| **Simulation** | Gazebo Harmonic |
+| **Interfaces** | VDA 5050 vehicle side |
+| **Platforms** | MP-400 class, MiR250 configuration generated and tested |
+| **Engineering** | Safety layer downstream of the planner, GitHub Actions CI |
+
 ## 🏗️ Architecture in five lines
 
 - **Sensors.** Two 275 degree safety scanners at diagonally opposite corners, two RGB-D cameras,
@@ -238,3 +248,9 @@ robot, different architecture. This repository is solo work from its first commi
 
 Apache-2.0. The imported warehouse scenery is derived from the AWS RoboMaker small warehouse world,
 copyright Amazon.com, Inc., licensed MIT-0; see `src/amr_sim/models/README.md`.
+
+---
+
+Built by **Mo Kamel**, M.Eng. Mechatronic and Cyber-Physical Systems, Technische
+Hochschule Deggendorf.
+[Portfolio](https://mkamel7.github.io) · [LinkedIn](https://linkedin.com/in/mo-kamel7)
