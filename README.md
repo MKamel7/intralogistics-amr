@@ -1,5 +1,11 @@
 # Intralogistics AMR
 
+[![CI](https://github.com/MKamel7/intralogistics-amr/actions/workflows/ci.yml/badge.svg)](https://github.com/MKamel7/intralogistics-amr/actions)
+[![ROS 2](https://img.shields.io/badge/ROS%202-Jazzy-blue)](https://docs.ros.org)
+[![Nav2](https://img.shields.io/badge/Nav2-Gazebo%20Harmonic-informational)](https://navigation.ros.org)
+[![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue)](LICENSE)
+
+
 An autonomous mobile robot for indoor intralogistics, on ROS 2 Jazzy, Gazebo Harmonic and Nav2.
 It moves load carriers between stations in a warehouse shared with people on foot, with a safety
 layer that sits after the planner and can override it.
@@ -22,7 +28,12 @@ the nine faults worth knowing about, each with the number attached and the wrong
 held for a while. Two of them are claims this project made and later retracted, five of the faults
 were in the measuring instruments rather than in the robot, and one was a value written, committed
 
-## Architecture in five lines
+![the AMR running a transport task](docs/media/demo.gif)
+
+*The first 20 seconds of a transport run. The safety layer sits after the planner and
+can override it, which is the part worth watching.*
+
+## 🏗️ Architecture in five lines
 
 - **Sensors.** Two 275 degree safety scanners at diagonally opposite corners, two RGB-D cameras,
   wheel odometry and an IMU, every one of them generated from the platform specification.
@@ -36,7 +47,9 @@ were in the measuring instruments rather than in the robot, and one was a value 
 - **ros2_control.** Differential drive over `gz_ros2_control`, with the controllers spawned when the
   model exists in the world rather than on a timer.
 
-## Headline results, on the generated track, MP-400 class
+## 📊 Headline results
+
+On the generated track, MP-400 class.
 
 | | result | where |
 |---|---|---|
@@ -57,7 +70,7 @@ that cost this project a published claim are in
 [docs/ENGINEERING_REPORT.md](docs/ENGINEERING_REPORT.md). Every figure traces to a numbered entry
 in [docs/validation.md](docs/validation.md).
 
-## Why this exists
+## 🎯 Why this exists
 
 The claim this repository is built around:
 
@@ -90,7 +103,7 @@ again, naming the file. The tests deliberately keep their own topic literals,
 because a test that repeats the name independently is a check on the constant
 rather than a copy of it.
 
-## Where to read next
+## 📖 Where to read next
 
 | | |
 |---|---|
@@ -101,7 +114,7 @@ rather than a copy of it.
 | [docs/adr](docs/adr) | ten architecture decision records |
 | [docs/architecture](docs/architecture) | arc42 architecture documentation |
 
-## Not done yet
+## ⚠️ Not done yet
 
 - **Physical load transfer.** A cycle loads and unloads as a mission state with a dwell. Nothing is
   carried in the physics.
@@ -121,7 +134,7 @@ rather than a copy of it.
 The open items, and the camera field-of-view figure that no published number may rest on until its
 data sheet is archived, are in the engineering report.
 
-## The robot
+## 🚚 The robot
 
 A **MiR250-class** AMR: a 250 kg payload differential-drive platform with two drive wheels, four
 casters, two safety laser scanners at diagonally opposite corners and two 3D cameras. It is a class
@@ -132,7 +145,7 @@ reasoning behind the choice is in
 [`docs/datasheets/`](docs/datasheets/) with text extractions beside them, so every constant cites a
 line rather than a memory.
 
-## Layout
+## 📁 Layout
 
 ```
 src/amr_description   platform specs, xacro description, generated controllers
@@ -156,7 +169,7 @@ requirements/         requirements with IDs, traced to tests
 Dockerfile            builds from a clean base and runs the suite
 ```
 
-## Try it
+## ▶️ Try it
 
 ```
 ./demo.sh
@@ -170,7 +183,7 @@ About four minutes on a laptop. Nothing needs clicking.
 selection, the two worlds, survey and mission tasks, and the preflight gate that
 refuses to measure an unhealthy stack.
 
-## Build
+## 🔨 Build
 
 ```bash
 git clone https://github.com/MKamel7/intralogistics-amr.git
@@ -185,7 +198,26 @@ must never report is FEWER pytest cases than `pytest src`, and for most of this 
 did; `test_registration.py` now fails the build if a test file exists that the build does not run.
 See V-50.
 
-## Roadmap
+## 💡 What I learned
+
+- **A safety layer belongs after the planner, not inside it.** If safety is a
+  constraint the planner respects, it can be planned around. Putting it downstream,
+  where it can override a plan that was legal when it was made, is the difference
+  between a robot that is safe and one that intended to be.
+
+- **Most of autonomy turns out to be bookkeeping.** The navigation was the interesting
+  part for about a week. What actually decided whether the thing worked was task state,
+  recovery after a failed leg, and knowing which carrier is where.
+
+- **Integration is the project, not the last step.** ROS 2, Gazebo, Nav2 and the task
+  layer each work. Getting them to agree about time, frames and lifecycle is where the
+  weeks went, and nobody writes that in a tutorial.
+
+- **A shared floor changes the problem.** Planning among static obstacles is a solved
+  exercise. Planning in a warehouse shared with people on foot is a different question,
+  and it is the reason the safety layer exists at all.
+
+## 🔭 Future improvements
 
 Capability-level, and the measurement-level list a successor would work from is in the engineering
 report.
@@ -202,14 +234,14 @@ report.
   because a launch file that imports from the workspace it is launching is a dependency worth
   thinking about rather than a rename.
 
-## Predecessor
+## 🕓 Predecessor
 
 This project began as a rebuild of a university coursework project
 ([`warehouse-fleet`](https://github.com/MKamel7/warehouse-fleet), SoSe 2026), which is preserved as
 submitted. Almost nothing carries over: different simulator, different ROS distribution, different
 robot, different architecture. This repository is solo work from its first commit.
 
-## Licence
+## 📄 Licence
 
 Apache-2.0. The imported warehouse scenery is derived from the AWS RoboMaker small warehouse world,
 copyright Amazon.com, Inc., licensed MIT-0; see `src/amr_sim/models/README.md`.
