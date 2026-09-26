@@ -4172,11 +4172,14 @@ are braking:
 
     S = v (t_scanner + t_control + t_brake) + v^2 / (2a) + C
 
-`a` comes from `max_linear_accel`, which the MP-400 manual publishes as a
-single 2.4 m/s2 rating and does NOT distinguish by load. The MiR250 sheet does
-distinguish, at 0.3 m/s2 with maximum payload. So this stack sizes its fields
-identically whether the vehicle is empty or carrying its rated 100 kg, and
-until now that was an inherited assumption rather than a measurement.
+`a` is `emergency_decel`, an ESTIMATED 1.50 m/s2 on both platforms, with no
+load term. (The first version of this entry said `a` came from
+`max_linear_accel`, the MP-400 manual's single 2.4 m/s2 rating. It does not:
+`generate_fields.py` reads `emergency_decel`, and the committed fields match
+1.50. Corrected in a documentation audit; the conclusion below only gets
+stronger.) So this stack sizes its fields identically whether the vehicle is
+empty or carrying its rated 100 kg, and until now that was an inherited
+assumption rather than a measurement.
 
 ### The measurement
 
@@ -4217,16 +4220,16 @@ to the stop it was written for.
 What the vehicle actually does is stop as hard as the drive and the floor
 allow, and at 88 or 188 kg that limit is the same because it is not
 mass-limited at these speeds. Measured, 3.49 and 4.08 m/s2, both **above** the
-2.4 m/s2 the fields are sized with.
+1.50 m/s2 the fields are sized with.
 
 ### What that means for the fields
 
-The `v^2 / 2a` term is conservative, by a third or more:
+The `v^2 / 2a` term is conservative, by more than half:
 
-| speed | assumed at 2.4 m/s2 | measured |
+| speed | assumed at 1.50 m/s2 | measured |
 |---|---|---|
-| 0.77 m/s | 124 mm | 85 mm |
-| 0.89 m/s | 165 mm | 97 mm |
+| 0.77 m/s | 198 mm | 85 mm |
+| 0.89 m/s | 264 mm | 97 mm |
 
 **Nothing is being resized on this.** A term that is conservative is a term
 that is safe, and V-42 and V-45 are what shrinking a field costs when the
@@ -4261,7 +4264,7 @@ the only reason it could be seen to fail.
 An unsecured load moves when deceleration exceeds `mu * g`. At the 0.35 in the
 payload model that is 3.43 m/s2, and V-60 measured protective stops at 3.49 and
 4.08 m/s2. A stop at 4.08 exceeds the limit by 0.65 m/s2 for about 190 ms,
-which is **11.5 mm of relative travel per hard stop**, accumulating over a duty
+which is **11.7 mm of relative travel per hard stop**, accumulating over a duty
 cycle.
 
 ### The measurement
@@ -4351,7 +4354,7 @@ That is not the main error though. The main error is duration:
 
     excess 11.49 m/s2 for one 4 ms physics step   ->   0.092 mm
     excess 11.49 m/s2 for two steps               ->   0.368 mm
-    excess 11.49 m/s2 for 190 ms, as predicted    ->  11.7 mm
+    excess  0.65 m/s2 for 190 ms, as predicted    ->  11.7 mm
 
 **V-61 assumed the excess lasted the whole stop.** A protective stop is a
 spike and a tail: the command goes to zero, the drive resists hard for a few

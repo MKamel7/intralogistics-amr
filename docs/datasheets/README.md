@@ -1,8 +1,8 @@
 # Data sheets
 
 Every physical constant in this repository traces to a line in one of these documents. If a value
-is not in here, it is listed in `docs/platform_spec.md` as derived, estimated or tuned, with the
-reasoning. A reviewer should never have to guess which numbers are real.
+is not in here, its entry in `src/amr_description/config/platforms/<platform>.yaml` is tagged
+derived, estimated, measured or tuned, with the reasoning. A reviewer should never have to guess which numbers are real.
 
 | File | Covers | Source |
 |---|---|---|
@@ -31,4 +31,4 @@ sheet gives 87 degrees for one D435, which settles it: 114 is the pair. The mode
 
 The robot built here is a *class* of machine derived from a published specification. It is not a
 model of any vendor's product, carries no vendor branding, and is not presented as equivalent to
-one. Where our model deviates from the reference, `docs/platform_spec.md` says so.
+one. Where our model deviates from the reference, the provenance entry in the platform YAML says so.

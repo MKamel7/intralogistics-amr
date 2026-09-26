@@ -1,6 +1,6 @@
 # Faults that hid behind coherent explanations
 
-`docs/validation.md` is the full record, 66 numbered findings and 4900 lines,
+`docs/validation.md` is the full record, 67 numbered findings and about 4900 lines,
 and it is long because it is a laboratory notebook. This is the short version.
 
 Every fault below had a persuasive wrong explanation attached to it, and none of
@@ -21,15 +21,17 @@ which is what actually goes wrong on a deployment.
 | Goal tolerance | set to 200 mm, parks **212 mm** out | a tolerance is a stopping condition, not an accuracy specification |
 | Human aware layer, RETRACTED | shipped disabled, then **7.33 % to 5.00 %** | "the effect is smaller than the noise" is a claim about the experiment, not the effect |
 | Station orientation | **every goal ever sent used yaw 0** | the generator wrote `yaw`, the mission read `approach_yaw` with a default, so a guess replaced a computed value silently |
-| Precision docking | built, measured, **not shipped**: 84 % false positives | "it steers nothing so there is no reason to gate it" was true in every clause and wrong in its conclusion |
+| Precision docking | **84 %** false positives always on, **0 of 2784** once gated (V-67); still not wired to park by | "it steers nothing so there is no reason to gate it" was true in every clause and wrong in its conclusion |
 
 **Five of the faults were in the measuring instruments rather than in the
 robot.** That ratio is uncomfortable and it is the honest headline.
 
 **One feature was built, measured and not shipped.** Precision docking works on
-synthetic geometry to under a millimetre and reports 84 percent false positives
-in a real building, so the node is kept, unit tested, and not launched. Building
-it found two defects that had nothing to do with docking.
+synthetic geometry to under a millimetre and reported 84 percent false positives
+in a real building when it ran always on. Gated to within 3 m of the dock it
+reported none in 2784 detections (V-67), but it is off by default and nothing
+parks by it yet. Building it found two defects that had nothing to do with
+docking.
 
 ---
 
@@ -284,7 +286,7 @@ person minima as its SUMMARY. Those are extrema and can only grow as a run gets
 longer, so a run that drove further looked worse at identical behaviour.
 
 **The wrong duration.** A prediction that an unsecured 100 kg load would creep
-11.5 mm per hard stop measured 0.0 mm. The friction arithmetic was right; the
+11.7 mm per hard stop measured 0.0 mm. The friction arithmetic was right; the
 assumption that the deceleration exceeded the friction limit for the whole
 190 ms stop was not. A protective stop is a spike and a tail, the excess lasts
 single 4 ms physics steps, and slip goes with the square of that time.
@@ -370,7 +372,7 @@ came from. Writing the deciding measurement down before building the fix. And
 refusing to draw a conclusion from a single run against a system with 35 m of
 variance, which is the one this project learned last and most expensively.
 
-Two ADRs and one hypothesis in this repository were **rejected after the
+One ADR, proposing two fixes, and one hypothesis in this repository were **rejected after the
 deciding measurement was taken and before a line of their implementation was
 written**. Two headline claims were **retracted** after being measured properly.
 That is the habit the rest of it is built to support.

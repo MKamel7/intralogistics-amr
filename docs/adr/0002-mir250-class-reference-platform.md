@@ -46,8 +46,10 @@ intralogistics employer.
 
 Makes hard: the sensor model needs the SICK nanoScan3 data sheet as a second source, because the
 MiR sheet names the part without giving its aperture, range, angular resolution or response time.
-Anything still not sourced (motor torque curve, friction, inertia tensors) has to be listed in
-`docs/platform_spec.md` as derived, estimated or tuned.
+Anything still not sourced (motor torque curve, friction, inertia tensors) has to be tagged in the
+platform spec's `provenance` block as derived, estimated or tuned. (This originally named a
+`docs/platform_spec.md`, which was never written; the provenance lives in
+`src/amr_description/config/platforms/`.)
 
 Rules out: claiming to have modelled a specific vendor's robot. That is deliberate. Cloning a
 target employer's platform is the weaker interview position, because at that employer every gap is

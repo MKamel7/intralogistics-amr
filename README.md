@@ -3,7 +3,7 @@
 [![CI](https://github.com/MKamel7/intralogistics-amr/actions/workflows/ci.yml/badge.svg)](https://github.com/MKamel7/intralogistics-amr/actions)
 [![ROS 2](https://img.shields.io/badge/ROS%202-Jazzy-blue)](https://docs.ros.org)
 [![Nav2](https://img.shields.io/badge/Nav2-Gazebo%20Harmonic-informational)](https://navigation.ros.org)
-[![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue)](LICENSE)
+[![Licence: Apache-2.0](https://img.shields.io/badge/licence-Apache--2.0-blue)](LICENSE)
 
 
 An autonomous mobile robot for indoor intralogistics, on ROS 2 Jazzy, Gazebo Harmonic and Nav2.
@@ -26,12 +26,13 @@ the timing is measured rather than assumed. It does not show docking, because do
 **If you have five minutes, read [docs/findings.md](docs/findings.md) instead of this file.** It is
 the nine faults worth knowing about, each with the number attached and the wrong explanation that
 held for a while. Two of them are claims this project made and later retracted, five of the faults
-were in the measuring instruments rather than in the robot, and one was a value written, committed
+were in the measuring instruments rather than in the robot, and one was a value written, committed,
+regenerated per platform and never read.
 
 ![the AMR running a transport task](docs/media/demo.gif)
 
-*The first 20 seconds of a transport run. The safety layer sits after the planner and
-can override it, which is the part worth watching.*
+*The first 20 seconds of the demo: the survey building its own map, then Nav2 planning a goal
+across it. The transport cycle and the pass by a worker follow in the full video.*
 
 ## 🛠️ Built with
 
@@ -63,14 +64,14 @@ On the generated track, MP-400 class.
 
 | | result | where |
 |---|---|---|
-| transport cycles | **12 of 12** across five runs | V-44 |
+| transport cycles | **12 of 12** across the four usable runs of five | V-44 |
 | cycle time | 223 s [175 to 272], sd 24, n=12 | V-44 |
 | contacts the vehicle drove into | **0** in 248 000 samples across two arms | V-51 |
 | deepest a person reached inside the footprint | **-0.100 m**, against -0.466 m before V-39 was closed | V-49 |
 | localisation error | p50 0.027 m driving, 0.055 m parked | V-37 |
 | sensor to command latency | p50 84 ms, **p95 124 ms**, n=397, against a 0.10 s estimate | V-56 |
 | the latency tail | **retracted**: it was a probe pairing artifact, not the stack | V-56 |
-| braking distance, laden and unladen | **9 mm** median both, 85 to 97 mm worst, n=859 | V-60 |
+| braking distance, laden and unladen | **9 mm** median both, 95 and 102 mm worst, n=859 | V-60 |
 | an unsecured 100 kg load, over a duty cycle | **0.0 mm** of slide, **3.8 deg** of rotation, none lost | V-61 |
 | parked accuracy at a station | median **117 mm**, worst 212 mm against a 200 mm tolerance | V-62 |
 | dock detection, gated | p95 **49.3 mm** while moving, **0** of 2784 beyond 300 mm | V-67 |
@@ -122,15 +123,17 @@ rather than a copy of it.
 | [docs/validation.md](docs/validation.md) | the laboratory notebook, 67 numbered entries |
 | [docs/safety_concept.md](docs/safety_concept.md) | the protective field reasoning and what it does not prove |
 | [docs/adr](docs/adr) | ten architecture decision records |
-| [docs/architecture](docs/architecture) | arc42 architecture documentation |
+| [docs/architecture](docs/architecture) | arc42 outline only; the decisions themselves are in the ADRs |
 
 ## 🚚 The robot
 
-A **MiR250-class** AMR: a 250 kg payload differential-drive platform with two drive wheels, four
-casters, two safety laser scanners at diagonally opposite corners and two 3D cameras. It is a class
-of machine derived from a published specification, with its own livery. It is not a model of any
-vendor's product, carries no vendor branding, and is not presented as equivalent to one, and the
-reasoning behind the choice is in
+Two platform classes share one sensor set: two safety laser scanners at diagonally opposite corners
+and two 3D cameras on a differential drive with casters. Every result above is on the **MP-400
+class** (590 x 559 mm, 100 kg rated payload, from the Neobotix operating manual). The **MiR250
+class** (250 kg payload) was the original reference and is still generated and tested, but has not
+been run on the track since. Each is a class of machine derived from a published specification,
+with its own livery. Neither is a model of any vendor's product, carries vendor branding, or is
+presented as equivalent to one, and the reasoning behind the class approach is in
 [ADR 0002](docs/adr/0002-mir250-class-reference-platform.md). Data sheets are archived in
 [`docs/datasheets/`](docs/datasheets/) with text extractions beside them, so every constant cites a
 line rather than a memory.
@@ -153,7 +156,7 @@ docs/findings.md      START HERE: the nine worth reading, with the numbers
 docs/ENGINEERING_REPORT.md  every measurement, every subsystem, the instruments
 docs/validation.md    the laboratory notebook, 67 numbered entries
 docs/adr              architecture decision records
-docs/architecture     arc42 architecture documentation
+docs/architecture     arc42 outline; the decisions are in docs/adr
 docs/datasheets       archived source documents for every physical constant
 requirements/         requirements with IDs, traced to tests
 Dockerfile            builds from a clean base and runs the suite
@@ -165,9 +168,10 @@ Dockerfile            builds from a clean base and runs the suite
 ./demo.sh
 ```
 
-Builds if needed, brings the stack up, runs two transport cycles on the MiR250
-with the cameras off, and prints the result table the transport task produces.
-About four minutes on a laptop. Nothing needs clicking.
+Builds if needed, brings the stack up, surveys the generated track, runs two transport cycles on
+the MP-400 class platform with the cameras off, and prints the result table the transport task
+produces. The script's own estimate is about fourteen minutes, most of it the survey that builds
+the map first. Nothing needs clicking.
 
 `tools/run_stack.sh --help` is the real instrument behind it: platform
 selection, the two worlds, survey and mission tasks, and the preflight gate that
@@ -183,7 +187,9 @@ source install/setup.bash
 colcon test && colcon test-result
 ```
 
-Tests that need no ROS at all: `python3 -m pytest src/amr_description/test -q`. What `colcon test`
+Tests that need no ROS at all are the generator and provenance gates CI runs first, listed in
+`.github/workflows/ci.yml` (`python3 -m pytest -q src/amr_description/test/test_platform_spec.py
+src/amr_safety/test/test_fields.py ...`); the rest of `src/amr_description/test` needs `xacro`. What `colcon test`
 must never report is FEWER pytest cases than `pytest src`, and for most of this project's life it
 did; `test_registration.py` now fails the build if a test file exists that the build does not run.
 See V-50.
@@ -217,19 +223,20 @@ report.
   detector at 49.3 mm p95 while moving with zero false positives, which is inside the budget a
   marker would have been added to reach. What is unmeasured is parking BY that sensor, against the
   117 mm median a map-frame goal achieves.
-- **Decide what VDA 5050 is today.** The bridge is a headline package that no launch file can start,
-  with neither credentials nor TLS. Either wire it, or say plainly it is an unwired entry point.
+- **Run VDA 5050 against a real broker.** The bridge has its own launch file and refuses to connect
+  without credentials and TLS, but its tests run without a broker, nothing in the main bringup starts
+  it, and no entry in `docs/validation.md` has driven the vehicle through it.
 - **Bring the launch files and the RViz generator onto `amr_common.topics`.** The nodes and probes
   use it now; `navigation.launch.py` and `build_navigation_rviz.py` still carry topic literals,
   because a launch file that imports from the workspace it is launching is a dependency worth
   thinking about rather than a rename.
 
-- **Carry the load in the physics.** A cycle currently loads and unloads as a mission state with a
-  dwell, so nothing is actually carried. Making the transfer physical is what would let the
-  dynamics of a loaded vehicle be measured rather than assumed.
-- **A human-aware costmap layer.** The planner routes around people as ordinary obstacles and pays
-  no cost for passing close to one. On a floor shared with people on foot that distinction is the
-  whole point.
+- **Handle the load with a mechanism.** With `--physical-load` the box rides on the deck held by
+  friction alone (V-61), but it is placed there and set down on the table by the simulator, not by
+  a lift or a fork. The vehicle has no lifting mechanism and none is claimed.
+- **Measure the human-aware costmap layer in missions.** The proxemic layer is on by default and
+  cut time in a person's intimate space from 7.33 % to 5.00 % on a matched survey (V-64). That is
+  one task type; it has not been measured across transport missions.
 - **Validate the MiR250 on the track.** Its specification and generated configuration are kept and
   the tests run over both platforms, which is what caught V-33, but it has never been run on the
   track as a vehicle.
@@ -251,6 +258,6 @@ copyright Amazon.com, Inc., licensed MIT-0; see `src/amr_sim/models/README.md`.
 
 ---
 
-Built by **Mo Kamel**, M.Eng. Mechatronic and Cyber-Physical Systems, Technische
+Built by **Mo Kamel**, M.Eng. student in Mechatronic and Cyber-Physical Systems, Technische
 Hochschule Deggendorf.
 [Portfolio](https://mkamel7.github.io) · [LinkedIn](https://linkedin.com/in/mo-kamel7)

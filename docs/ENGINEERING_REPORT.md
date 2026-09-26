@@ -14,7 +14,7 @@ notebook and stays the primary record. The nine faults worth reading on their ow
 
 | | result | where |
 |---|---|---|
-| transport cycles | **12 of 12** across five runs | V-44 |
+| transport cycles | **12 of 12** across the four usable runs of five | V-44 |
 | cycle time | 223 s [175 to 272], sd 24, n=12 | V-44 |
 | distance per cycle | 78.1 m [65.4 to 82.6] | V-44 |
 | contacts the vehicle drove into | **0** in 248 000 samples across two arms | V-51 |
@@ -26,14 +26,14 @@ notebook and stays the primary record. The nine faults worth reading on their ow
 | sensor to command latency | p50 84 ms, **p95 124 ms**, n=397, against a 0.10 s estimate | V-56 |
 | the latency tail | **retracted**: it was a probe pairing artifact, not the stack | V-56 |
 | protective field coverage outside the sensor's blind zone | **55.1 mm** against the 50 mm needed | V-49 |
-| braking distance, laden and unladen | **9 mm** median both, 85 to 97 mm worst, n=859 | V-60 |
-| deceleration in a protective stop | **3.5 to 4.1 m/s2**, against the 2.4 the fields assume | V-60 |
+| braking distance, laden and unladen | **9 mm** median both, 95 and 102 mm worst, n=859 | V-60 |
+| deceleration in a protective stop | **3.5 to 4.1 m/s2**, against the 1.5 the fields assume | V-60 |
 | an unsecured 100 kg load, over a duty cycle | **0.0 mm** of slide, **3.8 deg** of rotation, none lost | V-61 |
 | why it stays on | the stop peaks at **14.9 m/s2** but only for a **4 ms** step, and slip goes as time squared | V-61 |
 | parked accuracy at a station | median **117 mm**, worst 212 mm against a 200 mm tolerance | V-62 |
 | heading error when the goal needs a turn | up to the yaw tolerance, **signed by the rotation** | V-63 |
 | time in intimate space, human aware layer on | **5.00 %** against 7.33 with it off, for 6 % of survey time | V-64 |
-| precision docking | **not delivered.** The detector reports 84 % false positives always-on | V-66 |
+| dock detection, gated | p95 **49.3 mm** while moving, **0** of 2784 beyond 300 mm; 84 % false positives when it ran ungated (V-66). Not yet wired to park by | V-67 |
 
 The latency row was wrong for most of this project's life and the correction is worth reading.
 It said p95 796 ms and called the spec estimate refuted, on the strength of 43 samples pooled from
@@ -110,10 +110,11 @@ The open bay is wide enough for the vehicle to route around a person standing in
 aisle is not, so the same pedestrian behaviour produces a re-route in one place and a correct wait
 in the other. Both are asserted by tests, so neither can be lost by adjusting a width.
 
-**Robot description.** A MiR250-class AMR generated entirely from the platform spec: two drive
+**Robot description.** Generated entirely from the platform spec, for either platform class: two drive
 wheels on `ros2_control`, four real two-degree-of-freedom casters, two 275 degree safety scanners at
 diagonally opposite corners, two RGB-D cameras and an IMU. Sensor sets are switchable so the
-simulation tiers below are real rather than aspirational. 26 tests cover it.
+simulation tiers below are real rather than aspirational. `test_description.py` covers it with 18
+tests, run over both platforms.
 
 **Measured simulation cost**, by `src/amr_evaluation/tools/benchmark_sim_cost.py` on an i5-1235U,
 with the real-time throttle disabled and a subscriber attached to every sensor topic:
@@ -177,7 +178,7 @@ consequence for the later protective-field work.
 
 **Geometric people detection** (`amr_perception`, C++). Clusters the merged scan with an adaptive
 break threshold, keeps clusters that are leg sized and round rather than flat, and pairs them at a
-plausible stance width. 16 unit tests on synthesised scans with exact known truth.
+plausible stance width. 28 unit tests on synthesised scans with exact known truth.
 
 Scored against a scenario whose pedestrian positions are known: **recall 0.875, localisation p50
 5.4 cm, precision 0.168**. The precision figure is real and is not tuned away. A rack upright is a
@@ -233,12 +234,13 @@ architecture that does not make safety depend on a component measured at 0.218 p
 
 **Protective and warning fields** (`amr_safety`). Speed-switched fields on `nav2_collision_monitor`,
 sitting between the velocity command and the wheels. The geometry is not chosen: it is generated
-from a stopping-distance calculation over the platform spec, rounded outward only, and 11 tests
-assert each field covers its own stopping distance, that the bands leave no uncovered speed, and
+from a stopping-distance calculation over the platform spec, rounded outward only, and the 21 tests
+in `test_fields.py`, run over both platforms, assert each field covers its own stopping distance, that the bands leave no uncovered speed, and
 that the observation source is the merged scan rather than any classifier output.
 
 Measured with an obstacle 0.778 m ahead: at a 0.25 m/s command the active field reaches 0.561 m, the
-obstacle is outside it and the vehicle moves at 0.081 m/s under warning-field slowdown; at 0.80 m/s
+obstacle is outside it and the vehicle moves at 0.081 m/s under the warning field's multiplicative
+slowdown of that time, since replaced by a 0.30 m/s speed cap (ADR 0009); at 0.80 m/s
 the field reaches 0.854 m, the obstacle is inside and the vehicle **stops at 0.000 m/s**. Same
 obstacle, different speed, different outcome, which is the whole point of speed-dependent fields.
 
@@ -265,8 +267,10 @@ terms means reproducing them is arithmetic, not evidence. The sheet's undefined 
 runtimes survive any choice of it.
 
 **Platform specification with an enforced provenance gate.** Every physical constant of the robot
-lives in `src/amr_description/config/platforms/mir250_class.yaml`, tagged `datasheet`, `derived`,
-`estimated` or `tuned`, with its source. Currently 54 constants: 29 from a data sheet, 5 derived from data sheet values, 20 estimated with the reasoning recorded.
+lives in `src/amr_description/config/platforms/<platform>.yaml`, tagged `datasheet`, `derived`,
+`estimated`, `measured` or `tuned`, with its source. Currently 71 constants on the MiR250 class
+(35 datasheet, 6 derived, 29 estimated, 1 measured) and 74 on the MP-400 class (33 datasheet,
+10 derived, 30 estimated, 1 tuned).
 `test_platform_spec.py` fails the build if a value has no source, a source has no value, a
 non-datasheet value gives no reasoning, or the geometry contradicts itself.
 
@@ -277,30 +281,27 @@ runtimes.
 
 ### Not done yet
 
-**Physical load transfer.** A cycle loads and unloads as a mission state with a dwell, not as a
-lift or a fork engaging a pallet. Nothing is carried in the physics.
+**Mechanical load transfer.** With `--physical-load` a box rides on the deck held by friction only
+(V-61), but it is placed on the plate and set down on the table by the simulator, not by a lift or a
+fork engaging a pallet. The vehicle has no lifting mechanism.
 
-**Precision docking.** The vehicle parks by navigation goal, not by aligning to a marker. The
-localisation figures above are what a docking claim would have to be built on, and they are not
-sufficient for one on their own.
+**Precision docking.** The vehicle parks by navigation goal. The gated dock detector is accurate
+enough to dock by (V-67), but it is off by default and the approach controller in
+`amr_mission/dock_approach.py` is tested only as a pure function and not wired into a mission, so
+nothing has yet parked by sensor.
 
 **The fleet layer, deliberately.** There is no dispatcher, no lane reservation and no task
 allocation. The VDA 5050 interface is the *vehicle* half, which is what an integrator connects to,
-and it is tested end to end against a broker. A dispatcher with one robot behind it would be a
+and its protocol tests run without a broker. A dispatcher with one robot behind it would be a
 claim without a measurement.
-
-**A human-aware costmap layer.** People are detected, tracked and scored, and the planner routes
-around them as ordinary obstacles. It does not yet pay a cost for passing close to a person, which
-is what the social metrics in V-43 exist to make measurable.
 
 **The MiR250 as a running vehicle.** Its specification and generated configuration are kept and the
 tests run over both platforms, which is what caught V-33. It is not validated on the track and no
 cycle count is claimed for it.
 
-One open item is tracked in the code rather than hidden: the platform sheet gives a 114 degree
-camera field of view under a heading covering two cameras, without saying whether the figure is per
-camera or combined. The model currently uses the optimistic reading, and no detection or coverage
-number may be published from it until the Intel data sheet is archived and the figure resolved.
+One item that was open here is resolved: the platform sheet gives a 114 degree camera field of view
+under a heading covering two cameras. The archived Intel sheet gives 87 degrees for one D435, so 114
+is the pair, and a test asserts it (see `docs/datasheets/README.md`).
 
 ## The instruments
 
@@ -336,7 +337,7 @@ if a test file exists that the build does not run. See V-50.
 
 ## How this is built
 
-Decisions that were expensive to make are recorded as [ADRs](adr/). Ten exist so far, one of them still Proposed. Each
+Decisions that were expensive to make are recorded as [ADRs](adr/). Ten exist: nine Accepted and one Rejected. Each
 states the context and the measurement that forced it.
 
 | # | Decision |
@@ -350,7 +351,7 @@ states the context and the measurement that forced it.
 | [0007](adr/0007-keepout-zones-are-commissioning-data.md) | Keepout zones are commissioning data, authored from the site layout |
 | [0008](adr/0008-margin-belongs-to-the-mission-layer.md) | Navigation margin belongs to the mission layer, not the planner |
 | [0009](adr/0009-the-monitor-limits-speed-and-covers-every-velocity.md) | The monitor caps speed, and its bands must cover every velocity |
-| [0010](adr/0010-localisation-mode-for-mission-runs.md) | **Proposed.** Bound SLAM, or localise on a saved map, for mission runs |
+| [0010](adr/0010-localisation-mode-for-mission-runs.md) | **Rejected.** Bound SLAM, or localise on a saved map, for mission runs |
 
 Physical constants are never hardcoded. They live in a platform spec, carry a recorded source, and
 a test fails the build if that decays.
@@ -367,12 +368,10 @@ way the error points.
 This project is finished. What follows is not a plan, it is the list of things a
 next person would find worth doing, each with the measurement that says why.
 
-1. **Gate the dock detector on proximity to a known dock, then re-measure.** It
-   reports 84 % false positives when always on, because a warehouse is full of
-   two surfaces meeting near 90 degrees (V-66). A docking detector should run
-   when docking is expected. Its accuracy also needs re-scoring with the vehicle
-   pose interpolated to the scan stamp, since the current 43 mm p50 is an upper
-   bound that includes the scorer's own timing error.
+1. **Wire the dock approach controller into a mission and measure parking by
+   sensor.** The gating and the interpolated re-score are done (V-67): 0 of 2784
+   detections beyond 300 mm, p95 49.3 mm while moving. That is one run, one dock,
+   one approach direction and no people, and nothing has yet parked by it.
 2. **Decide whether to write the measured latency into the spec.**
    `control_latency: 0.10` is marked NOT YET MEASURED and is now measured at p95
    124 ms over 397 samples, sd 24 ms. The estimate is short by 24 ms, 18 mm of
